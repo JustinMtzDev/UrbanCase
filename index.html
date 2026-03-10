@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UrbanCase — POS Accesorios</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="blob blob1" aria-hidden="true"></div>
+  <div class="blob blob2" aria-hidden="true"></div>
+  <div class="blob blob3" aria-hidden="true"></div>
+  <div class="app">
+    <header>
+      <div class="logo">
+        <img src="urbanCase.svg" alt="UrbanCase" class="logo-brand">
+        <img src="logo.svg" alt="" class="logo-icon logo-icon-light" aria-hidden="true">
+        <img src="logoDark.svg" alt="" class="logo-icon logo-icon-dark" aria-hidden="true">
+      </div>
+      <nav class="categorias">
+        <button type="button" class="categoria-btn activo" data-categoria="todos">Home</button>
+        <button type="button" class="categoria-btn" data-categoria="cargadores">Inventario</button>
+        <button type="button" class="categoria-btn" data-categoria="fundas">Ventas</button>
+        <button type="button" class="categoria-btn" data-categoria="protectores">Reportes</button>
+        <button type="button" class="categoria-btn" data-categoria="cables">Proveedores</button>
+        <button type="button" class="categoria-btn" data-categoria="otros">Clientes</button>
+        <button type="button" class="categoria-btn" data-categoria="otros">Usuarios</button>
+        <button type="button" class="theme-toggle" id="theme-toggle" title="Tema obscuro">
+          <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
+          <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+          <span class="theme-label">Obscuro</span>
+        </button>
+      </nav>
+    </header>
+
+    <div class="app-glass">
+      <main class="productos-grid" id="productos"></main>
+      <aside class="carrito-panel">
+      <h2>Carrito <span id="carrito-count">0</span></h2>
+      <div class="carrito-lista" id="carrito-lista">
+        <div class="carrito-vacio" id="carrito-vacio">Añade productos tocando una tarjeta</div>
+      </div>
+      <div class="carrito-totales">
+        <div class="carrito-fila">
+          <span>Subtotal</span>
+          <span id="subtotal">$0.00</span>
+        </div>
+        <div class="carrito-fila total">
+          <span>Total</span>
+          <span id="total">$0.00</span>
+        </div>
+      </div>
+      <div class="carrito-acciones">
+        <button type="button" class="btn btn-vaciar" id="btn-vaciar">Vaciar</button>
+        <button type="button" class="btn btn-cobrar" id="btn-cobrar" disabled>Cobrar</button>
+      </div>
+    </aside>
+    </div>
+  </div>
+
+  <div id="modal-venta">
+    <div class="modal-content">
+      <h3>Venta completada</h3>
+      <p>Total cobrado:</p>
+      <div class="modal-total" id="modal-total">$0.00</div>
+      <div class="modal-acciones">
+        <button type="button" class="btn btn-vaciar" id="modal-cerrar">Cerrar</button>
+        <button type="button" class="btn btn-cobrar" id="modal-nueva">Nueva venta</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
