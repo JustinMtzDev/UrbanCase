@@ -1,137 +1,110 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>4K Liquid Background</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Background Liquid</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      font-family: sans-serif;
+      background: #0b0b0b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
 
-<style>
+    .blob {
+      position: absolute;
+      width: 900px;
+      height: 900px;
+      border-radius: 50%;
+      filter: blur(180px);
+      opacity: 0.9;
+      mix-blend-mode: screen;
+      animation: float 30s infinite ease-in-out alternate;
+    }
 
-body{
-margin:0;
-height:100vh;
-overflow:hidden;
-background:#0b0b0b;
-font-family:sans-serif;
-}
+    .blob1 {
+      background: radial-gradient(circle, #ff3131 0%, #ff1a1a 40%, transparent 70%);
+      top: -200px;
+      left: -200px;
+    }
 
-/* contenedor */
+    .blob2 {
+      background: radial-gradient(circle, #ff4d4d 0%, #ff3131 40%, transparent 70%);
+      bottom: -300px;
+      right: -200px;
+      animation-duration: 35s;
+    }
 
-.background{
-position:fixed;
-width:100%;
-height:100%;
-overflow:hidden;
-}
+    .blob3 {
+      background: radial-gradient(circle, #ff0000 0%, #ff3131 40%, transparent 70%);
+      top: 40%;
+      left: 60%;
+      animation-duration: 25s;
+    }
 
-/* blobs */
+    .blob4 {
+      background: radial-gradient(circle, #ff5757 0%, #ff3131 40%, transparent 70%);
+      bottom: 20%;
+      left: 20%;
+      animation-duration: 40s;
+    }
 
-.blob{
-position:absolute;
-width:900px;
-height:900px;
-border-radius:50%;
+    @keyframes float {
+      0% {
+        transform: translate(0px, 0px) scale(1);
+      }
+      50% {
+        transform: translate(80px, -120px) scale(1.1);
+      }
+      100% {
+        transform: translate(-100px, 80px) scale(0.95);
+      }
+    }
 
-filter:blur(180px);
+    .card {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 40px;
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.3),
+        inset 0 1px 1px rgba(255, 255, 255, 0.2);
+      z-index: 10;
+    }
 
-opacity:0.9;
+    .card h1 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.5rem;
+    }
 
-mix-blend-mode:screen;
-
-animation:float 30s infinite ease-in-out alternate;
-}
-
-/* colores */
-
-.blob1{
-background:radial-gradient(circle,#ff3131 0%,#ff1a1a 40%,transparent 70%);
-top:-200px;
-left:-200px;
-}
-
-.blob2{
-background:radial-gradient(circle,#ff4d4d 0%,#ff3131 40%,transparent 70%);
-bottom:-300px;
-right:-200px;
-animation-duration:35s;
-}
-
-.blob3{
-background:radial-gradient(circle,#ff0000 0%,#ff3131 40%,transparent 70%);
-top:40%;
-left:60%;
-animation-duration:25s;
-}
-
-.blob4{
-background:radial-gradient(circle,#ff5757 0%,#ff3131 40%,transparent 70%);
-bottom:20%;
-left:20%;
-animation-duration:40s;
-}
-
-/* movimiento */
-
-@keyframes float{
-
-0%{
-transform:translate(0px,0px) scale(1);
-}
-
-50%{
-transform:translate(200px,-150px) scale(1.2);
-}
-
-100%{
-transform:translate(-200px,150px) scale(0.9);
-}
-
-}
-
-/* tarjeta glass */
-
-.card{
-
-position:absolute;
-top:50%;
-left:50%;
-
-transform:translate(-50%,-50%);
-
-backdrop-filter:blur(30px);
-
-background:rgba(255,255,255,0.05);
-
-border-radius:24px;
-
-padding:50px;
-
-color:white;
-
-border:1px solid rgba(255,255,255,0.15);
-
-box-shadow:0 40px 120px rgba(0,0,0,0.7);
-
-}
-
-</style>
+    .card p {
+      margin: 0;
+      opacity: 0.9;
+      font-size: 0.95rem;
+    }
+  </style>
 </head>
-
 <body>
-
-<div class="background">
-
-<div class="blob blob1"></div>
-<div class="blob blob2"></div>
-<div class="blob blob3"></div>
-<div class="blob blob4"></div>
-
-</div>
-
-<div class="card">
-<h1>Urban Case POS</h1>
-<p>Dashboard</p>
-</div>
-
+  <div class="blob blob1"></div>
+  <div class="blob blob2"></div>
+  <div class="blob blob3"></div>
+  <div class="blob blob4"></div>
+  <div class="card">
+    <h1>UrbanCase POS</h1>
+    <p>Dashboard</p>
+  </div>
 </body>
 </html>
