@@ -1,21 +1,4 @@
-const PRODUCTOS = [
-  { id: 1, nombre: 'Cargador rápido 20W', precio: 299, categoria: 'cargadores', icono: '⚡' },
-  { id: 2, nombre: 'Cargador inalámbrico', precio: 449, categoria: 'cargadores', icono: '🔌' },
-  { id: 3, nombre: 'Cargador automóvil', precio: 199, categoria: 'cargadores', icono: '🚗' },
-  { id: 4, nombre: 'Funda silicona', precio: 149, categoria: 'fundas', icono: '📱' },
-  { id: 5, nombre: 'Fundas rígidas', precio: 179, categoria: 'fundas', icono: '🛡️' },
-  { id: 6, nombre: 'Fundas transparentes', precio: 129, categoria: 'fundas', icono: '✨' },
-  { id: 7, nombre: 'Protector vidrio templado', precio: 99, categoria: 'protectores', icono: '🪟' },
-  { id: 8, nombre: 'Protector hidrogel', precio: 79, categoria: 'protectores', icono: '💧' },
-  { id: 9, nombre: 'Kit protector + funda', precio: 249, categoria: 'protectores', icono: '📦' },
-  { id: 10, nombre: 'Cable USB-C 1m', precio: 89, categoria: 'cables', icono: '🔗' },
-  { id: 11, nombre: 'Cable Lightning', precio: 119, categoria: 'cables', icono: '📲' },
-  { id: 12, nombre: 'Cable braided 2m', precio: 159, categoria: 'cables', icono: '🧵' },
-  { id: 13, nombre: 'Soporte celular', precio: 129, categoria: 'otros', icono: '📐' },
-  { id: 14, nombre: 'Auriculares con cable', precio: 199, categoria: 'otros', icono: '🎧' },
-  { id: 15, nombre: 'Anillo soporte', precio: 69, categoria: 'otros', icono: '💍' },
-  { id: 16, nombre: 'Limpia pantallas', precio: 49, categoria: 'otros', icono: '🧴' },
-];
+const PRODUCTOS = [];
 
 let carrito = [];
 let categoriaActual = 'todos';
