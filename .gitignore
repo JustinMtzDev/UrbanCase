@@ -1,0 +1,7 @@
+# Env y secretos
+.env
+server/.env
+
+# Dependencias
+node_modules/
+server/node_modules/
