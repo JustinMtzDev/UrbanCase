@@ -1,3 +1,31 @@
+(async () => {
+  const token = localStorage.getItem('uc_token');
+  if (!token) return window.location.href = '/login.html';
+  try {
+    const r = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!r.ok) throw 0;
+    const u = await r.json();
+    const $info = document.getElementById('usuario-info');
+    const $nombre = document.getElementById('usuario-nombre');
+    if ($info && $nombre) { $nombre.textContent = u.nombre; $info.style.display = 'flex'; }
+  } catch {
+    localStorage.removeItem('uc_token');
+    localStorage.removeItem('uc_usuario');
+    return window.location.href = '/login.html';
+  }
+
+  document.getElementById('btn-logout')?.addEventListener('click', async () => {
+    await fetch('/api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(() => {});
+    localStorage.removeItem('uc_token');
+    localStorage.removeItem('uc_usuario');
+    window.location.href = '/login.html';
+  });
+
+  init();
+})();
+
+function init() {
+
 const PRODUCTOS = [];
 
 let carrito = [];
@@ -166,3 +194,5 @@ if ($logo) {
 
 renderProductos();
 actualizarCarrito();
+
+} // fin init()

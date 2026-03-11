@@ -443,6 +443,35 @@ body:not(.theme-dark) .theme-toggle .theme-icon-sun { display: inline; }
 body:not(.theme-dark) .theme-toggle .theme-icon-moon { display: none; }
 .theme-icon { font-size: 1.1rem; line-height: 1; }
 
+.usuario-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-left: 1px solid var(--border);
+}
+.usuario-nombre {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.btn-logout {
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.btn-logout:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
 .productos-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));

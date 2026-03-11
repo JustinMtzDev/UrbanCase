@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UrbanCase — Iniciar Sesión</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #0f0f0f;
+      color: #e8e8ed;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .blob {
+      position: fixed;
+      width: 500px;
+      height: 500px;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.8;
+      animation: moveBlob 20s infinite alternate ease-in-out;
+      pointer-events: none;
+    }
+    .blob1 { background: #ff3131; top: -100px; left: -100px; }
+    .blob2 { background: #ff5757; bottom: -120px; right: -120px; animation-duration: 25s; }
+    .blob3 { background: #ff1f1f; top: 40%; left: 60%; animation-duration: 18s; }
+
+    @keyframes moveBlob {
+      0%   { transform: translate(0, 0) scale(1); }
+      50%  { transform: translate(150px, -100px) scale(1.2); }
+      100% { transform: translate(-100px, 150px) scale(0.9); }
+    }
+
+    .login-card {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 400px;
+      padding: 40px 36px;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+      border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .login-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+    .login-logo img { height: 50px; width: auto; }
+    .login-logo .logo-icon { height: 70px; }
+
+    .login-title {
+      text-align: center;
+      font-size: 1rem;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 28px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.5);
+      margin-bottom: 6px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 14px 16px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1rem;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      color: #e8e8ed;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group input::placeholder { color: rgba(255, 255, 255, 0.25); }
+    .form-group input:focus {
+      border-color: #ff3131;
+      box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.15);
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 14px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #ff3131, #c92b2b);
+      color: #fff;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      margin-top: 8px;
+    }
+    .btn-login:hover { opacity: 0.9; }
+    .btn-login:active { transform: scale(0.98); }
+    .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .login-error {
+      display: none;
+      background: rgba(255, 59, 48, 0.15);
+      border: 1px solid rgba(255, 59, 48, 0.3);
+      color: #ff6b6b;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .login-error.visible { display: block; }
+  </style>
+</head>
+<body>
+  <div class="blob blob1"></div>
+  <div class="blob blob2"></div>
+  <div class="blob blob3"></div>
+
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="urbanCase.svg" alt="UrbanCase">
+      <img src="logoDark.svg" alt="" class="logo-icon">
+    </div>
+    <div class="login-title">Iniciar sesión</div>
+
+    <div class="login-error" id="login-error"></div>
+
+    <form id="login-form">
+      <div class="form-group">
+        <label for="usuario">Usuario</label>
+        <input type="text" id="usuario" placeholder="Tu usuario" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="password">Contraseña</label>
+        <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-login" id="btn-login">Entrar</button>
+    </form>
+  </div>
+
+  <script>
+    if (localStorage.getItem('uc_token')) {
+      fetch('/api/auth/me', {
+        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('uc_token') }
+      }).then(r => { if (r.ok) window.location.href = '/index.html'; });
+    }
+
+    const $form = document.getElementById('login-form');
+    const $error = document.getElementById('login-error');
+    const $btn = document.getElementById('btn-login');
+
+    $form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $error.classList.remove('visible');
+      $btn.disabled = true;
+      $btn.textContent = 'Verificando...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            usuario: document.getElementById('usuario').value.trim(),
+            password: document.getElementById('password').value,
+          }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          $error.textContent = data.error || 'Error al iniciar sesión';
+          $error.classList.add('visible');
+          return;
+        }
+
+        localStorage.setItem('uc_token', data.token);
+        localStorage.setItem('uc_usuario', JSON.stringify(data.usuario));
+        window.location.href = '/index.html';
+      } catch {
+        $error.textContent = 'No se pudo conectar con el servidor';
+        $error.classList.add('visible');
+      } finally {
+        $btn.disabled = false;
+        $btn.textContent = 'Entrar';
+      }
+    });
+  </script>
+</body>
+</html>
