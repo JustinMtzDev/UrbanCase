@@ -159,5 +159,10 @@ if ($themeToggle) {
   aplicarTema(guardado === 'dark');
 }
 
+const $logo = document.querySelector('.logo');
+if ($logo) {
+  $logo.addEventListener('click', () => aplicarTema(!document.body.classList.contains('theme-dark')));
+}
+
 renderProductos();
 actualizarCarrito();

@@ -259,6 +259,7 @@ body:not(.theme-dark) header {
   color: var(--accent);
   letter-spacing: -0.02em;
   padding: 0 1.25rem;
+  cursor: pointer;
 }
 
 .logo-brand,
@@ -281,12 +282,35 @@ body .logo-icon-dark {
   display: none;
 }
 
+/* Hover solo sobre el icono (logo/logoDark), no urbanCase */
+.logo-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+body:not(.theme-dark) .logo-icon-wrap:hover .logo-icon-light {
+  display: none;
+}
+
+body:not(.theme-dark) .logo-icon-wrap:hover .logo-icon-dark {
+  display: block;
+}
+
 body.theme-dark .logo-icon-light {
   display: none;
 }
 
 body.theme-dark .logo-icon-dark {
   display: block;
+}
+
+body.theme-dark .logo-icon-wrap:hover .logo-icon-light {
+  display: block;
+}
+
+body.theme-dark .logo-icon-wrap:hover .logo-icon-dark {
+  display: none;
 }
 
 .categorias {
