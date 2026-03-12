@@ -57,13 +57,14 @@
 
     .login-logo {
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 12px;
+      gap: 8px;
       margin-bottom: 32px;
     }
-    .login-logo img { height: 50px; width: auto; }
-    .login-logo .logo-icon { height: 70px; }
+    .login-logo .logo-icon { height: 140px; width: auto; }
+    .login-logo .logo-brand { height: 80px; width: auto; }
 
     .login-title {
       text-align: center;
@@ -78,10 +79,10 @@
     }
     .form-group label {
       display: block;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: rgba(255, 255, 255, 0.5);
-      margin-bottom: 6px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 8px;
     }
     .form-group input {
       width: 100%;
@@ -96,6 +97,62 @@
       transition: border-color 0.2s, box-shadow 0.2s;
     }
     .form-group input::placeholder { color: rgba(255, 255, 255, 0.25); }
+    .form-group input:not(:placeholder-shown) {
+      border-color: #ff3131;
+      box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.15);
+    }
+
+    .input-password-wrap {
+      position: relative;
+    }
+    .input-password-wrap input {
+      padding-right: 48px;
+    }
+    .btn-toggle-pass {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 8px;
+      opacity: 0.5;
+      transition: opacity 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-toggle-pass:hover {
+      opacity: 0.9;
+    }
+    .icon-ojo {
+      width: 32px;
+      height: 32px;
+    }
+    .icon-ojo-hover { display: none; }
+    .btn-toggle-pass:hover .icon-ojo-default { display: none; }
+    .btn-toggle-pass:hover .icon-ojo-hover { display: block; }
+    .btn-toggle-pass.pass-visible .icon-ojo-default { display: none; }
+    .btn-toggle-pass.pass-visible .icon-ojo-hover { display: block; }
+    .btn-toggle-pass.pass-visible:hover .icon-ojo-default { display: block; }
+    .btn-toggle-pass.pass-visible:hover .icon-ojo-hover { display: none; }
+    .form-group input:-webkit-autofill,
+    .form-group input:-webkit-autofill:hover,
+    .form-group input:-webkit-autofill:focus,
+    .form-group input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.06) inset !important;
+      -webkit-text-fill-color: #e8e8ed !important;
+      border: 1px solid #ff3131 !important;
+      border-radius: 14px !important;
+      box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.15), 0 0 0 1000px rgba(255, 255, 255, 0.06) inset !important;
+      font-family: 'DM Sans', sans-serif !important;
+      font-size: 1rem !important;
+      font-weight: 400 !important;
+      caret-color: #e8e8ed !important;
+      transition: background-color 5000s ease-in-out 0s;
+    }
     .form-group input:focus {
       border-color: #ff3131;
       box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.15);
@@ -140,21 +197,26 @@
 
   <div class="login-card">
     <div class="login-logo">
-      <img src="urbanCase.svg" alt="UrbanCase">
-      <img src="logoDark.svg" alt="" class="logo-icon">
+      <img src="img/logo.svg" alt="" class="logo-icon">
+      <img src="img/urbanCase.svg" alt="UrbanCase" class="logo-brand">
     </div>
-    <div class="login-title">Iniciar sesión</div>
-
     <div class="login-error" id="login-error"></div>
-
-    <form id="login-form">
+    <form id="login-form" autocomplete="off">
+      <input type="text" style="display:none" aria-hidden="true">
+      <input type="password" style="display:none" aria-hidden="true">
       <div class="form-group">
         <label for="usuario">Usuario</label>
-        <input type="text" id="usuario" placeholder="Tu usuario" required autocomplete="username">
+        <input type="text" id="usuario" name="usr" placeholder="Ej. admin" required autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly')">
       </div>
       <div class="form-group">
         <label for="password">Contraseña</label>
-        <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+        <div class="input-password-wrap">
+          <input type="password" id="password" name="pwd" placeholder="XXXXXXXXXXXX" required autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly')">
+          <button type="button" class="btn-toggle-pass" id="btn-toggle-pass" tabindex="-1" title="Mostrar contraseña">
+            <img src="img/icon_ojo_cerrado.svg" alt="" class="icon-ojo icon-ojo-default" id="icon-ojo-default">
+            <img src="img/icon_ojo_abierto.svg" alt="" class="icon-ojo icon-ojo-hover" id="icon-ojo-hover">
+          </button>
+        </div>
       </div>
       <button type="submit" class="btn-login" id="btn-login">Entrar</button>
     </form>
@@ -166,6 +228,14 @@
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('uc_token') }
       }).then(r => { if (r.ok) window.location.href = '/index.html'; });
     }
+
+    const $togglePass = document.getElementById('btn-toggle-pass');
+    const $passInput = document.getElementById('password');
+    $togglePass.addEventListener('click', () => {
+      const visible = $passInput.type === 'text';
+      $passInput.type = visible ? 'password' : 'text';
+      $togglePass.classList.toggle('pass-visible', !visible);
+    });
 
     const $form = document.getElementById('login-form');
     const $error = document.getElementById('login-error');
