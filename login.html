@@ -223,10 +223,11 @@
   </div>
 
   <script>
+    const API = (window.location.protocol === 'file:') ? 'http://localhost:3000/api' : '/api';
     if (localStorage.getItem('uc_token')) {
-      fetch('/api/auth/me', {
+      fetch(API + '/auth/me', {
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('uc_token') }
-      }).then(r => { if (r.ok) window.location.href = '/index.html'; });
+      }).then(r => { if (r.ok) window.location.href = (window.location.protocol === 'file:' ? 'http://localhost:3000' : '') + '/index.html'; });
     }
 
     const $togglePass = document.getElementById('btn-toggle-pass');
@@ -248,7 +249,7 @@
       $btn.textContent = 'Verificando...';
 
       try {
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch(API + '/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
