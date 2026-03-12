@@ -207,6 +207,7 @@ function renderInventarioProductos() {
   $grid.innerHTML = lista.map(p => `
     <article class="inventario-producto-card" data-id="${p.id}">
       <img class="inventario-producto-img" src="${p.imagen || imgPlaceholder}" alt="${(p.nombre || '').replace(/"/g, '&quot;')}">
+      <div class="inventario-producto-nombre">${(p.nombre || '').replace(/</g, '&lt;')}</div>
       <div class="inventario-producto-precio">${formatearPrecio(p.precio)}</div>
       <button type="button" class="inventario-producto-btn" data-id="${p.id}">Agregar al carrito</button>
     </article>
@@ -356,9 +357,9 @@ function initPOS() {
     if ($themeLabel) $themeLabel.textContent = oscuro ? 'Claro' : 'Obscuro';
     try { localStorage.setItem(THEME_KEY, oscuro ? 'dark' : 'light'); } catch (_) {}
   }
+  aplicarTema(localStorage.getItem(THEME_KEY) === 'dark');
   if ($themeToggle) {
     $themeToggle.addEventListener('click', () => aplicarTema(!document.body.classList.contains('theme-dark')));
-    aplicarTema(localStorage.getItem(THEME_KEY) === 'dark');
   }
   const $logo = document.querySelector('.logo');
   if ($logo) $logo.addEventListener('click', () => aplicarTema(!document.body.classList.contains('theme-dark')));

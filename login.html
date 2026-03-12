@@ -12,14 +12,21 @@
 
     body {
       font-family: 'DM Sans', sans-serif;
-      background: #0f0f0f;
-      color: #e8e8ed;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: hidden;
+      transition: background 0.3s, color 0.3s;
     }
+
+    body {
+      background: #0f0f0f;
+      color: #e8e8ed;
+    }
+    body.theme-dark .blob1 { background: #00d4aa; }
+    body.theme-dark .blob2 { background: #00a884; }
+    body.theme-dark .blob3 { background: #00f5c4; }
 
     .blob {
       position: fixed;
@@ -27,10 +34,10 @@
       height: 500px;
       border-radius: 50%;
       filter: blur(120px);
-      opacity: 0.8;
       animation: moveBlob 20s infinite alternate ease-in-out;
       pointer-events: none;
     }
+    .blob { opacity: 0.8; }
     .blob1 { background: #ff3131; top: -100px; left: -100px; }
     .blob2 { background: #ff5757; bottom: -120px; right: -120px; animation-duration: 25s; }
     .blob3 { background: #ff1f1f; top: 40%; left: 60%; animation-duration: 18s; }
@@ -47,10 +54,12 @@
       width: 100%;
       max-width: 400px;
       padding: 40px 36px;
-      background: rgba(255, 255, 255, 0.08);
       backdrop-filter: blur(30px);
       -webkit-backdrop-filter: blur(30px);
       border-radius: 24px;
+    }
+    .login-card {
+      background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.12);
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
@@ -66,13 +75,31 @@
     .login-logo .logo-icon { height: 140px; width: auto; }
     .login-logo .logo-brand { height: 80px; width: auto; }
 
+    .login-logo-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-logo-btn .logo-icon-light { display: block; }
+    .login-logo-btn .logo-icon-dark { display: none; }
+    .login-logo-btn:hover .logo-icon-light { display: none; }
+    .login-logo-btn:hover .logo-icon-dark { display: block; }
+    body.theme-dark .login-logo-btn .logo-icon-light { display: none; }
+    body.theme-dark .login-logo-btn .logo-icon-dark { display: block; }
+    body.theme-dark .login-logo-btn:hover .logo-icon-light { display: block; }
+    body.theme-dark .login-logo-btn:hover .logo-icon-dark { display: none; }
+
     .login-title {
       text-align: center;
       font-size: 1rem;
       font-weight: 600;
-      color: rgba(255, 255, 255, 0.6);
       margin-bottom: 28px;
     }
+    .login-title { color: rgba(255, 255, 255, 0.6); }
 
     .form-group {
       margin-bottom: 20px;
@@ -81,25 +108,29 @@
       display: block;
       font-size: 1.1rem;
       font-weight: 700;
-      color: rgba(255, 255, 255, 0.6);
       margin-bottom: 8px;
     }
+    .form-group label { color: rgba(255, 255, 255, 0.6); }
     .form-group input {
       width: 100%;
       padding: 14px 16px;
       font-family: 'DM Sans', sans-serif;
       font-size: 1rem;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 14px;
-      color: #e8e8ed;
       outline: none;
       transition: border-color 0.2s, box-shadow 0.2s;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #e8e8ed;
     }
     .form-group input::placeholder { color: rgba(255, 255, 255, 0.25); }
     .form-group input:not(:placeholder-shown) {
       border-color: #ff3131;
       box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.15);
+    }
+    body.theme-dark .form-group input:not(:placeholder-shown) {
+      border-color: #00d4aa;
+      box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.2);
     }
 
     .input-password-wrap {
@@ -138,14 +169,13 @@
     .btn-toggle-pass.pass-visible .icon-ojo-hover { display: block; }
     .btn-toggle-pass.pass-visible:hover .icon-ojo-default { display: block; }
     .btn-toggle-pass.pass-visible:hover .icon-ojo-hover { display: none; }
-    .form-group input:-webkit-autofill,
-    .form-group input:-webkit-autofill:hover,
-    .form-group input:-webkit-autofill:focus,
-    .form-group input:-webkit-autofill:active {
+    body:not(.theme-dark) .form-group input:-webkit-autofill,
+    body:not(.theme-dark) .form-group input:-webkit-autofill:hover,
+    body:not(.theme-dark) .form-group input:-webkit-autofill:focus,
+    body:not(.theme-dark) .form-group input:-webkit-autofill:active {
       -webkit-box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.06) inset !important;
       -webkit-text-fill-color: #e8e8ed !important;
       border: 1px solid #ff3131 !important;
-      border-radius: 14px !important;
       box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.15), 0 0 0 1000px rgba(255, 255, 255, 0.06) inset !important;
       font-family: 'DM Sans', sans-serif !important;
       font-size: 1rem !important;
@@ -153,9 +183,35 @@
       caret-color: #e8e8ed !important;
       transition: background-color 5000s ease-in-out 0s;
     }
-    .form-group input:focus {
+    body.theme-dark .form-group input:-webkit-autofill,
+    body.theme-dark .form-group input:-webkit-autofill:hover,
+    body.theme-dark .form-group input:-webkit-autofill:focus,
+    body.theme-dark .form-group input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.06) inset !important;
+      -webkit-text-fill-color: #e8e8ed !important;
+      border: 1px solid #00d4aa !important;
+      box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.2), 0 0 0 1000px rgba(255, 255, 255, 0.06) inset !important;
+      font-family: 'DM Sans', sans-serif !important;
+      font-size: 1rem !important;
+      font-weight: 400 !important;
+      caret-color: #00d4aa !important;
+      transition: background-color 5000s ease-in-out 0s;
+    }
+    body:not(.theme-dark) .form-group input:focus {
       border-color: #ff3131;
       box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.15);
+      color: #e8e8ed !important;
+      -webkit-text-fill-color: #e8e8ed !important;
+      caret-color: #e8e8ed !important;
+    }
+    body.theme-dark .form-group input:focus {
+      border-color: #00d4aa;
+      box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.2);
+      caret-color: #00d4aa;
+    }
+    body.theme-dark .form-group input::selection {
+      background: rgba(0, 212, 170, 0.4);
+      color: #fff;
     }
 
     .btn-login {
@@ -164,13 +220,18 @@
       font-family: 'DM Sans', sans-serif;
       font-size: 1rem;
       font-weight: 700;
-      background: linear-gradient(135deg, #ff3131, #c92b2b);
       color: #fff;
       border: none;
       border-radius: 14px;
       cursor: pointer;
       transition: opacity 0.2s, transform 0.1s;
       margin-top: 8px;
+    }
+    .btn-login {
+      background: linear-gradient(135deg, #ff3131, #c92b2b);
+    }
+    body.theme-dark .btn-login {
+      background: linear-gradient(135deg, #00d4aa, #00a884);
     }
     .btn-login:hover { opacity: 0.9; }
     .btn-login:active { transform: scale(0.98); }
@@ -197,7 +258,10 @@
 
   <div class="login-card">
     <div class="login-logo">
-      <img src="img/logo.svg" alt="" class="logo-icon">
+      <button type="button" class="login-logo-btn" id="login-logo-btn" title="Cambiar tema">
+        <img src="img/logo.svg" alt="" class="logo-icon logo-icon-light">
+        <img src="img/logoDark.svg" alt="" class="logo-icon logo-icon-dark">
+      </button>
       <img src="img/urbanCase.svg" alt="UrbanCase" class="logo-brand">
     </div>
     <div class="login-error" id="login-error"></div>
@@ -213,8 +277,8 @@
         <div class="input-password-wrap">
           <input type="password" id="password" name="pwd" placeholder="XXXXXXXXXXXX" required autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly')">
           <button type="button" class="btn-toggle-pass" id="btn-toggle-pass" tabindex="-1" title="Mostrar contraseña">
-            <img src="img/icon_ojo_cerrado.svg" alt="" class="icon-ojo icon-ojo-default" id="icon-ojo-default">
-            <img src="img/icon_ojo_abierto.svg" alt="" class="icon-ojo icon-ojo-hover" id="icon-ojo-hover">
+            <img src="img/icon_ojo_cerrado.svg" alt="" class="icon-ojo icon-ojo-default" id="icon-ojo-default" data-src="img/icon_ojo_cerrado.svg" data-src-dark="img/icon_ojo_cerrado_dark.svg">
+            <img src="img/icon_ojo_abierto.svg" alt="" class="icon-ojo icon-ojo-hover" id="icon-ojo-hover" data-src="img/icon_ojo_abierto.svg" data-src-dark="img/icon_ojo_abierto_dark.svg">
           </button>
         </div>
       </div>
@@ -224,11 +288,41 @@
 
   <script>
     const API = (window.location.protocol === 'file:') ? 'http://localhost:3000/api' : '/api';
+    const THEME_KEY = 'urbancase-theme';
+
+    function aplicarTemaLogin(oscuro) {
+      document.body.classList.toggle('theme-dark', oscuro);
+      try { localStorage.setItem(THEME_KEY, oscuro ? 'dark' : 'light'); } catch (_) {}
+      actualizarIconosOjo();
+    }
+    function actualizarIconosOjo() {
+      const dark = document.body.classList.contains('theme-dark');
+      document.querySelectorAll('#icon-ojo-default, #icon-ojo-hover').forEach(img => {
+        if (img.dataset.src) img.src = dark ? img.dataset.srcDark : img.dataset.src;
+      });
+    }
+    document.body.classList.toggle('theme-dark', localStorage.getItem(THEME_KEY) === 'dark');
+    actualizarIconosOjo();
+    const $logoBtn = document.getElementById('login-logo-btn');
+    if ($logoBtn) $logoBtn.addEventListener('click', () => aplicarTemaLogin(!document.body.classList.contains('theme-dark')));
+
     if (localStorage.getItem('uc_token')) {
       fetch(API + '/auth/me', {
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('uc_token') }
       }).then(r => { if (r.ok) window.location.href = (window.location.protocol === 'file:' ? 'http://localhost:3000' : '') + '/index.html'; });
     }
+
+    ['usuario', 'password'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('focus', () => {
+          if (document.body.classList.contains('theme-dark')) return;
+          const force = () => { el.style.color = '#e8e8ed'; el.style.webkitTextFillColor = '#e8e8ed'; };
+          force();
+          [100, 150, 250, 400].forEach(ms => setTimeout(force, ms));
+        });
+      }
+    });
 
     const $togglePass = document.getElementById('btn-toggle-pass');
     const $passInput = document.getElementById('password');
