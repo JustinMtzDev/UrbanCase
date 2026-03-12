@@ -40,7 +40,7 @@ async function initDatabase() {
   try {
     const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     await appPool.query(schema);
-    console.log('Tabla de usuarios creada y superusuario "soporte" insertado.');
+    console.log('Tablas creadas (usuarios, sucursales, clientes, proveedores) y superusuario "soporte" insertado.');
   } catch (err) {
     console.error('Error ejecutando el esquema:', err.message);
     process.exit(1);
