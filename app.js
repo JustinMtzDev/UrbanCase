@@ -32,6 +32,7 @@ let token = '';
   initModulo();
   initModuloClientes();
   initNav();
+  initDropdownSucursales();
 })();
 
 function authHeaders(json = true) {
@@ -60,7 +61,7 @@ function initNav() {
   const $vistaModulo = document.getElementById('vista-modulo');
   const $vistaModuloClientes = document.getElementById('vista-modulo-clientes');
 
-  document.querySelectorAll('.categoria-btn').forEach(btn => {
+  document.querySelectorAll('.categoria-btn:not(.dropdown-sucursales-trigger)').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.categoria-btn').forEach(b => b.classList.remove('activo'));
       btn.classList.add('activo');
@@ -80,6 +81,48 @@ function initNav() {
       }
     });
   });
+}
+
+function initDropdownSucursales() {
+  const $btn = document.getElementById('dropdown-sucursales-btn');
+  const $label = document.getElementById('dropdown-sucursales-label');
+  const $menu = document.getElementById('dropdown-sucursales-menu');
+  const $list = document.getElementById('dropdown-sucursales-list');
+  const $loading = document.getElementById('dropdown-sucursales-loading');
+
+  $btn?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    $menu.classList.toggle('abierto');
+    if ($menu.classList.contains('abierto')) {
+      $loading.style.display = 'block';
+      $list.innerHTML = '';
+      try {
+        const r = await fetch(`${API}/sucursales`, { headers: authHeaders(false) });
+        const sucursales = await r.json();
+        $loading.style.display = 'none';
+        if (sucursales.length === 0) {
+          $list.innerHTML = '<div class="dropdown-sucursales-vacio">No hay sucursales</div>';
+        } else {
+          $list.innerHTML = sucursales.map(s => {
+            const esc = (s.nombre || '').replace(/</g, '&lt;');
+            return `<div class="dropdown-sucursales-item">${esc}</div>`;
+          }).join('');
+          $list.querySelectorAll('.dropdown-sucursales-item').forEach(item => {
+            item.addEventListener('click', () => {
+              $label.textContent = item.textContent;
+              $menu.classList.remove('abierto');
+            });
+          });
+        }
+      } catch {
+        $loading.style.display = 'none';
+        $list.innerHTML = '<div class="dropdown-sucursales-vacio">Error al cargar</div>';
+      }
+    }
+  });
+
+  document.addEventListener('click', () => $menu?.classList.remove('abierto'));
+  $menu?.addEventListener('click', (e) => e.stopPropagation());
 }
 
 // ===================== POS =====================

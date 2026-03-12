@@ -237,6 +237,8 @@ header {
   min-height: 48px;
   padding: 0;
   border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 100;
 }
 
 body:not(.theme-dark) header {
@@ -345,6 +347,88 @@ body.theme-dark .logo-icon-wrap:hover .logo-icon-dark {
 
 .categoria-btn:last-of-type {
   border-right: none;
+}
+
+/* Dropdown Sucursales - más ancho para que quepa el nombre en una línea */
+.dropdown-sucursales {
+  position: relative;
+  flex: 2 1 0;
+  min-width: 120px;
+  display: flex;
+}
+
+.dropdown-sucursales-trigger {
+  width: 100%;
+}
+
+.dropdown-sucursales-trigger #dropdown-sucursales-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.dropdown-sucursales-trigger .dropdown-arrow {
+  font-size: 0.65em;
+  margin-left: 4px;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.dropdown-sucursales-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  min-width: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  margin-top: 4px;
+  padding: 6px 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  z-index: 9999;
+}
+
+body.theme-dark .dropdown-sucursales-menu {
+  background: #1a1a1f;
+}
+
+.dropdown-sucursales-menu.abierto {
+  display: block;
+}
+
+.dropdown-sucursales-loading {
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.dropdown-sucursales-vacio {
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.dropdown-sucursales-item {
+  padding: 10px 16px;
+  font-size: 0.95rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dropdown-sucursales-item:hover {
+  background: var(--surface-hover);
+}
+
+body:not(.theme-dark) .dropdown-sucursales-item:hover {
+  background: rgba(0, 0, 0, 0.06);
 }
 
 body:not(.theme-dark) .categoria-btn:hover {

@@ -24,7 +24,13 @@
       </div>
       <nav class="categorias">
         <button type="button" class="categoria-btn activo" data-categoria="todos">Home</button>
-        <button type="button" class="categoria-btn" data-categoria="proveedores">Sucursales</button>
+        <div class="dropdown-sucursales">
+          <button type="button" class="categoria-btn dropdown-sucursales-trigger" id="dropdown-sucursales-btn"><span id="dropdown-sucursales-label">Sucursales</span> <span class="dropdown-arrow">▼</span></button>
+          <div class="dropdown-sucursales-menu" id="dropdown-sucursales-menu">
+            <div class="dropdown-sucursales-loading" id="dropdown-sucursales-loading">Cargando...</div>
+            <div class="dropdown-sucursales-list" id="dropdown-sucursales-list"></div>
+          </div>
+        </div>
         <button type="button" class="categoria-btn" data-categoria="inventario">Inventario</button>
         <button type="button" class="categoria-btn" data-categoria="ventas">Ventas</button>
         <button type="button" class="categoria-btn" data-categoria="reportes">Reportes</button>
