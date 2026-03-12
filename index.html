@@ -24,11 +24,11 @@
       </div>
       <nav class="categorias">
         <button type="button" class="categoria-btn activo" data-categoria="todos">Home</button>
+        <button type="button" class="categoria-btn" data-categoria="proveedores">Sucursales</button>
         <button type="button" class="categoria-btn" data-categoria="inventario">Inventario</button>
         <button type="button" class="categoria-btn" data-categoria="ventas">Ventas</button>
         <button type="button" class="categoria-btn" data-categoria="reportes">Reportes</button>
-        <button type="button" class="categoria-btn" data-categoria="proveedores">Proveedores</button>
-        <button type="button" class="categoria-btn" data-categoria="clientes">Clientes</button>
+        <button type="button" class="categoria-btn" data-categoria="clientes">Clientes y Proveedores</button>
         <button type="button" class="categoria-btn" data-categoria="usuarios">Gestión</button>
       </nav>
       <div class="usuario-header" id="usuario-info" style="display:none">
@@ -121,6 +121,64 @@
       </div>
     </div>
 
+    <div class="app-glass modulo-panel" id="vista-modulo-clientes" style="display:none">
+      <div class="modulo-tabs">
+        <button type="button" class="modulo-tab activo" id="tab-clientes">Clientes</button>
+        <button type="button" class="modulo-tab" id="tab-proveedores">Proveedores</button>
+      </div>
+
+      <div id="subvista-clientes">
+        <div class="modulo-header">
+          <div></div>
+          <div class="modulo-acciones">
+            <input type="text" class="modulo-buscar" id="buscar-cliente" placeholder="Buscar cliente...">
+            <button type="button" class="btn btn-cobrar" id="btn-nuevo-cliente">+ Nuevo</button>
+          </div>
+        </div>
+        <div class="tabla-wrap">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Teléfono</th>
+                <th>Correo</th>
+                <th>Dirección</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-clientes"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="subvista-proveedores" style="display:none">
+        <div class="modulo-header">
+          <div></div>
+          <div class="modulo-acciones">
+            <input type="text" class="modulo-buscar" id="buscar-proveedor" placeholder="Buscar proveedor...">
+            <button type="button" class="btn btn-cobrar" id="btn-nuevo-proveedor">+ Nuevo</button>
+          </div>
+        </div>
+        <div class="tabla-wrap">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>RFC</th>
+                <th>Teléfono</th>
+                <th>Correo</th>
+                <th>Dirección</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-proveedores"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal Usuario -->
     <div id="modal-usuario" class="modal-overlay">
       <div class="modal-content modal-form">
@@ -184,6 +242,68 @@
           </div>
           <div class="modal-acciones">
             <button type="button" class="btn btn-vaciar" id="modal-sucursal-cancelar">Cancelar</button>
+            <button type="submit" class="btn btn-cobrar">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Cliente -->
+    <div id="modal-cliente" class="modal-overlay">
+      <div class="modal-content modal-form">
+        <h3 id="modal-cliente-titulo">Nuevo cliente</h3>
+        <form id="form-cliente">
+          <div class="form-row">
+            <label>Nombre <span class="required">*</span></label>
+            <input type="text" id="mc-nombre" required>
+          </div>
+          <div class="form-row">
+            <label>Teléfono</label>
+            <input type="text" id="mc-telefono" placeholder="10 dígitos" maxlength="10" inputmode="numeric">
+          </div>
+          <div class="form-row">
+            <label>Correo</label>
+            <input type="email" id="mc-correo" placeholder="ejemplo@correo.com">
+          </div>
+          <div class="form-row">
+            <label>Dirección</label>
+            <input type="text" id="mc-direccion" placeholder="Opcional">
+          </div>
+          <div class="modal-acciones">
+            <button type="button" class="btn btn-vaciar" id="modal-cliente-cancelar">Cancelar</button>
+            <button type="submit" class="btn btn-cobrar">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Proveedor -->
+    <div id="modal-proveedor" class="modal-overlay">
+      <div class="modal-content modal-form">
+        <h3 id="modal-proveedor-titulo">Nuevo proveedor</h3>
+        <form id="form-proveedor">
+          <div class="form-row">
+            <label>Nombre <span class="required">*</span></label>
+            <input type="text" id="mp-nombre" required>
+          </div>
+          <div class="form-row">
+            <label>RFC</label>
+            <input type="text" id="mp-rfc" placeholder="XAXX010101XXX" maxlength="13">
+          </div>
+          <div class="form-row">
+            <label>Teléfono</label>
+            <input type="text" id="mp-telefono" placeholder="10 dígitos" maxlength="10" inputmode="numeric">
+          </div>
+          <div class="form-row">
+            <label>Correo</label>
+            <input type="email" id="mp-correo" placeholder="ejemplo@correo.com">
+          </div>
+          <div class="form-row">
+            <label>Dirección</label>
+            <input type="text" id="mp-direccion" placeholder="Opcional">
+          </div>
+          <div class="modal-acciones">
+            <button type="button" class="btn btn-vaciar" id="modal-proveedor-cancelar">Cancelar</button>
             <button type="submit" class="btn btn-cobrar">Guardar</button>
           </div>
         </form>

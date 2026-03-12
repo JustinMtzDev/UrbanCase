@@ -1,3 +1,7 @@
+// Si abres el HTML directo (file://), redirigir al servidor
+if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
+  window.location.href = 'http://localhost:3000/';
+}
 const API = '/api';
 let token = '';
 
@@ -26,6 +30,7 @@ let token = '';
 
   initPOS();
   initModulo();
+  initModuloClientes();
   initNav();
 })();
 
@@ -34,6 +39,13 @@ function authHeaders(json = true) {
   if (json) h['Content-Type'] = 'application/json';
   return h;
 }
+
+// Validaciones para clientes/proveedores
+const validaciones = {
+  telefono: (v) => !v || /^\d{10}$/.test(v) || 'El teléfono debe tener exactamente 10 dígitos (sin letras)',
+  correo: (v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || 'Ingresa un correo electrónico válido',
+  rfc: (v) => !v || /^([A-ZÑ&]{3,4})\d{6}([A-Z0-9]{3})$/.test(v.replace(/\s/g, '').toUpperCase()) || 'El RFC debe tener formato: 3-4 letras + 6 dígitos + 3 caracteres (ej: XAXX010101XXX)',
+};
 
 function formatFecha(iso) {
   const d = new Date(iso);
@@ -46,18 +58,24 @@ function formatFecha(iso) {
 function initNav() {
   const $vistaPos = document.getElementById('vista-pos');
   const $vistaModulo = document.getElementById('vista-modulo');
+  const $vistaModuloClientes = document.getElementById('vista-modulo-clientes');
 
   document.querySelectorAll('.categoria-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.categoria-btn').forEach(b => b.classList.remove('activo'));
       btn.classList.add('activo');
+      $vistaModulo.style.display = 'none';
+      $vistaModuloClientes.style.display = 'none';
+      $vistaPos.style.display = 'none';
       if (btn.dataset.categoria === 'usuarios') {
-        $vistaPos.style.display = 'none';
         $vistaModulo.style.display = 'flex';
         cargarUsuarios();
         cargarSucursales();
+      } else if (btn.dataset.categoria === 'clientes') {
+        $vistaModuloClientes.style.display = 'flex';
+        cargarClientes();
+        cargarProveedores();
       } else {
-        $vistaModulo.style.display = 'none';
         $vistaPos.style.display = 'grid';
       }
     });
@@ -280,7 +298,10 @@ function initUsuarios() {
       if (!r.ok) return alert(data.error || 'Error al guardar');
       cerrarModalUsuario();
       cargarUsuarios();
-    } catch { alert('Error de conexión'); }
+    } catch (err) {
+      console.error(err);
+      alert('Error de conexión. Asegúrate de: 1) Tener el servidor corriendo (npm start en carpeta server), 2) Acceder por http://localhost:3000');
+    }
   });
 }
 
@@ -386,7 +407,10 @@ function initSucursales() {
       if (!r.ok) return alert(data.error || 'Error al guardar');
       cerrarModalSucursal();
       cargarSucursales();
-    } catch { alert('Error de conexión'); }
+    } catch (err) {
+      console.error(err);
+      alert('Error de conexión. Asegúrate de: 1) Tener el servidor corriendo (npm start en carpeta server), 2) Acceder por http://localhost:3000');
+    }
   });
 }
 
@@ -414,6 +438,260 @@ function eliminarSucursal(id, nombre) {
     const r = await fetch(`${API}/sucursales/${id}`, { method: 'DELETE', headers: authHeaders(false) });
     if (!r.ok) { const d = await r.json(); alert(d.error); }
     cargarSucursales();
+  });
+}
+
+// ===================== MÓDULO CLIENTES Y PROVEEDORES =====================
+
+let todosClientes = [];
+let todosProveedores = [];
+
+function initModuloClientes() {
+  const $tabClientes = document.getElementById('tab-clientes');
+  const $tabProveedores = document.getElementById('tab-proveedores');
+  const $svClientes = document.getElementById('subvista-clientes');
+  const $svProveedores = document.getElementById('subvista-proveedores');
+
+  $tabClientes.addEventListener('click', () => {
+    $tabClientes.classList.add('activo'); $tabProveedores.classList.remove('activo');
+    $svClientes.style.display = ''; $svProveedores.style.display = 'none';
+  });
+  $tabProveedores.addEventListener('click', () => {
+    $tabProveedores.classList.add('activo'); $tabClientes.classList.remove('activo');
+    $svProveedores.style.display = ''; $svClientes.style.display = 'none';
+    cargarProveedores();
+  });
+
+  initClientes();
+  initProveedores();
+  // Restringir input: teléfono y cuenta bancaria solo dígitos
+  ['mc-telefono', 'mp-telefono'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => { el.value = el.value.replace(/\D/g, '').slice(0, 10); });
+  });
+  }
+
+// ===================== CLIENTES =====================
+
+async function cargarClientes() {
+  try {
+    const r = await fetch(`${API}/clientes`, { headers: authHeaders(false) });
+    if (r.status === 401) return window.location.href = '/login.html';
+    todosClientes = await r.json();
+    renderTablaClientes(todosClientes);
+  } catch (err) { console.error(err); }
+}
+
+function renderTablaClientes(lista) {
+  const $tbody = document.getElementById('tbody-clientes');
+  const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  if (lista.length === 0) {
+    $tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;opacity:.5;padding:2rem">No se encontraron clientes</td></tr>';
+    return;
+  }
+  $tbody.innerHTML = lista.map(c => `
+    <tr>
+      <td>${c.id}</td>
+      <td>${esc(c.nombre)}</td>
+      <td>${esc(c.telefono) || '<span style="opacity:.4">—</span>'}</td>
+      <td>${esc(c.correo) || '<span style="opacity:.4">—</span>'}</td>
+      <td>${esc(c.direccion) || '<span style="opacity:.4">—</span>'}</td>
+      <td>
+        <button class="btn-tabla" onclick="editarCliente(${c.id})">Editar</button>
+        <button class="btn-tabla btn-tabla-danger" onclick="eliminarCliente(${c.id}, '${esc(c.nombre).replace(/'/g, "\\'")}')">Eliminar</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function initClientes() {
+  document.getElementById('buscar-cliente').addEventListener('input', function () {
+    const q = this.value.toLowerCase().trim();
+    renderTablaClientes(todosClientes.filter(c =>
+      (c.nombre || '').toLowerCase().includes(q) ||
+      (c.telefono || '').toLowerCase().includes(q) ||
+      (c.correo || '').toLowerCase().includes(q) ||
+      (c.direccion || '').toLowerCase().includes(q)
+    ));
+  });
+
+  document.getElementById('btn-nuevo-cliente').addEventListener('click', () => abrirModalCliente());
+  document.getElementById('modal-cliente-cancelar').addEventListener('click', cerrarModalCliente);
+  document.getElementById('modal-cliente').addEventListener('click', e => { if (e.target.id === 'modal-cliente') cerrarModalCliente(); });
+
+  document.getElementById('form-cliente').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const tel = document.getElementById('mc-telefono').value.trim();
+    const cor = document.getElementById('mc-correo').value.trim();
+    const errTel = validaciones.telefono(tel);
+    const errCor = validaciones.correo(cor);
+    if (errTel !== true) return alert(errTel);
+    if (errCor !== true) return alert(errCor);
+    const id = e.target.dataset.editId;
+    const datos = {
+      nombre: document.getElementById('mc-nombre').value.trim(),
+      telefono: tel || null,
+      correo: cor || null,
+      direccion: document.getElementById('mc-direccion').value.trim() || null,
+    };
+    try {
+      let r;
+      if (id) {
+        r = await fetch(`${API}/clientes/${id}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(datos) });
+      } else {
+        r = await fetch(`${API}/clientes`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(datos) });
+      }
+      const data = await r.json();
+      if (!r.ok) return alert(data.error || 'Error al guardar');
+      cerrarModalCliente();
+      cargarClientes();
+    } catch (err) {
+      console.error(err);
+      alert('Error de conexión. Asegúrate de: 1) Tener el servidor corriendo (npm start en carpeta server), 2) Acceder por http://localhost:3000');
+    }
+  });
+}
+
+function abrirModalCliente(cliente = null) {
+  const $form = document.getElementById('form-cliente');
+  $form.reset();
+  if (cliente) {
+    document.getElementById('modal-cliente-titulo').textContent = 'Editar cliente';
+    $form.dataset.editId = cliente.id;
+    document.getElementById('mc-nombre').value = cliente.nombre || '';
+    document.getElementById('mc-telefono').value = cliente.telefono || '';
+    document.getElementById('mc-correo').value = cliente.correo || '';
+    document.getElementById('mc-direccion').value = cliente.direccion || '';
+  } else {
+    document.getElementById('modal-cliente-titulo').textContent = 'Nuevo cliente';
+    delete $form.dataset.editId;
+  }
+  document.getElementById('modal-cliente').classList.add('visible');
+}
+
+function cerrarModalCliente() { document.getElementById('modal-cliente').classList.remove('visible'); }
+function editarCliente(id) { const c = todosClientes.find(x => x.id === id); if (c) abrirModalCliente(c); }
+
+function eliminarCliente(id, nombre) {
+  abrirConfirmar(`¿Eliminar al cliente "${nombre}"?`, async () => {
+    const r = await fetch(`${API}/clientes/${id}`, { method: 'DELETE', headers: authHeaders(false) });
+    if (!r.ok) { const d = await r.json(); alert(d.error); }
+    cargarClientes();
+  });
+}
+
+// ===================== PROVEEDORES =====================
+
+async function cargarProveedores() {
+  try {
+    const r = await fetch(`${API}/proveedores`, { headers: authHeaders(false) });
+    if (r.status === 401) return window.location.href = '/login.html';
+    todosProveedores = await r.json();
+    renderTablaProveedores(todosProveedores);
+  } catch (err) { console.error(err); }
+}
+
+function renderTablaProveedores(lista) {
+  const $tbody = document.getElementById('tbody-proveedores');
+  const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  if (lista.length === 0) {
+    $tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;opacity:.5;padding:2rem">No se encontraron proveedores</td></tr>';
+    return;
+  }
+  $tbody.innerHTML = lista.map(p => `
+    <tr>
+      <td>${p.id}</td>
+      <td>${esc(p.nombre)}</td>
+      <td>${esc(p.rfc) || '<span style="opacity:.4">—</span>'}</td>
+      <td>${esc(p.telefono) || '<span style="opacity:.4">—</span>'}</td>
+      <td>${esc(p.correo) || '<span style="opacity:.4">—</span>'}</td>
+      <td>${esc(p.direccion) || '<span style="opacity:.4">—</span>'}</td>
+      <td>
+        <button class="btn-tabla" onclick="editarProveedor(${p.id})">Editar</button>
+        <button class="btn-tabla btn-tabla-danger" onclick="eliminarProveedor(${p.id}, '${esc(p.nombre).replace(/'/g, "\\'")}')">Eliminar</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function initProveedores() {
+  document.getElementById('buscar-proveedor').addEventListener('input', function () {
+    const q = this.value.toLowerCase().trim();
+    renderTablaProveedores(todosProveedores.filter(p =>
+      (p.nombre || '').toLowerCase().includes(q) ||
+      (p.rfc || '').toLowerCase().includes(q) ||
+      (p.telefono || '').toLowerCase().includes(q) ||
+      (p.correo || '').toLowerCase().includes(q)
+    ));
+  });
+
+  document.getElementById('btn-nuevo-proveedor').addEventListener('click', () => abrirModalProveedor());
+  document.getElementById('modal-proveedor-cancelar').addEventListener('click', cerrarModalProveedor);
+  document.getElementById('modal-proveedor').addEventListener('click', e => { if (e.target.id === 'modal-proveedor') cerrarModalProveedor(); });
+
+  document.getElementById('form-proveedor').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const tel = document.getElementById('mp-telefono').value.trim();
+    const cor = document.getElementById('mp-correo').value.trim();
+    const rfc = document.getElementById('mp-rfc').value.trim().replace(/\s/g, '');
+    const errTel = validaciones.telefono(tel);
+    const errCor = validaciones.correo(cor);
+    const errRfc = validaciones.rfc(rfc);
+    if (errTel !== true) return alert(errTel);
+    if (errCor !== true) return alert(errCor);
+    if (errRfc !== true) return alert(errRfc);
+    const id = e.target.dataset.editId;
+    const datos = {
+      nombre: document.getElementById('mp-nombre').value.trim(),
+      rfc: rfc || null,
+      telefono: tel || null,
+      correo: cor || null,
+      direccion: document.getElementById('mp-direccion').value.trim() || null,
+    };
+    try {
+      let r;
+      if (id) {
+        r = await fetch(`${API}/proveedores/${id}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(datos) });
+      } else {
+        r = await fetch(`${API}/proveedores`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(datos) });
+      }
+      const data = await r.json();
+      if (!r.ok) return alert(data.error || 'Error al guardar');
+      cerrarModalProveedor();
+      cargarProveedores();
+    } catch (err) {
+      console.error(err);
+      alert('Error de conexión. Asegúrate de: 1) Tener el servidor corriendo (npm start en carpeta server), 2) Acceder por http://localhost:3000');
+    }
+  });
+}
+
+function abrirModalProveedor(proveedor = null) {
+  const $form = document.getElementById('form-proveedor');
+  $form.reset();
+  if (proveedor) {
+    document.getElementById('modal-proveedor-titulo').textContent = 'Editar proveedor';
+    $form.dataset.editId = proveedor.id;
+    document.getElementById('mp-nombre').value = proveedor.nombre || '';
+    document.getElementById('mp-rfc').value = proveedor.rfc || '';
+    document.getElementById('mp-telefono').value = proveedor.telefono || '';
+    document.getElementById('mp-correo').value = proveedor.correo || '';
+    document.getElementById('mp-direccion').value = proveedor.direccion || '';
+  } else {
+    document.getElementById('modal-proveedor-titulo').textContent = 'Nuevo proveedor';
+    delete $form.dataset.editId;
+  }
+  document.getElementById('modal-proveedor').classList.add('visible');
+}
+
+function cerrarModalProveedor() { document.getElementById('modal-proveedor').classList.remove('visible'); }
+function editarProveedor(id) { const p = todosProveedores.find(x => x.id === id); if (p) abrirModalProveedor(p); }
+
+function eliminarProveedor(id, nombre) {
+  abrirConfirmar(`¿Eliminar al proveedor "${nombre}"?`, async () => {
+    const r = await fetch(`${API}/proveedores/${id}`, { method: 'DELETE', headers: authHeaders(false) });
+    if (!r.ok) { const d = await r.json(); alert(d.error); }
+    cargarProveedores();
   });
 }
 
