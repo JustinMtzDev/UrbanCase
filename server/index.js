@@ -13,6 +13,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..')));
 
 app.use('/api/auth', authRouter);
+app.use('/api/usuarios', authMiddleware, require('./usuarios'));
+app.use('/api/sucursales', authMiddleware, require('./sucursales'));
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'login.html'));
