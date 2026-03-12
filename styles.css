@@ -784,13 +784,65 @@ body:not(.theme-dark) .modal-content {
   flex: 1;
 }
 
-/* ===== Módulos (Usuarios, etc.) ===== */
-body:not(.theme-dark) #vista-usuarios {
-  --accent: #ff3b30;
+/* ===== Módulos Gestión (solo theme default) ===== */
+body:not(.theme-dark) #vista-modulo {
+  --accent: #ff3131;
 }
 
-body:not(.theme-dark) #vista-usuarios .btn-cobrar {
-  background: #ff3b30;
+body:not(.theme-dark) #vista-modulo .btn-cobrar {
+  background: #ff3131;
+}
+
+body:not(.theme-dark) #modal-usuario,
+body:not(.theme-dark) #modal-sucursal {
+  --accent: #ff3131;
+}
+
+body:not(.theme-dark) #modal-usuario .modal-content,
+body:not(.theme-dark) #modal-sucursal .modal-content {
+  border-color: #ff3131;
+}
+
+body:not(.theme-dark) #modal-usuario .btn-cobrar,
+body:not(.theme-dark) #modal-sucursal .btn-cobrar {
+  background: #ff3131;
+}
+
+body:not(.theme-dark) #modal-usuario .form-row input:focus,
+body:not(.theme-dark) #modal-usuario .form-row select:focus,
+body:not(.theme-dark) #modal-sucursal .form-row input:focus,
+body:not(.theme-dark) #modal-sucursal .form-row select:focus {
+  border-color: #ff3131;
+}
+
+.modulo-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.modulo-tab {
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 10px 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+
+.modulo-tab:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.modulo-tab.activo {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
 }
 
 .modulo-panel {
