@@ -33,6 +33,7 @@ let token = '';
   initModuloClientes();
   initNav();
   initDropdownSucursales();
+  initProductoModal();
 })();
 
 function authHeaders(json = true) {
@@ -179,7 +180,8 @@ function initInventarioVista() {
   $buscador?.addEventListener('input', () => renderInventarioProductos());
 
   $btnAgregar?.addEventListener('click', () => {
-    alert('Agregar producto (próximamente)');
+    document.getElementById('modal-producto')?.classList.add('visible');
+    document.body.classList.add('modal-producto-abierto');
   });
 
   renderInventarioProductos();
@@ -220,6 +222,290 @@ function renderInventarioProductos() {
       const prod = productosInventario.find(p => p.id === id);
       if (prod && window.agregarAlCarrito) window.agregarAlCarrito(prod);
     });
+  });
+}
+
+// ===================== MODAL AGREGAR PRODUCTO =====================
+
+const MARCAS_MODELOS = {
+  Apple: ['iPhone 15', 'iPhone 15 Pro', 'iPhone 14', 'iPhone 14 Pro', 'iPhone 13', 'iPhone 12', 'iPhone SE'],
+  Samsung: ['Galaxy S24', 'Galaxy S23', 'Galaxy A54', 'Galaxy A34', 'Galaxy Z Flip', 'Galaxy Z Fold'],
+  Xiaomi: ['Redmi Note 13', 'Redmi 12', 'POCO X6', 'Mi 14'],
+  Motorola: ['Edge 40', 'Edge 30', 'Moto G84', 'Razr'],
+  Huawei: ['P60', 'P50', 'Mate 60', 'Nova 12'],
+  Google: ['Pixel 8', 'Pixel 7', 'Pixel 6a'],
+  OnePlus: ['OnePlus 12', 'OnePlus 11', 'Nord 3'],
+  OPPO: ['Find X6', 'Reno 10', 'A78'],
+  Realme: ['Realme 11', 'Realme 10', 'Realme C55'],
+  Honor: ['Honor 90', 'Honor Magic 5', 'Honor X9b'],
+};
+
+function initProductoModal() {
+  const $modal = document.getElementById('modal-producto');
+  const $form = document.getElementById('form-producto');
+  const $categoria = document.getElementById('prod-categoria');
+  const $camposMicas = document.getElementById('prod-campos-micas');
+  const $camposFundas = document.getElementById('prod-campos-fundas');
+  const $camposCargadores = document.getElementById('prod-campos-cargadores');
+  const $chipCristal = document.querySelector('.form-chip[data-tipo="cristal"]');
+  const $chipHidrogel = document.querySelector('.form-chip[data-tipo="hidrogel"]');
+  const $tipoCristalWrap = document.getElementById('prod-mica-cristal-opciones');
+  const $tipoCristal = document.getElementById('prod-mica-tipo-cristal');
+  const $tipoHidrogelWrap = document.getElementById('prod-mica-hidrogel-opciones');
+  const $tipoHidrogel = document.getElementById('prod-mica-tipo-hidrogel');
+  const $marcaModeloWrap = document.getElementById('prod-mica-marca-modelo');
+  const $marca = document.getElementById('prod-mica-marca');
+  const $modelo = document.getElementById('prod-mica-modelo');
+  const $precio = document.getElementById('prod-precio');
+  const $precioMenos = document.getElementById('prod-precio-menos');
+  const $precioMas = document.getElementById('prod-precio-mas');
+  const $stockValor = document.getElementById('prod-stock-valor');
+  const $stockMenos = document.getElementById('prod-stock-menos');
+  const $stockMas = document.getElementById('prod-stock-mas');
+  const $imagen = document.getElementById('prod-imagen');
+  const $imagenNombre = document.getElementById('prod-imagen-nombre');
+  const $cancelar = document.getElementById('modal-producto-cancelar');
+
+  const $fundaMarca = document.getElementById('prod-funda-marca');
+  const $fundaMarcaCel = document.getElementById('prod-funda-marca-cel');
+  const $fundaModeloCel = document.getElementById('prod-funda-modelo-cel');
+  const $fundaRangos = document.getElementById('prod-funda-rangos');
+
+  const $cargadorTipo = document.getElementById('prod-cargador-tipo');
+  const $cargadorMarca = document.getElementById('prod-cargador-marca');
+  const $cargadorWatts = document.getElementById('prod-cargador-watts');
+  const $cargadorConexion = document.getElementById('prod-cargador-conexion');
+  const $cargadorMetros = document.getElementById('prod-cargador-metros');
+
+  function resetModal() {
+    $categoria.value = '';
+    $camposMicas.style.display = 'none';
+    $camposFundas.style.display = 'none';
+    $chipCristal?.classList.remove('activo');
+    $chipHidrogel?.classList.remove('activo');
+    $tipoCristalWrap.style.display = 'none';
+    $tipoCristal.value = '';
+    $tipoHidrogelWrap.style.display = 'none';
+    $tipoHidrogel.value = '';
+    $marcaModeloWrap.style.display = 'none';
+    $marca.innerHTML = '<option value="">Seleccionar marca...</option>';
+    $modelo.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    if ($fundaMarca) $fundaMarca.value = '';
+    if ($fundaMarcaCel) $fundaMarcaCel.value = '';
+    if ($fundaModeloCel) $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    $fundaRangos?.querySelectorAll('.form-chip.activo').forEach(c => c.classList.remove('activo'));
+    if ($cargadorTipo) $cargadorTipo.value = '';
+    if ($cargadorMarca) $cargadorMarca.value = '';
+    if ($cargadorWatts) $cargadorWatts.value = '';
+    if ($cargadorConexion) $cargadorConexion.value = '';
+    if ($cargadorMetros) $cargadorMetros.value = '';
+    $precio.value = '';
+    if ($stockValor) $stockValor.value = '0';
+    if ($imagen) $imagen.value = '';
+    if ($imagenNombre) $imagenNombre.textContent = '';
+  }
+
+  function cerrarModal() {
+    $modal?.classList.remove('visible');
+    document.body.classList.remove('modal-producto-abierto');
+    resetModal();
+  }
+
+  function limpiarCamposAlCambiarCategoria() {
+    $chipCristal?.classList.remove('activo');
+    $chipHidrogel?.classList.remove('activo');
+    $tipoCristalWrap.style.display = 'none';
+    $tipoCristal.value = '';
+    $tipoHidrogelWrap.style.display = 'none';
+    $tipoHidrogel.value = '';
+    $marcaModeloWrap.style.display = 'none';
+    $marca.innerHTML = '<option value="">Seleccionar marca...</option>';
+    $modelo.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    if ($fundaMarca) $fundaMarca.value = '';
+    if ($fundaMarcaCel) $fundaMarcaCel.value = '';
+    if ($fundaModeloCel) $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    $fundaRangos?.querySelectorAll('.form-chip.activo').forEach(c => c.classList.remove('activo'));
+    if ($cargadorTipo) $cargadorTipo.value = '';
+    if ($cargadorMarca) $cargadorMarca.value = '';
+    if ($cargadorWatts) $cargadorWatts.value = '';
+    if ($cargadorConexion) $cargadorConexion.value = '';
+    if ($cargadorMetros) $cargadorMetros.value = '';
+    $precio.value = '';
+    if ($stockValor) $stockValor.value = '0';
+    if ($imagen) $imagen.value = '';
+    if ($imagenNombre) $imagenNombre.textContent = '';
+  }
+
+  $categoria?.addEventListener('change', () => {
+    limpiarCamposAlCambiarCategoria();
+    const cat = $categoria.value;
+    $camposMicas.style.display = cat === 'micas' ? 'block' : 'none';
+    $camposFundas.style.display = cat === 'fundas' ? 'block' : 'none';
+    $camposCargadores.style.display = cat === 'cargadores' ? 'block' : 'none';
+    if (cat === 'fundas' && $fundaMarcaCel) {
+      $fundaMarcaCel.innerHTML = '<option value="">Seleccionar marca...</option>' +
+        Object.keys(MARCAS_MODELOS).map(m => `<option value="${m}">${m}</option>`).join('');
+      $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    }
+    if (cat !== 'micas') {
+      $chipCristal?.classList.remove('activo');
+      $chipHidrogel?.classList.remove('activo');
+      $tipoCristalWrap.style.display = 'none';
+      $tipoHidrogelWrap.style.display = 'none';
+      $marcaModeloWrap.style.display = 'none';
+    }
+  });
+
+  $chipCristal?.addEventListener('click', () => {
+    $chipCristal.classList.add('activo');
+    $chipHidrogel?.classList.remove('activo');
+    $tipoCristalWrap.style.display = 'block';
+    $tipoCristal.value = '';
+    $tipoHidrogelWrap.style.display = 'none';
+    $tipoHidrogel.value = '';
+    $marcaModeloWrap.style.display = 'none';
+  });
+
+  $chipHidrogel?.addEventListener('click', () => {
+    $chipHidrogel.classList.add('activo');
+    $chipCristal?.classList.remove('activo');
+    $tipoCristalWrap.style.display = 'none';
+    $tipoCristal.value = '';
+    $tipoHidrogelWrap.style.display = 'block';
+    $tipoHidrogel.value = '';
+    $marcaModeloWrap.style.display = 'none';
+  });
+
+  $tipoCristal?.addEventListener('change', () => {
+    const tipo = $tipoCristal.value;
+    if (tipo) {
+      $marcaModeloWrap.style.display = 'block';
+      $marca.innerHTML = '<option value="">Seleccionar marca...</option>' +
+        Object.keys(MARCAS_MODELOS).map(m => `<option value="${m}">${m}</option>`).join('');
+      $modelo.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    } else {
+      $marcaModeloWrap.style.display = 'none';
+    }
+  });
+
+  $marca?.addEventListener('change', () => {
+    const marca = $marca.value;
+    const modelos = MARCAS_MODELOS[marca] || [];
+    $modelo.innerHTML = '<option value="">Seleccionar modelo...</option>' +
+      modelos.map(m => `<option value="${m}">${m}</option>`).join('');
+  });
+
+  $fundaMarcaCel?.addEventListener('change', () => {
+    const marca = $fundaMarcaCel.value;
+    const modelos = MARCAS_MODELOS[marca] || [];
+    $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>' +
+      modelos.map(m => `<option value="${m}">${m}</option>`).join('');
+  });
+
+  $fundaRangos?.querySelectorAll('.form-chip[data-rango]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      $fundaRangos.querySelectorAll('.form-chip').forEach(c => c.classList.remove('activo'));
+      chip.classList.add('activo');
+      const rango = chip.dataset.rango;
+      const [min] = rango.split('-').map(Number);
+      if ($precio) $precio.value = min;
+    });
+  });
+
+  function actualizarChipRango() {
+    if (!$fundaRangos || $categoria?.value !== 'fundas') return;
+    const precio = parseInt($precio?.value || 0, 10);
+    $fundaRangos.querySelectorAll('.form-chip').forEach(c => c.classList.remove('activo'));
+    const chips = Array.from($fundaRangos.querySelectorAll('.form-chip[data-rango]'));
+    const chipMatch = chips.find(chip => {
+      const [min, max] = chip.dataset.rango.split('-').map(Number);
+      return precio >= min && precio <= max;
+    });
+    if (chipMatch) chipMatch.classList.add('activo');
+  }
+
+  $precio?.addEventListener('input', actualizarChipRango);
+  $precio?.addEventListener('change', actualizarChipRango);
+
+  $imagen?.addEventListener('change', () => {
+    const file = $imagen.files?.[0];
+    if ($imagenNombre) $imagenNombre.textContent = file ? file.name : '';
+  });
+
+  function setupHoldRepeat($btn, $input, delta, opts = {}) {
+    let timer = null;
+    let interval = null;
+    const delay = opts.delay ?? 400;
+    const intervalMs = opts.interval ?? 150;
+    const onUpdate = opts.onUpdate;
+
+    function update() {
+      const v = Math.max(0, parseInt($input?.value || 0, 10) + delta);
+      if ($input) $input.value = v;
+      onUpdate?.();
+    }
+
+    $btn?.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      update();
+      timer = setTimeout(() => {
+        interval = setInterval(update, intervalMs);
+      }, delay);
+    });
+
+    $btn?.addEventListener('mouseup', stop);
+    $btn?.addEventListener('mouseleave', stop);
+
+    function stop() {
+      clearTimeout(timer);
+      clearInterval(interval);
+      timer = null;
+      interval = null;
+    }
+  }
+
+  setupHoldRepeat($precioMenos, $precio, -1, { delay: 250, interval: 80, onUpdate: actualizarChipRango });
+  setupHoldRepeat($precioMas, $precio, 1, { delay: 250, interval: 80, onUpdate: actualizarChipRango });
+  setupHoldRepeat($stockMenos, $stockValor, -1);
+  setupHoldRepeat($stockMas, $stockValor, 1);
+
+  $cancelar?.addEventListener('click', cerrarModal);
+  $modal?.addEventListener('click', e => { if (e.target.id === 'modal-producto') cerrarModal(); });
+
+  $form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const cat = $categoria.value;
+    if (!cat) { alert('Selecciona una categoría'); return; }
+    if (cat === 'micas') {
+      const tipoMica = $chipCristal?.classList.contains('activo') ? 'cristal' : ($chipHidrogel?.classList.contains('activo') ? 'hidrogel' : null);
+      if (!tipoMica) { alert('Selecciona tipo de mica (Cristal o Hidrogel)'); return; }
+      if (tipoMica === 'cristal') {
+        const tipoCristal = $tipoCristal.value;
+        if (!tipoCristal) { alert('Selecciona tipo de cristal'); return; }
+        const marca = $marca.value;
+        const modelo = $modelo.value;
+        if (!marca || !modelo) { alert('Selecciona marca y modelo'); return; }
+      } else if (tipoMica === 'hidrogel') {
+        const tipoHidrogel = $tipoHidrogel.value;
+        if (!tipoHidrogel) { alert('Selecciona tipo de hidrogel'); return; }
+      }
+    }
+    if (cat === 'fundas') {
+      const marcaCel = $fundaMarcaCel?.value;
+      const modeloCel = $fundaModeloCel?.value;
+      if (!marcaCel || !modeloCel) { alert('Selecciona marca y modelo del celular'); return; }
+    }
+    if (cat === 'cargadores') {
+      const tipo = $cargadorTipo?.value;
+      if (!tipo) { alert('Selecciona tipo de cargador'); return; }
+    }
+    const precio = parseFloat($precio?.value || 0);
+    if (precio <= 0) { alert('Ingresa un precio válido'); return; }
+    const stock = parseInt($stockValor?.value || 0, 10);
+    if (stock < 1) { alert('El stock debe ser al menos 1'); return; }
+    console.log('Producto a agregar:', { categoria: cat, stock, /* otros campos */ });
+    alert('Producto agregado (frontend listo, falta backend)');
+    cerrarModal();
   });
 }
 

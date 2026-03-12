@@ -335,6 +335,174 @@
       </div>
     </div>
 
+    <!-- Modal Agregar Producto -->
+    <div id="modal-producto" class="modal-overlay">
+      <div class="modal-content modal-form">
+        <h3>Agregar producto</h3>
+        <form id="form-producto">
+          <div class="form-row form-row-inline">
+            <label>Categoría</label>
+            <select id="prod-categoria">
+              <option value="">Seleccionar...</option>
+              <option value="micas">Micas</option>
+              <option value="fundas">Fundas</option>
+              <option value="cargadores">Cargadores</option>
+              <option value="audifonos">Audífonos</option>
+              <option value="bocinas">Bocinas</option>
+              <option value="accesorios">Accesorios</option>
+              <option value="otros">Otros</option>
+            </select>
+          </div>
+
+          <div id="prod-campos-micas" class="prod-campos-categoria" style="display:none">
+            <div class="form-row">
+              <label>Tipo de mica</label>
+              <div class="form-chips">
+                <button type="button" class="form-chip" data-tipo="cristal">Cristal</button>
+                <button type="button" class="form-chip" data-tipo="hidrogel">Hidrogel</button>
+              </div>
+            </div>
+            <div id="prod-mica-cristal-opciones" class="form-row" style="display:none">
+              <label>Tipo cristal</label>
+              <select id="prod-mica-tipo-cristal">
+                <option value="">Seleccionar...</option>
+                <option value="9H">9H</option>
+                <option value="9D">9D</option>
+                <option value="privacidad">Privacidad</option>
+                <option value="curva">Curva</option>
+              </select>
+            </div>
+            <div id="prod-mica-hidrogel-opciones" class="form-row" style="display:none">
+              <label>Tipo hidrogel</label>
+              <select id="prod-mica-tipo-hidrogel">
+                <option value="">Seleccionar...</option>
+                <option value="HD">HD</option>
+                <option value="mate">Mate</option>
+                <option value="privacidad">Privacidad</option>
+              </select>
+            </div>
+            <div id="prod-mica-marca-modelo" style="display:none">
+              <div class="form-row form-row-inline">
+                <label>Marca</label>
+                <select id="prod-mica-marca">
+                  <option value="">Seleccionar marca...</option>
+                </select>
+              </div>
+              <div class="form-row form-row-inline">
+                <label>Modelo</label>
+                <select id="prod-mica-modelo">
+                  <option value="">Seleccionar modelo...</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div id="prod-campos-fundas" class="prod-campos-categoria" style="display:none">
+            <div class="form-row">
+              <label>Marca de la funda</label>
+              <input type="text" id="prod-funda-marca" placeholder="Ej: Spigen, Otterbox...">
+            </div>
+            <div class="form-row form-row-inline">
+              <label>Marca</label>
+              <select id="prod-funda-marca-cel">
+                <option value="">Seleccionar marca...</option>
+              </select>
+            </div>
+            <div class="form-row form-row-inline">
+              <label>Modelo</label>
+              <select id="prod-funda-modelo-cel">
+                <option value="">Seleccionar modelo...</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Rango de precios</label>
+              <div class="form-chips" id="prod-funda-rangos">
+                <button type="button" class="form-chip" data-rango="50-100">50-100</button>
+                <button type="button" class="form-chip" data-rango="100-150">100-150</button>
+                <button type="button" class="form-chip" data-rango="150-200">150-200</button>
+                <button type="button" class="form-chip" data-rango="200-250">200-250</button>
+                <button type="button" class="form-chip" data-rango="250-300">250-300</button>
+                <button type="button" class="form-chip" data-rango="300-350">300-350</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="prod-campos-cargadores" class="prod-campos-categoria" style="display:none">
+            <div class="form-row">
+              <label>Tipo</label>
+              <select id="prod-cargador-tipo">
+                <option value="">Seleccionar...</option>
+                <option value="completo">Completo</option>
+                <option value="cable">Cable</option>
+                <option value="cubo">Cubo</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Marca</label>
+              <input type="text" id="prod-cargador-marca" placeholder="Ej: Anker, Baseus...">
+            </div>
+            <div class="form-row form-row-inline">
+              <label>Velocidad de carga</label>
+              <div class="input-unidad">
+                <input type="number" id="prod-cargador-watts" min="0" step="1" placeholder="0">
+                <span class="input-unidad-simbolo">W</span>
+              </div>
+            </div>
+            <div class="form-row form-row-inline">
+              <label>Tipo de conexión</label>
+              <select id="prod-cargador-conexion">
+                <option value="">Seleccionar...</option>
+                <option value="usb-c">USB-C</option>
+                <option value="c-c">C-C</option>
+              </select>
+            </div>
+            <div class="form-row form-row-inline">
+              <label>Longitud del cable</label>
+              <div class="input-unidad">
+                <input type="number" id="prod-cargador-metros" min="0" step="0.1" placeholder="0">
+                <span class="input-unidad-simbolo">M</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row form-row-precio">
+            <label>Precio</label>
+            <div class="precio-contador">
+              <button type="button" class="stock-btn" id="prod-precio-menos" aria-label="Menos">−</button>
+              <span class="precio-simbolo">$</span>
+              <input type="number" id="prod-precio" min="0" step="1" placeholder="0">
+              <button type="button" class="stock-btn" id="prod-precio-mas" aria-label="Más">+</button>
+            </div>
+          </div>
+
+          <div class="form-row form-row-stock">
+            <label>Stock</label>
+            <div class="stock-contador">
+              <button type="button" class="stock-btn" id="prod-stock-menos" aria-label="Menos">−</button>
+              <span class="stock-icono" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+              </span>
+              <input type="number" id="prod-stock-valor" min="0" step="1" value="0" aria-label="Cantidad en stock">
+              <button type="button" class="stock-btn" id="prod-stock-mas" aria-label="Más">+</button>
+            </div>
+          </div>
+
+          <div class="form-row form-row-imagen">
+            <div class="imagen-upload">
+              <input type="file" id="prod-imagen" accept="image/*" aria-label="Subir imagen">
+              <label for="prod-imagen" class="imagen-upload-btn">Elegir imagen</label>
+              <span class="imagen-upload-nombre" id="prod-imagen-nombre"></span>
+            </div>
+          </div>
+
+          <div class="modal-acciones">
+            <button type="button" class="btn btn-vaciar" id="modal-producto-cancelar">Cancelar</button>
+            <button type="submit" class="btn btn-cobrar">Agregar producto</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Modal Confirmar -->
     <div id="modal-confirmar" class="modal-overlay">
       <div class="modal-content">
