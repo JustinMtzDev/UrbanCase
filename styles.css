@@ -783,3 +783,222 @@ body:not(.theme-dark) .modal-content {
 .modal-acciones .btn {
   flex: 1;
 }
+
+/* ===== Módulos (Usuarios, etc.) ===== */
+body:not(.theme-dark) #vista-usuarios {
+  --accent: #ff3b30;
+}
+
+body:not(.theme-dark) #vista-usuarios .btn-cobrar {
+  background: #ff3b30;
+}
+
+.modulo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.modulo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.modulo-header h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.modulo-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.modulo-buscar {
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  min-width: 220px;
+  transition: border-color 0.2s;
+}
+
+.modulo-buscar:focus {
+  border-color: var(--accent);
+}
+
+.modulo-buscar::placeholder {
+  color: var(--text-muted);
+}
+
+/* Tabla */
+.tabla-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.tabla th,
+.tabla td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabla th {
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+
+.tabla tbody tr {
+  transition: background 0.15s;
+}
+
+.tabla tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+.tabla td:last-child {
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.badge-activo {
+  background: rgba(0, 200, 100, 0.15);
+  color: #00c864;
+}
+
+.badge-inactivo {
+  background: rgba(255, 59, 48, 0.15);
+  color: var(--danger);
+}
+
+.badge-admin {
+  background: rgba(100, 100, 255, 0.15);
+  color: #7b7bff;
+}
+
+.badge-vendedor {
+  background: rgba(255, 180, 0, 0.15);
+  color: #e6a800;
+}
+
+.btn-tabla {
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+  margin-right: 4px;
+}
+
+.btn-tabla:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn-tabla.btn-tabla-danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.btn-danger {
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.75rem 1.25rem;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: var(--danger);
+  color: #fff;
+  transition: opacity 0.2s;
+}
+
+.btn-danger:hover {
+  opacity: 0.9;
+}
+
+/* Modal overlay genérico */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal-overlay.visible {
+  display: flex;
+}
+
+.modal-form {
+  max-width: 440px;
+  width: 100%;
+}
+
+.form-row {
+  margin-bottom: 14px;
+}
+
+.form-row label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.form-row input,
+.form-row select {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-row input:focus,
+.form-row select:focus {
+  border-color: var(--accent);
+}
