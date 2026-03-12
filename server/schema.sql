@@ -1,9 +1,17 @@
+CREATE TABLE IF NOT EXISTS sucursales (
+  id SERIAL PRIMARY KEY,
+  nombre VARCHAR(200) NOT NULL,
+  activo BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS usuarios (
   id SERIAL PRIMARY KEY,
   usuario VARCHAR(100) UNIQUE NOT NULL,
   nombre VARCHAR(200) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   rol VARCHAR(50) DEFAULT 'vendedor',
+  sucursal_id INTEGER REFERENCES sucursales(id) ON DELETE SET NULL,
   activo BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT NOW()
 );

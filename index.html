@@ -24,12 +24,12 @@
       </div>
       <nav class="categorias">
         <button type="button" class="categoria-btn activo" data-categoria="todos">Home</button>
-        <button type="button" class="categoria-btn" data-categoria="cargadores">Inventario</button>
-        <button type="button" class="categoria-btn" data-categoria="fundas">Ventas</button>
-        <button type="button" class="categoria-btn" data-categoria="protectores">Reportes</button>
-        <button type="button" class="categoria-btn" data-categoria="cables">Proveedores</button>
-        <button type="button" class="categoria-btn" data-categoria="otros">Clientes</button>
-        <button type="button" class="categoria-btn" data-categoria="otros">Usuarios</button>
+        <button type="button" class="categoria-btn" data-categoria="inventario">Inventario</button>
+        <button type="button" class="categoria-btn" data-categoria="ventas">Ventas</button>
+        <button type="button" class="categoria-btn" data-categoria="reportes">Reportes</button>
+        <button type="button" class="categoria-btn" data-categoria="proveedores">Proveedores</button>
+        <button type="button" class="categoria-btn" data-categoria="clientes">Clientes</button>
+        <button type="button" class="categoria-btn" data-categoria="usuarios">Gestión</button>
       </nav>
       <div class="usuario-header" id="usuario-info" style="display:none">
         <span class="usuario-nombre" id="usuario-nombre"></span>
@@ -37,7 +37,7 @@
       </div>
     </header>
 
-    <div class="app-glass">
+    <div class="app-glass" id="vista-pos">
       <main class="productos-grid" id="productos"></main>
       <aside class="carrito-panel">
         <h2>Carrito <span id="carrito-count">0</span></h2>
@@ -59,6 +59,147 @@
           <button type="button" class="btn btn-cobrar" id="btn-cobrar" disabled>Cobrar</button>
         </div>
       </aside>
+    </div>
+
+    <div class="app-glass modulo-panel" id="vista-modulo" style="display:none">
+      <div class="modulo-tabs">
+        <button type="button" class="modulo-tab activo" id="tab-usuarios">Usuarios</button>
+        <button type="button" class="modulo-tab" id="tab-sucursales">Sucursales</button>
+      </div>
+
+      <!-- Sub-vista Usuarios -->
+      <div id="subvista-usuarios">
+        <div class="modulo-header">
+          <div></div>
+          <div class="modulo-acciones">
+            <input type="text" class="modulo-buscar" id="buscar-usuario" placeholder="Buscar usuario...">
+            <button type="button" class="btn btn-cobrar" id="btn-nuevo-usuario">+ Nuevo</button>
+          </div>
+        </div>
+        <div class="tabla-wrap">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Usuario</th>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th>Sucursal</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+                <th>Creado</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-usuarios"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Sub-vista Sucursales -->
+      <div id="subvista-sucursales" style="display:none">
+        <div class="modulo-header">
+          <div></div>
+          <div class="modulo-acciones">
+            <input type="text" class="modulo-buscar" id="buscar-sucursal" placeholder="Buscar sucursal...">
+            <button type="button" class="btn btn-cobrar" id="btn-nueva-sucursal">+ Nueva</button>
+          </div>
+        </div>
+        <div class="tabla-wrap">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Empleados asignados</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-sucursales"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Usuario -->
+    <div id="modal-usuario" class="modal-overlay">
+      <div class="modal-content modal-form">
+        <h3 id="modal-usuario-titulo">Nuevo usuario</h3>
+        <form id="form-usuario">
+          <div class="form-row">
+            <label>Usuario</label>
+            <input type="text" id="mu-usuario" required>
+          </div>
+          <div class="form-row">
+            <label>Nombre</label>
+            <input type="text" id="mu-nombre" required>
+          </div>
+          <div class="form-row">
+            <label>Contraseña</label>
+            <input type="password" id="mu-password" placeholder="Dejar vacío para no cambiar">
+          </div>
+          <div class="form-row">
+            <label>Rol</label>
+            <select id="mu-rol">
+              <option value="vendedor">Vendedor</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Sucursal</label>
+            <select id="mu-sucursal">
+              <option value="">Sin asignar</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Activo</label>
+            <select id="mu-activo">
+              <option value="true">Sí</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+          <div class="modal-acciones">
+            <button type="button" class="btn btn-vaciar" id="modal-usuario-cancelar">Cancelar</button>
+            <button type="submit" class="btn btn-cobrar">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Sucursal -->
+    <div id="modal-sucursal" class="modal-overlay">
+      <div class="modal-content modal-form">
+        <h3 id="modal-sucursal-titulo">Nueva sucursal</h3>
+        <form id="form-sucursal">
+          <div class="form-row">
+            <label>Nombre</label>
+            <input type="text" id="ms-nombre" required>
+          </div>
+          <div class="form-row">
+            <label>Activo</label>
+            <select id="ms-activo">
+              <option value="true">Sí</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+          <div class="modal-acciones">
+            <button type="button" class="btn btn-vaciar" id="modal-sucursal-cancelar">Cancelar</button>
+            <button type="submit" class="btn btn-cobrar">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Confirmar -->
+    <div id="modal-confirmar" class="modal-overlay">
+      <div class="modal-content">
+        <h3>Confirmar eliminación</h3>
+        <p id="confirmar-texto">¿Eliminar?</p>
+        <div class="modal-acciones">
+          <button type="button" class="btn btn-vaciar" id="confirmar-cancelar">Cancelar</button>
+          <button type="button" class="btn btn-danger" id="confirmar-ok">Eliminar</button>
+        </div>
+      </div>
     </div>
   </div>
 
