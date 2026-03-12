@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS clientes (
   telefono VARCHAR(50),
   correo VARCHAR(254),
   direccion TEXT,
+  sucursal_id INTEGER REFERENCES sucursales(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -32,8 +33,20 @@ CREATE TABLE IF NOT EXISTS proveedores (
   telefono VARCHAR(50),
   correo VARCHAR(254),
   direccion TEXT,
+  sucursal_id INTEGER REFERENCES sucursales(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Migración: agregar sucursal_id a clientes y proveedores si no existe
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='clientes' AND column_name='sucursal_id') THEN
+    ALTER TABLE clientes ADD COLUMN sucursal_id INTEGER REFERENCES sucursales(id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='proveedores' AND column_name='sucursal_id') THEN
+    ALTER TABLE proveedores ADD COLUMN sucursal_id INTEGER REFERENCES sucursales(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- Migración: quitar cuenta_bancaria de proveedores si existe
 DO $$

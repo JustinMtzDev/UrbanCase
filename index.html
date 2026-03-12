@@ -44,11 +44,30 @@
     </header>
 
     <div class="app-glass" id="vista-pos">
-      <main class="productos-grid" id="productos"></main>
+      <div class="vista-main-col">
+        <div id="productos" class="productos-grid contenido-home"></div>
+        <div id="contenido-inventario" class="inventario-contenido" style="display:none">
+          <div class="inventario-header">
+            <input type="text" class="inventario-buscador" id="inventario-buscador" placeholder="Buscar productos...">
+            <div class="inventario-chips-wrap">
+              <button type="button" class="inventario-chip activo" data-cat="todos">Todos</button>
+              <button type="button" class="inventario-chip" data-cat="micas">Micas</button>
+              <button type="button" class="inventario-chip" data-cat="fundas">Fundas</button>
+              <button type="button" class="inventario-chip" data-cat="cargadores">Cargadores</button>
+              <button type="button" class="inventario-chip" data-cat="pilas">Pilas recargables</button>
+              <button type="button" class="inventario-chip" data-cat="bocinas">Bocinas</button>
+              <button type="button" class="inventario-chip" data-cat="accesorios">Accesorios</button>
+              <button type="button" class="inventario-chip" data-cat="otros">Otros</button>
+            </div>
+            <button type="button" class="btn btn-cobrar" id="btn-agregar-producto">+ Agregar producto</button>
+          </div>
+          <div class="inventario-grid" id="inventario-productos"></div>
+        </div>
+      </div>
       <aside class="carrito-panel">
         <h2>Carrito <span id="carrito-count">0</span></h2>
         <div class="carrito-lista" id="carrito-lista">
-          <div class="carrito-vacio" id="carrito-vacio">Añade productos tocando una tarjeta</div>
+          <div class="carrito-vacio carrito-vacio-link" id="carrito-vacio">Agrega productos tocando aquí</div>
         </div>
         <div class="carrito-totales">
           <div class="carrito-fila">

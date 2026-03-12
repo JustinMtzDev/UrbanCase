@@ -76,8 +76,21 @@ function initNav() {
         $vistaModuloClientes.style.display = 'flex';
         cargarClientes();
         cargarProveedores();
+      } else if (btn.dataset.categoria === 'inventario') {
+        $vistaPos.style.display = 'grid';
+        document.getElementById('productos').style.display = 'none';
+        document.getElementById('contenido-inventario').style.display = 'flex';
+        document.querySelectorAll('.inventario-chip').forEach(c => c.classList.remove('activo'));
+        const $chipTodos = document.querySelector('.inventario-chip[data-cat="todos"]');
+        if ($chipTodos) $chipTodos.classList.add('activo');
+        categoriaInventarioActiva = 'todos';
+        initInventarioVista();
+        if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
       } else {
         $vistaPos.style.display = 'grid';
+        document.getElementById('productos').style.display = 'grid';
+        document.getElementById('contenido-inventario').style.display = 'none';
+        if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
       }
     });
   });
@@ -123,6 +136,90 @@ function initDropdownSucursales() {
 
   document.addEventListener('click', () => $menu?.classList.remove('abierto'));
   $menu?.addEventListener('click', (e) => e.stopPropagation());
+}
+
+// ===================== INVENTARIO =====================
+
+const CATEGORIAS_INVENTARIO = ['todos', 'micas', 'fundas', 'cargadores', 'pilas', 'bocinas', 'accesorios', 'otros'];
+let productosInventario = [];
+let categoriaInventarioActiva = 'todos';
+
+function initInventarioVista() {
+  const $buscador = document.getElementById('inventario-buscador');
+  const $grid = document.getElementById('inventario-productos');
+  const $chips = document.querySelectorAll('.inventario-chip');
+  const $btnAgregar = document.getElementById('btn-agregar-producto');
+
+  if (typeof initInventarioVista._inited !== 'undefined' && initInventarioVista._inited) {
+    renderInventarioProductos();
+    return;
+  }
+  initInventarioVista._inited = true;
+
+  productosInventario = [
+    { id: 1, nombre: 'Mica templada iPhone 15', precio: 89, imagen: '', categoria: 'micas' },
+    { id: 2, nombre: 'Funda silicona Samsung', precio: 149, imagen: '', categoria: 'fundas' },
+    { id: 3, nombre: 'Cargador rápido 20W', precio: 199, imagen: '', categoria: 'cargadores' },
+    { id: 4, nombre: 'Power bank 10000mAh', precio: 349, imagen: '', categoria: 'pilas' },
+    { id: 5, nombre: 'Bocina Bluetooth', precio: 299, imagen: '', categoria: 'bocinas' },
+    { id: 6, nombre: 'Soporte celular', precio: 79, imagen: '', categoria: 'accesorios' },
+    { id: 7, nombre: 'Cable USB-C', precio: 59, imagen: '', categoria: 'cargadores' },
+    { id: 8, nombre: 'Mica hidrogel', precio: 69, imagen: '', categoria: 'micas' },
+  ];
+
+  $chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      $chips.forEach(c => c.classList.remove('activo'));
+      chip.classList.add('activo');
+      categoriaInventarioActiva = chip.dataset.cat;
+      renderInventarioProductos();
+    });
+  });
+
+  $buscador?.addEventListener('input', () => renderInventarioProductos());
+
+  $btnAgregar?.addEventListener('click', () => {
+    alert('Agregar producto (próximamente)');
+  });
+
+  renderInventarioProductos();
+}
+
+function renderInventarioProductos() {
+  const $grid = document.getElementById('inventario-productos');
+  const $buscador = document.getElementById('inventario-buscador');
+  const q = ($buscador?.value || '').toLowerCase().trim();
+  const cat = categoriaInventarioActiva;
+
+  let lista = productosInventario.filter(p => {
+    const matchCat = cat === 'todos' || (p.categoria || '').toLowerCase() === cat;
+    const matchQ = !q || (p.nombre || '').toLowerCase().includes(q);
+    return matchCat && matchQ;
+  });
+
+  const formatearPrecio = window.formatearPrecioPOS || (n => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 }));
+  const imgPlaceholder = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23999"><rect width="100" height="100"/><text x="50" y="55" font-size="12" fill="%23666" text-anchor="middle">Sin imagen</text></svg>');
+
+  if (lista.length === 0) {
+    $grid.innerHTML = '<div class="inventario-vacio">No hay productos que coincidan con la búsqueda</div>';
+    return;
+  }
+  $grid.innerHTML = lista.map(p => `
+    <article class="inventario-producto-card" data-id="${p.id}">
+      <img class="inventario-producto-img" src="${p.imagen || imgPlaceholder}" alt="${(p.nombre || '').replace(/"/g, '&quot;')}">
+      <div class="inventario-producto-precio">${formatearPrecio(p.precio)}</div>
+      <button type="button" class="inventario-producto-btn" data-id="${p.id}">Agregar al carrito</button>
+    </article>
+  `).join('');
+
+  $grid.querySelectorAll('.inventario-producto-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = Number(btn.dataset.id);
+      const prod = productosInventario.find(p => p.id === id);
+      if (prod && window.agregarAlCarrito) window.agregarAlCarrito(prod);
+    });
+  });
 }
 
 // ===================== POS =====================
@@ -180,6 +277,9 @@ function initPOS() {
       $carritoLista.innerHTML = '';
       $carritoLista.appendChild($carritoVacio);
       $carritoVacio.style.display = 'block';
+      const enInventario = document.getElementById('contenido-inventario')?.style.display === 'flex';
+      $carritoVacio.textContent = enInventario ? 'Agrega productos' : 'Agrega productos tocando aquí';
+      $carritoVacio.classList.toggle('carrito-vacio-link', !enInventario);
     } else {
       $carritoVacio.style.display = 'none';
       $carritoLista.innerHTML = carrito.map(i => `
@@ -215,6 +315,19 @@ function initPOS() {
   }
 
   $btnVaciar.addEventListener('click', () => { carrito = []; actualizarCarrito(); });
+
+  $carritoVacio?.addEventListener('click', () => {
+    if (!$carritoVacio.classList.contains('carrito-vacio-link')) return;
+    const $btnInventario = document.querySelector('.categoria-btn[data-categoria="inventario"]');
+    if ($btnInventario) $btnInventario.click();
+  });
+
+  window.actualizarCarritoVacioParaVista = () => {
+    if ($carritoVacio.style.display !== 'block') return;
+    const enInventario = document.getElementById('contenido-inventario')?.style.display === 'flex';
+    $carritoVacio.textContent = enInventario ? 'Agrega productos' : 'Agrega productos tocando aquí';
+    $carritoVacio.classList.toggle('carrito-vacio-link', !enInventario);
+  };
   $btnCobrar.addEventListener('click', () => {
     if (carrito.length === 0) return;
     $modalTotal.textContent = formatearPrecio(carrito.reduce((s, i) => s + i.precio * i.cantidad, 0));
@@ -226,6 +339,14 @@ function initPOS() {
 
   renderProductos();
   actualizarCarrito();
+
+  window.agregarAlCarrito = (prod) => {
+    const item = carrito.find(i => i.id === prod.id);
+    if (item) item.cantidad++;
+    else carrito.push({ ...prod, cantidad: 1 });
+    actualizarCarrito();
+  };
+  window.formatearPrecioPOS = formatearPrecio;
 
   const THEME_KEY = 'urbancase-theme';
   const $themeToggle = document.getElementById('theme-toggle');
