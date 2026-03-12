@@ -784,35 +784,51 @@ body:not(.theme-dark) .modal-content {
   flex: 1;
 }
 
-/* ===== Módulos Gestión (solo theme default) ===== */
-body:not(.theme-dark) #vista-modulo {
+/* ===== Módulos Gestión y Clientes/Proveedores (solo theme default) ===== */
+body:not(.theme-dark) #vista-modulo,
+body:not(.theme-dark) #vista-modulo-clientes {
   --accent: #ff3131;
 }
 
-body:not(.theme-dark) #vista-modulo .btn-cobrar {
+body:not(.theme-dark) #vista-modulo .btn-cobrar,
+body:not(.theme-dark) #vista-modulo-clientes .btn-cobrar {
   background: #ff3131;
 }
 
 body:not(.theme-dark) #modal-usuario,
-body:not(.theme-dark) #modal-sucursal {
+body:not(.theme-dark) #modal-sucursal,
+body:not(.theme-dark) #modal-cliente,
+body:not(.theme-dark) #modal-proveedor {
   --accent: #ff3131;
 }
 
 body:not(.theme-dark) #modal-usuario .modal-content,
-body:not(.theme-dark) #modal-sucursal .modal-content {
+body:not(.theme-dark) #modal-sucursal .modal-content,
+body:not(.theme-dark) #modal-cliente .modal-content,
+body:not(.theme-dark) #modal-proveedor .modal-content {
   border-color: #ff3131;
 }
 
 body:not(.theme-dark) #modal-usuario .btn-cobrar,
-body:not(.theme-dark) #modal-sucursal .btn-cobrar {
+body:not(.theme-dark) #modal-sucursal .btn-cobrar,
+body:not(.theme-dark) #modal-cliente .btn-cobrar,
+body:not(.theme-dark) #modal-proveedor .btn-cobrar {
   background: #ff3131;
 }
 
 body:not(.theme-dark) #modal-usuario .form-row input:focus,
 body:not(.theme-dark) #modal-usuario .form-row select:focus,
 body:not(.theme-dark) #modal-sucursal .form-row input:focus,
-body:not(.theme-dark) #modal-sucursal .form-row select:focus {
+body:not(.theme-dark) #modal-sucursal .form-row select:focus,
+body:not(.theme-dark) #modal-cliente .form-row input:focus,
+body:not(.theme-dark) #modal-cliente .form-row select:focus,
+body:not(.theme-dark) #modal-proveedor .form-row input:focus,
+body:not(.theme-dark) #modal-proveedor .form-row select:focus {
   border-color: #ff3131;
+}
+
+body:not(.theme-dark) #modal-confirmar .modal-content h3 {
+  color: #ff3131;
 }
 
 .modulo-tabs {
@@ -1034,6 +1050,10 @@ body:not(.theme-dark) #modal-sucursal .form-row select:focus {
   font-weight: 600;
   color: var(--text-muted);
   margin-bottom: 4px;
+}
+
+.form-row label .required {
+  color: var(--accent);
 }
 
 .form-row input,
