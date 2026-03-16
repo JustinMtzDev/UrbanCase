@@ -4,12 +4,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>UrbanCase — POS Accesorios</title>
+  <script>
+    (function(){
+      try {
+        if (localStorage.getItem('urbancase-theme') === 'dark') document.documentElement.classList.add('theme-dark');
+        if (localStorage.getItem('urbancase-texto-grande') === '1') document.documentElement.classList.add('texto-grande');
+        var m = localStorage.getItem('uc_modulo');
+        if (m && m !== 'todos') document.documentElement.classList.add('uc-restore-modulo');
+      } catch(_){}
+    })();
+  </script>
+  <style>
+    body.app-loading .app{visibility:hidden!important;opacity:0!important;transition:none!important}
+    html.uc-restore-modulo .categoria-btn[data-categoria="todos"].activo{background:transparent!important;color:#5c5c66!important;font-weight:600!important;border-right-color:rgba(0,0,0,0.12)!important;box-shadow:inset 0 2px 4px rgba(255,255,255,0.5),0 2px 6px rgba(0,0,0,0.06)!important}
+    html.theme-dark.uc-restore-modulo .categoria-btn[data-categoria="todos"].activo{color:#8888a0!important;font-weight:600!important;border-right-color:rgba(255,255,255,0.06)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),0 2px 6px rgba(0,0,0,0.15)!important}
+  </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="css/styles.css">
 </head>
-<body>
+<body class="app-loading">
   <div class="blob blob1" aria-hidden="true"></div>
   <div class="blob blob2" aria-hidden="true"></div>
   <div class="blob blob3" aria-hidden="true"></div>
@@ -32,8 +47,7 @@
           </div>
         </div>
         <button type="button" class="categoria-btn" data-categoria="inventario">Inventario</button>
-        <button type="button" class="categoria-btn" data-categoria="ventas">Ventas</button>
-        <button type="button" class="categoria-btn" data-categoria="reportes">Reportes</button>
+        <button type="button" class="categoria-btn" data-categoria="ventas">Ventas y Reportes</button>
         <button type="button" class="categoria-btn" data-categoria="clientes">Clientes y Proveedores</button>
         <button type="button" class="categoria-btn" data-categoria="usuarios">Gestión</button>
       </nav>
@@ -43,6 +57,7 @@
       </div>
     </header>
 
+    <div id="carrito-overlay" class="carrito-overlay" aria-hidden="true"></div>
     <div class="app-glass" id="vista-pos">
       <div class="vista-main-col">
         <div id="productos" class="productos-grid contenido-home"></div>
@@ -54,7 +69,8 @@
               <button type="button" class="inventario-chip" data-cat="micas">Micas</button>
               <button type="button" class="inventario-chip" data-cat="fundas">Fundas</button>
               <button type="button" class="inventario-chip" data-cat="cargadores">Cargadores</button>
-              <button type="button" class="inventario-chip" data-cat="pilas">Pilas recargables</button>
+              <button type="button" class="inventario-chip" data-cat="powerbanks">Power banks</button>
+              <button type="button" class="inventario-chip" data-cat="audifonos">Audífonos</button>
               <button type="button" class="inventario-chip" data-cat="bocinas">Bocinas</button>
               <button type="button" class="inventario-chip" data-cat="accesorios">Accesorios</button>
               <button type="button" class="inventario-chip" data-cat="otros">Otros</button>
@@ -64,8 +80,20 @@
           <div class="inventario-grid" id="inventario-productos"></div>
         </div>
       </div>
-      <aside class="carrito-panel">
-        <h2>Carrito <span id="carrito-count">0</span></h2>
+      <aside class="carrito-panel" id="carrito-panel">
+        <div class="carrito-header-wrap">
+          <div class="carrito-header-row">
+            <h2>Carrito <span id="carrito-count">0</span></h2>
+            <button type="button" class="btn-carrito-expand" id="btn-carrito-expand" title="Maximizar carrito">
+              <span class="btn-expand-icon" aria-hidden="true">⛶</span>
+            </button>
+          </div>
+          <div class="carrito-consignada-row">
+            <button type="button" class="btn-consignada" id="btn-consignada" title="Venta de productos de otros locales (comisión)">
+              Venta consignada
+            </button>
+          </div>
+        </div>
         <div class="carrito-lista" id="carrito-lista">
           <div class="carrito-vacio carrito-vacio-link" id="carrito-vacio">Agrega productos tocando aquí</div>
         </div>
@@ -347,6 +375,7 @@
               <option value="micas">Micas</option>
               <option value="fundas">Fundas</option>
               <option value="cargadores">Cargadores</option>
+              <option value="powerbanks">Power banks</option>
               <option value="audifonos">Audífonos</option>
               <option value="bocinas">Bocinas</option>
               <option value="accesorios">Accesorios</option>
@@ -465,6 +494,50 @@
             </div>
           </div>
 
+          <div id="prod-campos-audifonos" class="prod-campos-categoria" style="display:none">
+            <div class="form-row">
+              <label>Tipo</label>
+              <select id="prod-audifonos-tipo">
+                <option value="">Seleccionar...</option>
+                <option value="diadema">Diadema</option>
+                <option value="in-ear">In Ear</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Tipo de conexión</label>
+              <select id="prod-audifonos-conexion">
+                <option value="">Seleccionar...</option>
+                <option value="alambrico">Alámbrico</option>
+                <option value="inalambrico">Inalámbrico</option>
+                <option value="hibrido">Híbrido</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Marca</label>
+              <input type="text" id="prod-audifonos-marca" placeholder="Ej: Sony, JBL, Apple...">
+            </div>
+            <div class="form-row">
+              <label>Modelo</label>
+              <input type="text" id="prod-audifonos-modelo" placeholder="Ej: WH-1000XM5, AirPods Pro...">
+            </div>
+          </div>
+
+          <div id="prod-campos-powerbanks" class="prod-campos-categoria" style="display:none">
+            <div class="form-row">
+              <label>Marca</label>
+              <input type="text" id="prod-powerbank-marca" placeholder="Ej: Anker, Baseus, Xiaomi...">
+            </div>
+            <div class="form-row">
+              <label>Capacidad (mAh)</label>
+              <div class="stock-contador">
+                <button type="button" class="stock-btn" id="prod-powerbank-mah-menos" aria-label="Menos">−</button>
+                <input type="number" id="prod-powerbank-mah" min="0" step="500" value="10000" aria-label="Capacidad en mAh">
+                <span class="input-unidad-simbolo">mAh</span>
+                <button type="button" class="stock-btn" id="prod-powerbank-mah-mas" aria-label="Más">+</button>
+              </div>
+            </div>
+          </div>
+
           <div class="form-row form-row-precio">
             <label>Precio</label>
             <div class="precio-contador">
@@ -528,6 +601,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
