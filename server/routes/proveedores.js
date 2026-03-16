@@ -1,18 +1,7 @@
 const { Router } = require('express');
-const pool = require('./db');
+const pool = require('../config/db');
 
 const router = Router();
-
-router.get('/', async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      'SELECT * FROM proveedores ORDER BY id'
-    );
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 function validarProveedor(body) {
   if (!body.nombre) return 'El nombre es requerido';
@@ -21,6 +10,15 @@ function validarProveedor(body) {
   if (body.rfc && !/^([A-ZÑ&]{3,4})\d{6}([A-Z0-9]{3})$/.test((body.rfc || '').replace(/\s/g, '').toUpperCase())) return 'El RFC debe tener formato: 3-4 letras + 6 dígitos + 3 caracteres';
   return null;
 }
+
+router.get('/', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM proveedores ORDER BY id');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.post('/', async (req, res) => {
   const { nombre, rfc, telefono, correo, direccion } = req.body;

@@ -2,7 +2,8 @@
 if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
   window.location.href = 'http://localhost:3000/';
 }
-const API = '/api';
+// Usar siempre el mismo servidor que sirve la app (puerto 3000) para que los datos se guarden
+const API = (typeof window !== 'undefined' && window.location.port === '3000') ? '/api' : 'http://localhost:3000/api';
 let token = '';
 
 (async () => {
@@ -25,6 +26,7 @@ let token = '';
     await fetch(`${API}/auth/logout`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(() => {});
     localStorage.removeItem('uc_token');
     localStorage.removeItem('uc_usuario');
+    localStorage.removeItem('uc_modulo');
     window.location.href = '/login.html';
   });
 
@@ -33,6 +35,12 @@ let token = '';
   initModuloClientes();
   initNav();
   initDropdownSucursales();
+  try { initProductoModal(); } catch (err) { console.error('initProductoModal:', err); }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      document.body.classList.remove('app-loading');
+    });
+  });
 })();
 
 function authHeaders(json = true) {
@@ -56,44 +64,69 @@ function formatFecha(iso) {
 
 // ===================== NAVEGACIÓN =====================
 
+const MODULO_KEY = 'uc_modulo';
+
 function initNav() {
   const $vistaPos = document.getElementById('vista-pos');
   const $vistaModulo = document.getElementById('vista-modulo');
   const $vistaModuloClientes = document.getElementById('vista-modulo-clientes');
 
+  function irAModulo(btn) {
+    if (btn.dataset.categoria === 'todos') document.documentElement.classList.remove('uc-restore-modulo');
+    document.querySelectorAll('.categoria-btn').forEach(b => b.classList.remove('activo'));
+    btn.classList.add('activo');
+    $vistaModulo.style.display = 'none';
+    $vistaModuloClientes.style.display = 'none';
+    $vistaPos.style.display = 'none';
+    if (btn.dataset.categoria === 'usuarios') {
+      $vistaModulo.style.display = 'flex';
+      cargarUsuarios();
+      cargarSucursales();
+    } else if (btn.dataset.categoria === 'clientes') {
+      $vistaModuloClientes.style.display = 'flex';
+      cargarClientes();
+      cargarProveedores();
+    } else if (btn.dataset.categoria === 'inventario') {
+      document.body.classList.remove('modulo-ventas');
+      $vistaPos.style.display = 'grid';
+      const $productos = document.getElementById('productos');
+      const $contenidoInv = document.getElementById('contenido-inventario');
+      if ($productos) $productos.style.display = 'none';
+      if ($contenidoInv) $contenidoInv.style.display = 'flex';
+      document.querySelectorAll('.inventario-chip').forEach(c => c.classList.remove('activo'));
+      const $chipTodos = document.querySelector('.inventario-chip[data-cat="todos"]');
+      if ($chipTodos) $chipTodos.classList.add('activo');
+      categoriaInventarioActiva = 'todos';
+      try { initInventarioVista(); } catch (err) { console.error('initInventarioVista:', err); }
+      if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
+    } else if (btn.dataset.categoria === 'ventas') {
+      document.body.classList.add('modulo-ventas');
+      $vistaPos.style.display = 'grid';
+      document.getElementById('productos').style.display = 'grid';
+      document.getElementById('contenido-inventario').style.display = 'none';
+      if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
+    } else {
+      document.body.classList.remove('modulo-ventas');
+      $vistaPos.style.display = 'grid';
+      document.getElementById('productos').style.display = 'grid';
+      document.getElementById('contenido-inventario').style.display = 'none';
+      if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
+    }
+  }
+
   document.querySelectorAll('.categoria-btn:not(.dropdown-sucursales-trigger)').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.categoria-btn').forEach(b => b.classList.remove('activo'));
-      btn.classList.add('activo');
-      $vistaModulo.style.display = 'none';
-      $vistaModuloClientes.style.display = 'none';
-      $vistaPos.style.display = 'none';
-      if (btn.dataset.categoria === 'usuarios') {
-        $vistaModulo.style.display = 'flex';
-        cargarUsuarios();
-        cargarSucursales();
-      } else if (btn.dataset.categoria === 'clientes') {
-        $vistaModuloClientes.style.display = 'flex';
-        cargarClientes();
-        cargarProveedores();
-      } else if (btn.dataset.categoria === 'inventario') {
-        $vistaPos.style.display = 'grid';
-        document.getElementById('productos').style.display = 'none';
-        document.getElementById('contenido-inventario').style.display = 'flex';
-        document.querySelectorAll('.inventario-chip').forEach(c => c.classList.remove('activo'));
-        const $chipTodos = document.querySelector('.inventario-chip[data-cat="todos"]');
-        if ($chipTodos) $chipTodos.classList.add('activo');
-        categoriaInventarioActiva = 'todos';
-        initInventarioVista();
-        if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
-      } else {
-        $vistaPos.style.display = 'grid';
-        document.getElementById('productos').style.display = 'grid';
-        document.getElementById('contenido-inventario').style.display = 'none';
-        if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
-      }
+      try { localStorage.setItem(MODULO_KEY, btn.dataset.categoria); } catch (_) {}
+      irAModulo(btn);
     });
   });
+
+  const saved = localStorage.getItem(MODULO_KEY);
+  if (saved) {
+    const mod = saved === 'reportes' ? 'ventas' : saved;
+    const $btn = document.querySelector(`.categoria-btn[data-categoria="${mod}"]`);
+    if ($btn) irAModulo($btn);
+  }
 }
 
 function initDropdownSucursales() {
@@ -140,7 +173,7 @@ function initDropdownSucursales() {
 
 // ===================== INVENTARIO =====================
 
-const CATEGORIAS_INVENTARIO = ['todos', 'micas', 'fundas', 'cargadores', 'pilas', 'bocinas', 'accesorios', 'otros'];
+const CATEGORIAS_INVENTARIO = ['todos', 'micas', 'fundas', 'cargadores', 'powerbanks', 'bocinas', 'accesorios', 'otros'];
 let productosInventario = [];
 let categoriaInventarioActiva = 'todos';
 
@@ -157,14 +190,14 @@ function initInventarioVista() {
   initInventarioVista._inited = true;
 
   productosInventario = [
-    { id: 1, nombre: 'Mica templada iPhone 15', precio: 89, imagen: '', categoria: 'micas' },
-    { id: 2, nombre: 'Funda silicona Samsung', precio: 149, imagen: '', categoria: 'fundas' },
-    { id: 3, nombre: 'Cargador rápido 20W', precio: 199, imagen: '', categoria: 'cargadores' },
-    { id: 4, nombre: 'Power bank 10000mAh', precio: 349, imagen: '', categoria: 'pilas' },
-    { id: 5, nombre: 'Bocina Bluetooth', precio: 299, imagen: '', categoria: 'bocinas' },
-    { id: 6, nombre: 'Soporte celular', precio: 79, imagen: '', categoria: 'accesorios' },
-    { id: 7, nombre: 'Cable USB-C', precio: 59, imagen: '', categoria: 'cargadores' },
-    { id: 8, nombre: 'Mica hidrogel', precio: 69, imagen: '', categoria: 'micas' },
+    { id: 1, nombre: 'Mica templada iPhone 15', precio: 89, stock: 12, imagen: '', categoria: 'micas' },
+    { id: 2, nombre: 'Funda silicona Samsung', precio: 149, stock: 8, imagen: '', categoria: 'fundas' },
+    { id: 3, nombre: 'Cargador rápido 20W', precio: 199, stock: 5, imagen: '', categoria: 'cargadores' },
+    { id: 4, nombre: 'Power bank 10000mAh', precio: 349, stock: 3, imagen: '', categoria: 'powerbanks' },
+    { id: 5, nombre: 'Bocina Bluetooth', precio: 299, stock: 7, imagen: '', categoria: 'bocinas' },
+    { id: 6, nombre: 'Soporte celular', precio: 79, stock: 15, imagen: '', categoria: 'accesorios' },
+    { id: 7, nombre: 'Cable USB-C', precio: 59, stock: 20, imagen: '', categoria: 'cargadores' },
+    { id: 8, nombre: 'Mica hidrogel', precio: 69, stock: 0, imagen: '', categoria: 'micas' },
   ];
 
   $chips.forEach(chip => {
@@ -179,7 +212,8 @@ function initInventarioVista() {
   $buscador?.addEventListener('input', () => renderInventarioProductos());
 
   $btnAgregar?.addEventListener('click', () => {
-    alert('Agregar producto (próximamente)');
+    document.getElementById('modal-producto')?.classList.add('visible');
+    document.body.classList.add('modal-producto-abierto');
   });
 
   renderInventarioProductos();
@@ -187,6 +221,7 @@ function initInventarioVista() {
 
 function renderInventarioProductos() {
   const $grid = document.getElementById('inventario-productos');
+  if (!$grid) return;
   const $buscador = document.getElementById('inventario-buscador');
   const q = ($buscador?.value || '').toLowerCase().trim();
   const cat = categoriaInventarioActiva;
@@ -207,7 +242,9 @@ function renderInventarioProductos() {
   $grid.innerHTML = lista.map(p => `
     <article class="inventario-producto-card" data-id="${p.id}">
       <img class="inventario-producto-img" src="${p.imagen || imgPlaceholder}" alt="${(p.nombre || '').replace(/"/g, '&quot;')}">
+      <div class="inventario-producto-nombre">${(p.nombre || '').replace(/</g, '&lt;')}</div>
       <div class="inventario-producto-precio">${formatearPrecio(p.precio)}</div>
+      <div class="inventario-producto-stock">Stock: ${p.stock ?? 0}</div>
       <button type="button" class="inventario-producto-btn" data-id="${p.id}">Agregar al carrito</button>
     </article>
   `).join('');
@@ -219,6 +256,427 @@ function renderInventarioProductos() {
       const prod = productosInventario.find(p => p.id === id);
       if (prod && window.agregarAlCarrito) window.agregarAlCarrito(prod);
     });
+  });
+}
+
+// ===================== MODAL AGREGAR PRODUCTO =====================
+
+const MARCAS_MODELOS = {
+  Apple: ['iPhone 15', 'iPhone 15 Pro', 'iPhone 14', 'iPhone 14 Pro', 'iPhone 13', 'iPhone 12', 'iPhone SE'],
+  Samsung: ['Galaxy S24', 'Galaxy S23', 'Galaxy A54', 'Galaxy A34', 'Galaxy Z Flip', 'Galaxy Z Fold'],
+  Xiaomi: ['Redmi Note 13', 'Redmi 12', 'POCO X6', 'Mi 14'],
+  Motorola: ['Edge 40', 'Edge 30', 'Moto G84', 'Razr'],
+  Huawei: ['P60', 'P50', 'Mate 60', 'Nova 12'],
+  Google: ['Pixel 8', 'Pixel 7', 'Pixel 6a'],
+  OnePlus: ['OnePlus 12', 'OnePlus 11', 'Nord 3'],
+  OPPO: ['Find X6', 'Reno 10', 'A78'],
+  Realme: ['Realme 11', 'Realme 10', 'Realme C55'],
+  Honor: ['Honor 90', 'Honor Magic 5', 'Honor X9b'],
+};
+
+function initProductoModal() {
+  const $modal = document.getElementById('modal-producto');
+  const $form = document.getElementById('form-producto');
+  const $categoria = document.getElementById('prod-categoria');
+  const $camposMicas = document.getElementById('prod-campos-micas');
+  const $camposFundas = document.getElementById('prod-campos-fundas');
+  const $camposCargadores = document.getElementById('prod-campos-cargadores');
+  const $camposAudifonos = document.getElementById('prod-campos-audifonos');
+  const $camposPowerbanks = document.getElementById('prod-campos-powerbanks');
+  const $chipCristal = document.querySelector('.form-chip[data-tipo="cristal"]');
+  const $chipHidrogel = document.querySelector('.form-chip[data-tipo="hidrogel"]');
+  const $tipoCristalWrap = document.getElementById('prod-mica-cristal-opciones');
+  const $tipoCristal = document.getElementById('prod-mica-tipo-cristal');
+  const $tipoHidrogelWrap = document.getElementById('prod-mica-hidrogel-opciones');
+  const $tipoHidrogel = document.getElementById('prod-mica-tipo-hidrogel');
+  const $marcaModeloWrap = document.getElementById('prod-mica-marca-modelo');
+  const $marca = document.getElementById('prod-mica-marca');
+  const $modelo = document.getElementById('prod-mica-modelo');
+  const $precio = document.getElementById('prod-precio');
+  const $precioMenos = document.getElementById('prod-precio-menos');
+  const $precioMas = document.getElementById('prod-precio-mas');
+  const $stockValor = document.getElementById('prod-stock-valor');
+  const $stockMenos = document.getElementById('prod-stock-menos');
+  const $stockMas = document.getElementById('prod-stock-mas');
+  const $imagen = document.getElementById('prod-imagen');
+  const $imagenNombre = document.getElementById('prod-imagen-nombre');
+  const $cancelar = document.getElementById('modal-producto-cancelar');
+
+  const $fundaMarca = document.getElementById('prod-funda-marca');
+  const $fundaMarcaCel = document.getElementById('prod-funda-marca-cel');
+  const $fundaModeloCel = document.getElementById('prod-funda-modelo-cel');
+  const $fundaRangos = document.getElementById('prod-funda-rangos');
+
+  const $cargadorTipo = document.getElementById('prod-cargador-tipo');
+  const $cargadorMarca = document.getElementById('prod-cargador-marca');
+  const $cargadorWatts = document.getElementById('prod-cargador-watts');
+  const $cargadorConexion = document.getElementById('prod-cargador-conexion');
+  const $cargadorMetros = document.getElementById('prod-cargador-metros');
+
+  const $audifonosTipo = document.getElementById('prod-audifonos-tipo');
+  const $audifonosConexion = document.getElementById('prod-audifonos-conexion');
+  const $audifonosMarca = document.getElementById('prod-audifonos-marca');
+  const $audifonosModelo = document.getElementById('prod-audifonos-modelo');
+
+  const $powerbankMarca = document.getElementById('prod-powerbank-marca');
+  const $powerbankMah = document.getElementById('prod-powerbank-mah');
+  const $powerbankMahMenos = document.getElementById('prod-powerbank-mah-menos');
+  const $powerbankMahMas = document.getElementById('prod-powerbank-mah-mas');
+
+  const customDropdowns = {};
+
+  function createCustomDropdown($select) {
+    if (!$select || customDropdowns[$select.id]) return customDropdowns[$select.id];
+    const wrap = document.createElement('div');
+    wrap.className = 'custom-select-wrap';
+    $select.parentNode.insertBefore(wrap, $select);
+    wrap.appendChild($select);
+
+    const trigger = document.createElement('div');
+    trigger.className = 'custom-select-trigger';
+    trigger.setAttribute('tabindex', '0');
+    wrap.appendChild(trigger);
+
+    const optionsDiv = document.createElement('div');
+    optionsDiv.className = 'custom-select-options';
+    wrap.appendChild(optionsDiv);
+
+    function syncDisplay() {
+      const opt = $select.options[$select.selectedIndex];
+      const text = opt ? opt.textContent : '';
+      const placeholder = $select.options[0]?.value === '' ? $select.options[0].textContent : '';
+      trigger.textContent = text || placeholder;
+      trigger.classList.toggle('placeholder', !text);
+    }
+
+    function buildOptions() {
+      optionsDiv.innerHTML = '';
+      for (let i = 0; i < $select.options.length; i++) {
+        const opt = $select.options[i];
+        const div = document.createElement('div');
+        div.className = 'custom-select-option';
+        div.textContent = opt.textContent;
+        div.dataset.value = opt.value;
+        div.dataset.index = String(i);
+        div.addEventListener('click', (e) => {
+          e.stopPropagation();
+          $select.selectedIndex = parseInt(div.dataset.index, 10);
+          $select.dispatchEvent(new Event('change', { bubbles: true }));
+          syncDisplay();
+          wrap.classList.remove('abierto');
+        });
+        optionsDiv.appendChild(div);
+      }
+    }
+
+    function refresh() {
+      buildOptions();
+      syncDisplay();
+    }
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('#modal-producto .custom-select-wrap.abierto').forEach(w => w.classList.remove('abierto'));
+      wrap.classList.toggle('abierto');
+    });
+
+    trigger.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        trigger.click();
+      }
+    });
+
+    if (!customDropdowns._closeListener) {
+      customDropdowns._closeListener = true;
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('#modal-producto .custom-select-wrap')) {
+          document.querySelectorAll('#modal-producto .custom-select-wrap.abierto').forEach(w => w.classList.remove('abierto'));
+        }
+      });
+    }
+
+    refresh();
+    customDropdowns[$select.id] = { refresh, syncDisplay };
+    return customDropdowns[$select.id];
+  }
+
+  document.querySelectorAll('#modal-producto select').forEach($s => createCustomDropdown($s));
+
+  function resetModal() {
+    if ($categoria) $categoria.value = '';
+    if ($camposMicas) $camposMicas.style.display = 'none';
+    if ($camposFundas) $camposFundas.style.display = 'none';
+    if ($camposCargadores) $camposCargadores.style.display = 'none';
+    if ($camposAudifonos) $camposAudifonos.style.display = 'none';
+    if ($camposPowerbanks) $camposPowerbanks.style.display = 'none';
+    $chipCristal?.classList.remove('activo');
+    $chipHidrogel?.classList.remove('activo');
+    $tipoCristalWrap.style.display = 'none';
+    $tipoCristal.value = '';
+    $tipoHidrogelWrap.style.display = 'none';
+    $tipoHidrogel.value = '';
+    $marcaModeloWrap.style.display = 'none';
+    $marca.innerHTML = '<option value="">Seleccionar marca...</option>';
+    $modelo.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    if ($fundaMarca) $fundaMarca.value = '';
+    if ($fundaMarcaCel) $fundaMarcaCel.value = '';
+    if ($fundaModeloCel) $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    customDropdowns['prod-funda-modelo-cel']?.refresh();
+    $fundaRangos?.querySelectorAll('.form-chip.activo').forEach(c => c.classList.remove('activo'));
+    if ($cargadorTipo) $cargadorTipo.value = '';
+    if ($cargadorMarca) $cargadorMarca.value = '';
+    if ($cargadorWatts) $cargadorWatts.value = '';
+    if ($cargadorConexion) $cargadorConexion.value = '';
+    if ($cargadorMetros) $cargadorMetros.value = '';
+    if ($audifonosTipo) $audifonosTipo.value = '';
+    if ($audifonosConexion) $audifonosConexion.value = '';
+    if ($audifonosMarca) $audifonosMarca.value = '';
+    if ($audifonosModelo) $audifonosModelo.value = '';
+    if ($powerbankMarca) $powerbankMarca.value = '';
+    if ($powerbankMah) $powerbankMah.value = '10000';
+    $precio.value = '';
+    if ($stockValor) $stockValor.value = '0';
+    if ($imagen) $imagen.value = '';
+    if ($imagenNombre) $imagenNombre.textContent = '';
+    document.querySelectorAll('#modal-producto .custom-select-wrap.abierto').forEach(w => w.classList.remove('abierto'));
+    Object.keys(customDropdowns).forEach(id => {
+      if (id === '_closeListener') return;
+      customDropdowns[id].refresh?.();
+      customDropdowns[id].syncDisplay?.();
+    });
+  }
+
+  function cerrarModal() {
+    $modal?.classList.remove('visible');
+    document.body.classList.remove('modal-producto-abierto');
+    resetModal();
+  }
+
+  function limpiarCamposAlCambiarCategoria() {
+    $chipCristal?.classList.remove('activo');
+    $chipHidrogel?.classList.remove('activo');
+    $tipoCristalWrap.style.display = 'none';
+    $tipoCristal.value = '';
+    $tipoHidrogelWrap.style.display = 'none';
+    $tipoHidrogel.value = '';
+    $marcaModeloWrap.style.display = 'none';
+    $marca.innerHTML = '<option value="">Seleccionar marca...</option>';
+    $modelo.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    customDropdowns['prod-mica-marca']?.refresh();
+    customDropdowns['prod-mica-modelo']?.refresh();
+    if ($fundaMarca) $fundaMarca.value = '';
+    if ($fundaMarcaCel) $fundaMarcaCel.value = '';
+    if ($fundaModeloCel) $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    customDropdowns['prod-funda-modelo-cel']?.refresh();
+    $fundaRangos?.querySelectorAll('.form-chip.activo').forEach(c => c.classList.remove('activo'));
+    if ($cargadorTipo) $cargadorTipo.value = '';
+    if ($cargadorMarca) $cargadorMarca.value = '';
+    if ($cargadorWatts) $cargadorWatts.value = '';
+    if ($cargadorConexion) $cargadorConexion.value = '';
+    if ($cargadorMetros) $cargadorMetros.value = '';
+    if ($audifonosTipo) $audifonosTipo.value = '';
+    if ($audifonosConexion) $audifonosConexion.value = '';
+    if ($audifonosMarca) $audifonosMarca.value = '';
+    if ($audifonosModelo) $audifonosModelo.value = '';
+    if ($powerbankMarca) $powerbankMarca.value = '';
+    if ($powerbankMah) $powerbankMah.value = '10000';
+    $precio.value = '';
+    if ($stockValor) $stockValor.value = '0';
+    if ($imagen) $imagen.value = '';
+    if ($imagenNombre) $imagenNombre.textContent = '';
+  }
+
+  $categoria?.addEventListener('change', () => {
+    limpiarCamposAlCambiarCategoria();
+    const cat = $categoria.value;
+    if ($camposMicas) $camposMicas.style.display = cat === 'micas' ? 'block' : 'none';
+    if ($camposFundas) $camposFundas.style.display = cat === 'fundas' ? 'block' : 'none';
+    if ($camposCargadores) $camposCargadores.style.display = cat === 'cargadores' ? 'block' : 'none';
+    if ($camposAudifonos) $camposAudifonos.style.display = cat === 'audifonos' ? 'block' : 'none';
+    if ($camposPowerbanks) $camposPowerbanks.style.display = cat === 'powerbanks' ? 'block' : 'none';
+    if (cat === 'fundas' && $fundaMarcaCel) {
+      $fundaMarcaCel.innerHTML = '<option value="">Seleccionar marca...</option>' +
+        Object.keys(MARCAS_MODELOS).map(m => `<option value="${m}">${m}</option>`).join('');
+      $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>';
+      customDropdowns['prod-funda-marca-cel']?.refresh();
+      customDropdowns['prod-funda-modelo-cel']?.refresh();
+    }
+    if (cat !== 'micas') {
+      $chipCristal?.classList.remove('activo');
+      $chipHidrogel?.classList.remove('activo');
+      $tipoCristalWrap.style.display = 'none';
+      $tipoHidrogelWrap.style.display = 'none';
+      $marcaModeloWrap.style.display = 'none';
+    }
+  });
+
+  $chipCristal?.addEventListener('click', () => {
+    $chipCristal.classList.add('activo');
+    $chipHidrogel?.classList.remove('activo');
+    $tipoCristalWrap.style.display = 'block';
+    $tipoCristal.value = '';
+    $tipoHidrogelWrap.style.display = 'none';
+    $tipoHidrogel.value = '';
+    $marcaModeloWrap.style.display = 'none';
+  });
+
+  $chipHidrogel?.addEventListener('click', () => {
+    $chipHidrogel.classList.add('activo');
+    $chipCristal?.classList.remove('activo');
+    $tipoCristalWrap.style.display = 'none';
+    $tipoCristal.value = '';
+    $tipoHidrogelWrap.style.display = 'block';
+    $tipoHidrogel.value = '';
+    $marcaModeloWrap.style.display = 'none';
+  });
+
+  $tipoCristal?.addEventListener('change', () => {
+    const tipo = $tipoCristal.value;
+    if (tipo) {
+      $marcaModeloWrap.style.display = 'block';
+      $marca.innerHTML = '<option value="">Seleccionar marca...</option>' +
+        Object.keys(MARCAS_MODELOS).map(m => `<option value="${m}">${m}</option>`).join('');
+      $modelo.innerHTML = '<option value="">Seleccionar modelo...</option>';
+      customDropdowns['prod-mica-marca']?.refresh();
+      customDropdowns['prod-mica-modelo']?.refresh();
+    } else {
+      $marcaModeloWrap.style.display = 'none';
+    }
+  });
+
+  $marca?.addEventListener('change', () => {
+    const marca = $marca.value;
+    const modelos = MARCAS_MODELOS[marca] || [];
+    $modelo.innerHTML = '<option value="">Seleccionar modelo...</option>' +
+      modelos.map(m => `<option value="${m}">${m}</option>`).join('');
+    customDropdowns['prod-mica-modelo']?.refresh();
+  });
+
+  $fundaMarcaCel?.addEventListener('change', () => {
+    const marca = $fundaMarcaCel.value;
+    const modelos = MARCAS_MODELOS[marca] || [];
+    $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>' +
+      modelos.map(m => `<option value="${m}">${m}</option>`).join('');
+    customDropdowns['prod-funda-modelo-cel']?.refresh();
+  });
+
+  $fundaRangos?.querySelectorAll('.form-chip[data-rango]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      $fundaRangos.querySelectorAll('.form-chip').forEach(c => c.classList.remove('activo'));
+      chip.classList.add('activo');
+      const rango = chip.dataset.rango;
+      const [min] = rango.split('-').map(Number);
+      if ($precio) $precio.value = min;
+    });
+  });
+
+  function actualizarChipRango() {
+    if (!$fundaRangos || $categoria?.value !== 'fundas') return;
+    const precio = parseInt($precio?.value || 0, 10);
+    $fundaRangos.querySelectorAll('.form-chip').forEach(c => c.classList.remove('activo'));
+    const chips = Array.from($fundaRangos.querySelectorAll('.form-chip[data-rango]'));
+    const chipMatch = chips.find(chip => {
+      const [min, max] = chip.dataset.rango.split('-').map(Number);
+      return precio >= min && precio <= max;
+    });
+    if (chipMatch) chipMatch.classList.add('activo');
+  }
+
+  $precio?.addEventListener('input', actualizarChipRango);
+  $precio?.addEventListener('change', actualizarChipRango);
+
+  $imagen?.addEventListener('change', () => {
+    const file = $imagen.files?.[0];
+    if ($imagenNombre) $imagenNombre.textContent = file ? file.name : '';
+  });
+
+  function setupHoldRepeat($btn, $input, delta, opts = {}) {
+    let timer = null;
+    let interval = null;
+    const delay = opts.delay ?? 400;
+    const intervalMs = opts.interval ?? 150;
+    const onUpdate = opts.onUpdate;
+
+    function update() {
+      const v = Math.max(0, parseInt($input?.value || 0, 10) + delta);
+      if ($input) $input.value = v;
+      onUpdate?.();
+    }
+
+    $btn?.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      update();
+      timer = setTimeout(() => {
+        interval = setInterval(update, intervalMs);
+      }, delay);
+    });
+
+    $btn?.addEventListener('mouseup', stop);
+    $btn?.addEventListener('mouseleave', stop);
+
+    function stop() {
+      clearTimeout(timer);
+      clearInterval(interval);
+      timer = null;
+      interval = null;
+    }
+  }
+
+  setupHoldRepeat($precioMenos, $precio, -1, { delay: 250, interval: 80, onUpdate: actualizarChipRango });
+  setupHoldRepeat($precioMas, $precio, 1, { delay: 250, interval: 80, onUpdate: actualizarChipRango });
+  setupHoldRepeat($stockMenos, $stockValor, -1);
+  setupHoldRepeat($stockMas, $stockValor, 1);
+  setupHoldRepeat($powerbankMahMenos, $powerbankMah, -500, { delay: 250, interval: 100 });
+  setupHoldRepeat($powerbankMahMas, $powerbankMah, 500, { delay: 250, interval: 100 });
+
+  $cancelar?.addEventListener('click', cerrarModal);
+  $modal?.addEventListener('click', e => { if (e.target.id === 'modal-producto') cerrarModal(); });
+
+  $form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const cat = $categoria.value;
+    if (!cat) { alert('Selecciona una categoría'); return; }
+    if (cat === 'micas') {
+      const tipoMica = $chipCristal?.classList.contains('activo') ? 'cristal' : ($chipHidrogel?.classList.contains('activo') ? 'hidrogel' : null);
+      if (!tipoMica) { alert('Selecciona tipo de mica (Cristal o Hidrogel)'); return; }
+      if (tipoMica === 'cristal') {
+        const tipoCristal = $tipoCristal.value;
+        if (!tipoCristal) { alert('Selecciona tipo de cristal'); return; }
+        const marca = $marca.value;
+        const modelo = $modelo.value;
+        if (!marca || !modelo) { alert('Selecciona marca y modelo'); return; }
+      } else if (tipoMica === 'hidrogel') {
+        const tipoHidrogel = $tipoHidrogel.value;
+        if (!tipoHidrogel) { alert('Selecciona tipo de hidrogel'); return; }
+      }
+    }
+    if (cat === 'fundas') {
+      const marcaCel = $fundaMarcaCel?.value;
+      const modeloCel = $fundaModeloCel?.value;
+      if (!marcaCel || !modeloCel) { alert('Selecciona marca y modelo del celular'); return; }
+    }
+    if (cat === 'cargadores') {
+      const tipo = $cargadorTipo?.value;
+      if (!tipo) { alert('Selecciona tipo de cargador'); return; }
+    }
+    if (cat === 'audifonos') {
+      const tipo = $audifonosTipo?.value;
+      const conexion = $audifonosConexion?.value;
+      if (!tipo) { alert('Selecciona tipo de audífonos'); return; }
+      if (!conexion) { alert('Selecciona tipo de conexión'); return; }
+    }
+    if (cat === 'powerbanks') {
+      const mah = parseInt($powerbankMah?.value || 0, 10);
+      if (mah < 1) { alert('Ingresa una capacidad válida en mAh'); return; }
+    }
+    const precio = parseFloat($precio?.value || 0);
+    if (precio <= 0) { alert('Ingresa un precio válido'); return; }
+    const stock = parseInt($stockValor?.value || 0, 10);
+    if (stock < 1) { alert('El stock debe ser al menos 1'); return; }
+    console.log('Producto a agregar:', { categoria: cat, stock, /* otros campos */ });
+    alert('Producto agregado (frontend listo, falta backend)');
+    cerrarModal();
   });
 }
 
@@ -316,6 +774,35 @@ function initPOS() {
 
   $btnVaciar.addEventListener('click', () => { carrito = []; actualizarCarrito(); });
 
+  document.getElementById('btn-consignada')?.addEventListener('click', function() {
+    this.classList.toggle('activo');
+  });
+
+  const $carritoPanel = document.getElementById('carrito-panel');
+  const $carritoOverlay = document.getElementById('carrito-overlay');
+  const $btnExpand = document.getElementById('btn-carrito-expand');
+  const $expandIcon = $btnExpand?.querySelector('.btn-expand-icon');
+  const $vistaPos = document.getElementById('vista-pos');
+  function toggleCarritoMaximizado() {
+    const maximizado = $carritoPanel?.classList.toggle('carrito-maximizado');
+    $carritoOverlay?.classList.toggle('visible', maximizado);
+    $carritoOverlay?.setAttribute('aria-hidden', !maximizado);
+    $btnExpand?.setAttribute('title', maximizado ? 'Minimizar carrito' : 'Maximizar carrito');
+    if ($expandIcon) $expandIcon.textContent = maximizado ? '✕' : '⛶';
+    if (maximizado && $carritoPanel && $vistaPos && $carritoOverlay) {
+      document.body.appendChild($carritoOverlay);
+      document.body.appendChild($carritoPanel);
+    } else if (!maximizado && $carritoPanel && $vistaPos && $carritoOverlay) {
+      const $app = document.querySelector('.app');
+      if ($app) $app.insertBefore($carritoOverlay, $app.children[1]);
+      $vistaPos.appendChild($carritoPanel);
+    }
+  }
+  $btnExpand?.addEventListener('click', toggleCarritoMaximizado);
+  $carritoOverlay?.addEventListener('click', () => {
+    if ($carritoPanel?.classList.contains('carrito-maximizado')) toggleCarritoMaximizado();
+  });
+
   $carritoVacio?.addEventListener('click', () => {
     if (!$carritoVacio.classList.contains('carrito-vacio-link')) return;
     const $btnInventario = document.querySelector('.categoria-btn[data-categoria="inventario"]');
@@ -353,12 +840,13 @@ function initPOS() {
   const $themeLabel = $themeToggle?.querySelector('.theme-label');
   function aplicarTema(oscuro) {
     document.body.classList.toggle('theme-dark', oscuro);
+    document.documentElement.classList.toggle('theme-dark', oscuro);
     if ($themeLabel) $themeLabel.textContent = oscuro ? 'Claro' : 'Obscuro';
     try { localStorage.setItem(THEME_KEY, oscuro ? 'dark' : 'light'); } catch (_) {}
   }
+  aplicarTema(localStorage.getItem(THEME_KEY) === 'dark');
   if ($themeToggle) {
     $themeToggle.addEventListener('click', () => aplicarTema(!document.body.classList.contains('theme-dark')));
-    aplicarTema(localStorage.getItem(THEME_KEY) === 'dark');
   }
   const $logo = document.querySelector('.logo');
   if ($logo) $logo.addEventListener('click', () => aplicarTema(!document.body.classList.contains('theme-dark')));
@@ -448,18 +936,17 @@ function initUsuarios() {
     };
     const pass = document.getElementById('mu-password').value;
     if (pass) datos.password = pass;
+    if (!id && !pass) return alert('La contraseña es requerida para usuarios nuevos');
 
     try {
       let r;
-      if (id) {
-        r = await fetch(`${API}/usuarios/${id}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(datos) });
-      } else {
-        if (!pass) return alert('La contraseña es requerida para usuarios nuevos');
-        datos.password = pass;
-        r = await fetch(`${API}/usuarios`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(datos) });
-      }
-      const data = await r.json();
-      if (!r.ok) return alert(data.error || 'Error al guardar');
+      const url = id ? `${API}/usuarios/${id}` : `${API}/usuarios`;
+      const opts = id
+        ? { method: 'PUT', headers: authHeaders(), body: JSON.stringify(datos) }
+        : { method: 'POST', headers: authHeaders(), body: JSON.stringify(datos) };
+      r = await fetch(url, opts);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) return alert(data.error || 'Error al guardar (' + r.status + ')');
       cerrarModalUsuario();
       cargarUsuarios();
     } catch (err) {
