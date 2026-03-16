@@ -7,8 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    (function(){ try { if (localStorage.getItem('urbancase-texto-grande') === '1') document.documentElement.classList.add('texto-grande'); } catch(_){} })();
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; }
+    html.texto-grande { font-size: 18px; }
 
     body {
       font-family: 'DM Sans', sans-serif;
@@ -118,13 +123,39 @@
       font-size: 1rem;
       border-radius: 14px;
       outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
       background: rgba(255, 255, 255, 0.06);
       border: 1px solid rgba(255, 255, 255, 0.1);
       color: #e8e8ed;
     }
-    .form-group input::placeholder { color: rgba(255, 255, 255, 0.25); }
-    .form-group input:not(:placeholder-shown) {
+    .form-group input::placeholder {
+      color: #888;
+    }
+    .form-group input:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+    body:not(.theme-dark) .form-group input:focus {
+      border-color: #ff3131;
+      box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.15);
+      background: rgba(255, 255, 255, 0.08);
+      color: #e8e8ed;
+      -webkit-text-fill-color: #e8e8ed;
+      caret-color: #e8e8ed;
+    }
+    body.theme-dark .form-group input:focus {
+      border-color: #00d4aa;
+      box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.2);
+      background: rgba(255, 255, 255, 0.08);
+      color: #e8e8ed;
+      -webkit-text-fill-color: #e8e8ed;
+      caret-color: #00d4aa;
+    }
+    .form-group input:focus::placeholder {
+      color: #888;
+      -webkit-text-fill-color: #888;
+    }
+    body:not(.theme-dark) .form-group input:not(:placeholder-shown) {
       border-color: #ff3131;
       box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.15);
     }
@@ -197,17 +228,9 @@
       caret-color: #00d4aa !important;
       transition: background-color 5000s ease-in-out 0s;
     }
-    body:not(.theme-dark) .form-group input:focus {
-      border-color: #ff3131;
-      box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.15);
-      color: #e8e8ed !important;
-      -webkit-text-fill-color: #e8e8ed !important;
-      caret-color: #e8e8ed !important;
-    }
-    body.theme-dark .form-group input:focus {
-      border-color: #00d4aa;
-      box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.2);
-      caret-color: #00d4aa;
+    .form-group input::selection {
+      background: rgba(255, 49, 49, 0.3);
+      color: #fff;
     }
     body.theme-dark .form-group input::selection {
       background: rgba(0, 212, 170, 0.4);
@@ -301,7 +324,7 @@
         if (img.dataset.src) img.src = dark ? img.dataset.srcDark : img.dataset.src;
       });
     }
-    document.body.classList.toggle('theme-dark', localStorage.getItem(THEME_KEY) === 'dark');
+    document.body.classList.remove('theme-dark');
     actualizarIconosOjo();
     const $logoBtn = document.getElementById('login-logo-btn');
     if ($logoBtn) $logoBtn.addEventListener('click', () => aplicarTemaLogin(!document.body.classList.contains('theme-dark')));
@@ -311,18 +334,6 @@
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('uc_token') }
       }).then(r => { if (r.ok) window.location.href = (window.location.protocol === 'file:' ? 'http://localhost:3000' : '') + '/index.html'; });
     }
-
-    ['usuario', 'password'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.addEventListener('focus', () => {
-          if (document.body.classList.contains('theme-dark')) return;
-          const force = () => { el.style.color = '#e8e8ed'; el.style.webkitTextFillColor = '#e8e8ed'; };
-          force();
-          [100, 150, 250, 400].forEach(ms => setTimeout(force, ms));
-        });
-      }
-    });
 
     const $togglePass = document.getElementById('btn-toggle-pass');
     const $passInput = document.getElementById('password');
@@ -354,17 +365,22 @@
         const data = await res.json();
 
         if (!res.ok) {
-          $error.textContent = data.error || 'Error al iniciar sesión';
+          const msg = data.error || ('Error ' + res.status);
+          $error.textContent = msg;
           $error.classList.add('visible');
+          console.error('Login falló:', res.status, data);
           return;
         }
 
         localStorage.setItem('uc_token', data.token);
         localStorage.setItem('uc_usuario', JSON.stringify(data.usuario));
-        window.location.href = '/index.html';
-      } catch {
-        $error.textContent = 'No se pudo conectar con el servidor';
+        var usr = (data.usuario && data.usuario.usuario) ? String(data.usuario.usuario).toLowerCase() : '';
+        try { localStorage.setItem('urbancase-texto-grande', usr === 'edgar' ? '1' : '0'); } catch(_){}
+        window.location.href = (window.location.protocol === 'file:' ? 'http://localhost:3000' : '') + '/index.html';
+      } catch (err) {
+        $error.textContent = 'No se pudo conectar con el servidor. ¿Está corriendo node index.js en la carpeta server?';
         $error.classList.add('visible');
+        console.error('Login error de red:', err);
       } finally {
         $btn.disabled = false;
         $btn.textContent = 'Entrar';

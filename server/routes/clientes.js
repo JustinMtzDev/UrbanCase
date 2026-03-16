@@ -1,18 +1,7 @@
 const { Router } = require('express');
-const pool = require('./db');
+const pool = require('../config/db');
 
 const router = Router();
-
-router.get('/', async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      'SELECT * FROM clientes ORDER BY id'
-    );
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 function validarCliente(body) {
   if (!body.nombre) return 'El nombre es requerido';
@@ -20,6 +9,15 @@ function validarCliente(body) {
   if (body.correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.correo)) return 'Ingresa un correo electrónico válido';
   return null;
 }
+
+router.get('/', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM clientes ORDER BY id');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.post('/', async (req, res) => {
   const { nombre, telefono, correo, direccion } = req.body;

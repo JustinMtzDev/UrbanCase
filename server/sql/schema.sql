@@ -56,7 +56,7 @@ BEGIN
   END IF;
 END $$;
 
--- Superusuario: soporte / Justin2025@
-INSERT INTO usuarios (usuario, nombre, password_hash, rol) VALUES
-  ('soporte', 'Soporte', '$2b$10$OBiD2mwn91CgxrOkZDDlBuak.6p/3Ia9zTvsJ3XqDx68FQv4/46NW', 'admin')
-ON CONFLICT (usuario) DO NOTHING;
+-- Superusuario: soporte / soporte123
+INSERT INTO usuarios (usuario, nombre, password_hash, rol, activo) VALUES
+  ('soporte', 'Soporte', '$2b$10$WvDeilZe/jmlV0pznP6nRe2hjjCXgvugFApuoR8wmBm5HkVnDow7C', 'admin', TRUE)
+ON CONFLICT (usuario) DO UPDATE SET password_hash = EXCLUDED.password_hash, activo = TRUE;
