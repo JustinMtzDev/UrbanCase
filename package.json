@@ -1,0 +1,11 @@
+{
+  "name": "urbancase",
+  "private": true,
+  "version": "1.0.0",
+  "description": "POS para accesorios de celulares",
+  "scripts": {
+    "dev": "npm run server",
+    "server": "cd server && npm start",
+    "start": "cd server && npm start"
+  }
+}

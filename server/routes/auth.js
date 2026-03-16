@@ -1,10 +1,10 @@
 const { Router } = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const pool = require('./db');
+const pool = require('../config/db');
+const { sessions } = require('../middleware/auth');
 
 const router = Router();
-const sessions = new Map();
 
 router.post('/login', async (req, res) => {
   const { usuario, password } = req.body;
@@ -58,13 +58,4 @@ router.get('/me', (req, res) => {
   res.json(sessions.get(token));
 });
 
-function authMiddleware(req, res, next) {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token || !sessions.has(token)) {
-    return res.status(401).json({ error: 'No autenticado' });
-  }
-  req.usuario = sessions.get(token);
-  next();
-}
-
-module.exports = { router, authMiddleware };
+module.exports = router;
