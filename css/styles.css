@@ -37,6 +37,8 @@ body.theme-dark {
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.5);
   --blur: 24px;
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 body.app-loading .app {
@@ -942,16 +944,37 @@ body:not(.theme-dark) .carrito-panel {
   backdrop-filter: blur(28px);
   border-radius: 24px;
   border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.6), 0 8px 24px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
   padding: 24px;
 }
 
-/* En inventario: carrito como el buscador con efecto 3D */
+body:not(.theme-dark) .carrito-item {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+body:not(.theme-dark) .carrito-item-cantidad button {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+body:not(.theme-dark) .carrito-totales,
+body:not(.theme-dark) .carrito-fila.total {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+
+body:not(.theme-dark) .btn-carrito-expand {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+body:not(.theme-dark) .carrito-panel .btn-vaciar {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* En inventario: carrito */
 body:not(.theme-dark) #vista-pos:has(#contenido-inventario[style*="flex"]) .carrito-panel {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 10px;
-  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.4), 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.06);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
@@ -1389,14 +1412,14 @@ body:not(.theme-dark) #modal-producto {
   --accent: #ff3131;
 }
 
-/* Sin transparencia en modal producto para evitar confusión con elementos detrás */
+/* Modal producto */
 body:not(.theme-dark) #modal-producto .modal-content {
   background: #ffffff;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
 }
 
-html.theme-dark,
 body.theme-dark #modal-producto .modal-content {
   background: #1a1a1f;
   -webkit-backdrop-filter: none;
@@ -1409,13 +1432,38 @@ body:not(.theme-dark) #modal-producto .custom-select-options {
   background: #ffffff;
 }
 
-html.theme-dark,
+body:not(.theme-dark) #modal-producto .form-row input,
+body:not(.theme-dark) #modal-producto .custom-select-trigger,
+body:not(.theme-dark) #modal-producto .custom-select-input,
+body:not(.theme-dark) #modal-producto .stock-contador input,
+body:not(.theme-dark) #modal-producto .input-unidad input,
+body:not(.theme-dark) #modal-producto .form-row-precio .precio-contador input {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+body:not(.theme-dark) #modal-producto .custom-select-options {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+body:not(.theme-dark) #modal-producto .form-chip {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+body:not(.theme-dark) #modal-producto .stock-btn {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+body:not(.theme-dark) #modal-producto .btn-vaciar,
+body:not(.theme-dark) #modal-producto .imagen-upload-btn {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
 body.theme-dark #modal-producto .form-row input,
-html.theme-dark,
 body.theme-dark #modal-producto .custom-select-trigger,
-html.theme-dark,
 body.theme-dark #modal-producto .custom-select-options {
   background: #1a1a1f;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 body:not(.theme-dark) #modal-usuario .modal-content,
@@ -1451,6 +1499,92 @@ body:not(.theme-dark) #modal-producto .form-row select:focus {
 .custom-select-wrap {
   position: relative;
   width: 100%;
+}
+
+.custom-select-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.custom-select-row.no-pencil {
+  gap: 0;
+}
+
+.custom-select-row .custom-select-trigger {
+  flex: 1;
+  min-width: 0;
+}
+
+.custom-select-pencil-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  position: relative;
+  right: 0;
+}
+
+.custom-select-pencil-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.custom-select-pencil-btn.activo {
+  background: rgba(0, 212, 170, 0.15);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+body:not(.theme-dark) #modal-producto .custom-select-pencil-btn.activo {
+  background: rgba(247, 64, 64, 0.1);
+  color: #f74040;
+  border-color: #f74040;
+}
+
+.custom-select-pencil-btn.activo:hover {
+  background: rgba(0, 212, 170, 0.2);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+body:not(.theme-dark) #modal-producto .custom-select-pencil-btn.activo:hover {
+  background: rgba(247, 64, 64, 0.15);
+  color: #f74040;
+  border-color: #f74040;
+}
+
+.custom-select-input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 16px;
+  font-family: inherit;
+  font-size: inherit;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+}
+
+.custom-select-input:focus {
+  border-color: var(--accent);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06), 0 0 0 2px rgba(250, 48, 48, 0.2);
+}
+
+body.theme-dark .custom-select-input:focus {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 2px rgba(0, 212, 170, 0.2);
 }
 
 .custom-select-wrap select {
@@ -1856,6 +1990,7 @@ body.modal-producto-abierto {
 #modal-producto .form-row input,
 #modal-producto .form-row select,
 #modal-producto .custom-select-trigger,
+#modal-producto .custom-select-input,
 #modal-producto .custom-select-option,
 #modal-producto .form-row-precio .precio-contador input,
 #modal-producto .stock-contador input,
@@ -1876,6 +2011,29 @@ body.modal-producto-abierto {
 }
 #modal-producto .imagen-upload-nombre {
   font-size: 1.1rem;
+}
+
+#modal-producto input::placeholder {
+  color: var(--text-muted);
+}
+
+#modal-producto input:focus::placeholder {
+  opacity: 0;
+}
+
+#modal-producto input:focus,
+#modal-producto .custom-select-wrap.abierto .custom-select-trigger,
+#modal-producto .stock-contador:has(.stock-btn:active) input,
+#modal-producto .precio-contador:has(.stock-btn:active) input {
+  border-color: var(--accent);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06), 0 0 0 2px rgba(250, 48, 48, 0.2);
+}
+
+body.theme-dark #modal-producto input:focus,
+body.theme-dark #modal-producto .custom-select-wrap.abierto .custom-select-trigger,
+body.theme-dark #modal-producto .stock-contador:has(.stock-btn:active) input,
+body.theme-dark #modal-producto .precio-contador:has(.stock-btn:active) input {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 2px rgba(0, 212, 170, 0.2);
 }
 
 .form-row {
@@ -1995,9 +2153,52 @@ body:not(.theme-dark) .form-chip.activo {
   border-color: #f74040;
 }
 
+.form-checkboxes {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.form-row-checkboxes-centered label {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.form-row-checkboxes-centered .form-checkboxes {
+  justify-content: space-evenly;
+  gap: 1rem;
+}
+
+.form-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+  user-select: none;
+}
+
+.form-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+}
+
+.form-seccion-fija {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
 .form-row-precio,
 .form-row-stock,
 .form-row-imagen {
+  text-align: center;
+}
+
+.form-row:has(.stock-contador) label {
   text-align: center;
 }
 
@@ -2089,8 +2290,6 @@ body:not(.theme-dark) .form-chip.activo {
 
 .form-row-stock {
   margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
 }
 
 .stock-contador {
@@ -2148,8 +2347,6 @@ body:not(.theme-dark) .stock-btn:hover {
 
 .form-row-imagen {
   margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
 }
 
 .imagen-upload {
