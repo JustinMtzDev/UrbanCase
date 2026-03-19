@@ -140,6 +140,7 @@ function initDropdownSucursales() {
     e.stopPropagation();
     $menu.classList.toggle('abierto');
     if ($menu.classList.contains('abierto')) {
+      $menu.scrollTop = 0;
       $loading.style.display = 'block';
       $list.innerHTML = '';
       try {
@@ -283,6 +284,7 @@ function initProductoModal() {
   const $camposCargadores = document.getElementById('prod-campos-cargadores');
   const $camposAudifonos = document.getElementById('prod-campos-audifonos');
   const $camposPowerbanks = document.getElementById('prod-campos-powerbanks');
+  const $camposBocinas = document.getElementById('prod-campos-bocinas');
   const $chipCristal = document.querySelector('.form-chip[data-tipo="cristal"]');
   const $chipHidrogel = document.querySelector('.form-chip[data-tipo="hidrogel"]');
   const $tipoCristalWrap = document.getElementById('prod-mica-cristal-opciones');
@@ -305,13 +307,19 @@ function initProductoModal() {
   const $fundaMarca = document.getElementById('prod-funda-marca');
   const $fundaMarcaCel = document.getElementById('prod-funda-marca-cel');
   const $fundaModeloCel = document.getElementById('prod-funda-modelo-cel');
+  const $fundaTipo = document.getElementById('prod-funda-tipo');
+  const $fundaDescripcion = document.getElementById('prod-funda-descripcion');
   const $fundaRangos = document.getElementById('prod-funda-rangos');
 
   const $cargadorTipo = document.getElementById('prod-cargador-tipo');
   const $cargadorMarca = document.getElementById('prod-cargador-marca');
   const $cargadorWatts = document.getElementById('prod-cargador-watts');
+  const $cargadorWattsMenos = document.getElementById('prod-cargador-watts-menos');
+  const $cargadorWattsMas = document.getElementById('prod-cargador-watts-mas');
   const $cargadorConexion = document.getElementById('prod-cargador-conexion');
   const $cargadorMetros = document.getElementById('prod-cargador-metros');
+  const $cargadorMetrosMenos = document.getElementById('prod-cargador-metros-menos');
+  const $cargadorMetrosMas = document.getElementById('prod-cargador-metros-mas');
 
   const $audifonosTipo = document.getElementById('prod-audifonos-tipo');
   const $audifonosConexion = document.getElementById('prod-audifonos-conexion');
@@ -319,40 +327,125 @@ function initProductoModal() {
   const $audifonosModelo = document.getElementById('prod-audifonos-modelo');
 
   const $powerbankMarca = document.getElementById('prod-powerbank-marca');
+  const $powerbankModelo = document.getElementById('prod-powerbank-modelo');
   const $powerbankMah = document.getElementById('prod-powerbank-mah');
   const $powerbankMahMenos = document.getElementById('prod-powerbank-mah-menos');
   const $powerbankMahMas = document.getElementById('prod-powerbank-mah-mas');
+  const $powerbankWatts = document.getElementById('prod-powerbank-watts');
+  const $powerbankWattsMenos = document.getElementById('prod-powerbank-watts-menos');
+  const $powerbankWattsMas = document.getElementById('prod-powerbank-watts-mas');
+  const $powerbankConexion = document.getElementById('prod-powerbank-conexion');
+
+  const $bocinaMarca = document.getElementById('prod-bocina-marca');
+  const $bocinaModelo = document.getElementById('prod-bocina-modelo');
+  const $bocinaBluetooth = document.getElementById('prod-bocina-bluetooth');
+  const $bocinaAux = document.getElementById('prod-bocina-aux');
+  const $bocinaUsb = document.getElementById('prod-bocina-usb');
+  const $bocinaWatts = document.getElementById('prod-bocina-watts');
+  const $bocinaWattsMenos = document.getElementById('prod-bocina-watts-menos');
+  const $bocinaWattsMas = document.getElementById('prod-bocina-watts-mas');
+  const $bocinaColor = document.getElementById('prod-bocina-color');
 
   const customDropdowns = {};
 
+  const iconPencil = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+
+  const NO_PENCIL_IDS = ['prod-categoria', 'prod-mica-tipo-cristal', 'prod-mica-tipo-hidrogel', 'prod-cargador-tipo', 'prod-cargador-conexion', 'prod-audifonos-tipo', 'prod-audifonos-conexion', 'prod-powerbank-conexion'];
+
   function createCustomDropdown($select) {
     if (!$select || customDropdowns[$select.id]) return customDropdowns[$select.id];
+    const hasPencil = !NO_PENCIL_IDS.includes($select.id);
     const wrap = document.createElement('div');
     wrap.className = 'custom-select-wrap';
     $select.parentNode.insertBefore(wrap, $select);
     wrap.appendChild($select);
 
+    const row = document.createElement('div');
+    row.className = 'custom-select-row';
+    wrap.appendChild(row);
+
     const trigger = document.createElement('div');
     trigger.className = 'custom-select-trigger';
     trigger.setAttribute('tabindex', '0');
-    wrap.appendChild(trigger);
+    row.appendChild(trigger);
+
+    let btnToggle = null;
+    let customInput = null;
+    if (hasPencil) {
+      customInput = document.createElement('input');
+      customInput.type = 'text';
+      customInput.className = 'custom-select-input';
+      customInput.style.display = 'none';
+      customInput.placeholder = $select.options[0]?.value === '' ? $select.options[0].textContent : '';
+      row.appendChild(customInput);
+
+      btnToggle = document.createElement('button');
+      btnToggle.type = 'button';
+      btnToggle.className = 'custom-select-pencil-btn';
+      btnToggle.setAttribute('aria-label', 'Escribir valor personalizado');
+      btnToggle.innerHTML = iconPencil;
+      row.appendChild(btnToggle);
+    } else {
+      row.classList.add('no-pencil');
+    }
 
     const optionsDiv = document.createElement('div');
     optionsDiv.className = 'custom-select-options';
     wrap.appendChild(optionsDiv);
+
+    function removeCustomOption() {
+      const last = $select.options[$select.options.length - 1];
+      if (last?.dataset?.custom === '1') {
+        last.remove();
+      }
+    }
+
+    function switchToInput() {
+      if (!hasPencil || !customInput || !btnToggle) return;
+      wrap.classList.add('input-mode');
+      wrap.classList.remove('abierto');
+      trigger.style.display = 'none';
+      customInput.style.display = 'block';
+      const opt = $select.options[$select.selectedIndex];
+      customInput.value = (opt && opt.value) ? opt.textContent : '';
+      customInput.focus();
+      btnToggle.classList.add('activo');
+    }
+
+    function switchToDropdown() {
+      if (!hasPencil || !customInput || !btnToggle) return;
+      const val = customInput.value.trim();
+      removeCustomOption();
+      if (val) {
+        const opt = new Option(val, val);
+        opt.dataset.custom = '1';
+        $select.add(opt);
+        $select.value = val;
+      } else {
+        $select.selectedIndex = 0;
+      }
+      $select.dispatchEvent(new Event('change', { bubbles: true }));
+      wrap.classList.remove('input-mode');
+      trigger.style.display = '';
+      customInput.style.display = 'none';
+      customInput.value = '';
+      btnToggle.classList.remove('activo');
+      syncDisplay();
+    }
 
     function syncDisplay() {
       const opt = $select.options[$select.selectedIndex];
       const text = opt ? opt.textContent : '';
       const placeholder = $select.options[0]?.value === '' ? $select.options[0].textContent : '';
       trigger.textContent = text || placeholder;
-      trigger.classList.toggle('placeholder', !text);
+      trigger.classList.toggle('placeholder', opt?.value === '');
     }
 
     function buildOptions() {
       optionsDiv.innerHTML = '';
       for (let i = 0; i < $select.options.length; i++) {
         const opt = $select.options[i];
+        if (opt.value === '' && i === 0) continue;
         const div = document.createElement('div');
         div.className = 'custom-select-option';
         div.textContent = opt.textContent;
@@ -370,14 +463,36 @@ function initProductoModal() {
     }
 
     function refresh() {
+      removeCustomOption();
       buildOptions();
+      if (hasPencil && wrap.classList.contains('input-mode') && btnToggle && customInput) {
+        wrap.classList.remove('input-mode');
+        trigger.style.display = '';
+        customInput.style.display = 'none';
+        customInput.value = '';
+        btnToggle.classList.remove('activo');
+      }
       syncDisplay();
+    }
+
+    if (hasPencil && btnToggle) {
+      btnToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (wrap.classList.contains('input-mode')) {
+          switchToDropdown();
+        } else {
+          switchToInput();
+        }
+      });
     }
 
     trigger.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (wrap.classList.contains('input-mode')) return;
       document.querySelectorAll('#modal-producto .custom-select-wrap.abierto').forEach(w => w.classList.remove('abierto'));
+      const abriendo = !wrap.classList.contains('abierto');
       wrap.classList.toggle('abierto');
+      if (abriendo) optionsDiv.scrollTop = 0;
     });
 
     trigger.addEventListener('keydown', (e) => {
@@ -386,6 +501,12 @@ function initProductoModal() {
         trigger.click();
       }
     });
+
+    if (hasPencil && customInput) {
+      customInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') switchToDropdown();
+      });
+    }
 
     if (!customDropdowns._closeListener) {
       customDropdowns._closeListener = true;
@@ -397,11 +518,19 @@ function initProductoModal() {
     }
 
     refresh();
-    customDropdowns[$select.id] = { refresh, syncDisplay };
+    customDropdowns[$select.id] = { refresh, syncDisplay, switchToDropdown, wrap };
     return customDropdowns[$select.id];
   }
 
   document.querySelectorAll('#modal-producto select').forEach($s => createCustomDropdown($s));
+
+  function syncDropdownsFromInput() {
+    Object.keys(customDropdowns).forEach(id => {
+      if (id === '_closeListener') return;
+      const d = customDropdowns[id];
+      if (d.wrap?.classList.contains('input-mode')) d.switchToDropdown?.();
+    });
+  }
 
   function resetModal() {
     if ($categoria) $categoria.value = '';
@@ -410,6 +539,7 @@ function initProductoModal() {
     if ($camposCargadores) $camposCargadores.style.display = 'none';
     if ($camposAudifonos) $camposAudifonos.style.display = 'none';
     if ($camposPowerbanks) $camposPowerbanks.style.display = 'none';
+    if ($camposBocinas) $camposBocinas.style.display = 'none';
     $chipCristal?.classList.remove('activo');
     $chipHidrogel?.classList.remove('activo');
     $tipoCristalWrap.style.display = 'none';
@@ -422,19 +552,31 @@ function initProductoModal() {
     if ($fundaMarca) $fundaMarca.value = '';
     if ($fundaMarcaCel) $fundaMarcaCel.value = '';
     if ($fundaModeloCel) $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    if ($fundaTipo) $fundaTipo.value = '';
+    if ($fundaDescripcion) $fundaDescripcion.value = '';
     customDropdowns['prod-funda-modelo-cel']?.refresh();
     $fundaRangos?.querySelectorAll('.form-chip.activo').forEach(c => c.classList.remove('activo'));
     if ($cargadorTipo) $cargadorTipo.value = '';
     if ($cargadorMarca) $cargadorMarca.value = '';
-    if ($cargadorWatts) $cargadorWatts.value = '';
+    if ($cargadorWatts) $cargadorWatts.value = '0';
     if ($cargadorConexion) $cargadorConexion.value = '';
-    if ($cargadorMetros) $cargadorMetros.value = '';
+    if ($cargadorMetros) $cargadorMetros.value = '1';
     if ($audifonosTipo) $audifonosTipo.value = '';
     if ($audifonosConexion) $audifonosConexion.value = '';
     if ($audifonosMarca) $audifonosMarca.value = '';
     if ($audifonosModelo) $audifonosModelo.value = '';
     if ($powerbankMarca) $powerbankMarca.value = '';
+    if ($powerbankModelo) $powerbankModelo.value = '';
     if ($powerbankMah) $powerbankMah.value = '10000';
+    if ($powerbankWatts) $powerbankWatts.value = '0';
+    if ($powerbankConexion) $powerbankConexion.value = '';
+    if ($bocinaMarca) $bocinaMarca.value = '';
+    if ($bocinaModelo) $bocinaModelo.value = '';
+    if ($bocinaBluetooth) $bocinaBluetooth.checked = false;
+    if ($bocinaAux) $bocinaAux.checked = false;
+    if ($bocinaUsb) $bocinaUsb.checked = false;
+    if ($bocinaWatts) $bocinaWatts.value = '0';
+    if ($bocinaColor) $bocinaColor.value = '';
     $precio.value = '';
     if ($stockValor) $stockValor.value = '0';
     if ($imagen) $imagen.value = '';
@@ -468,23 +610,39 @@ function initProductoModal() {
     if ($fundaMarca) $fundaMarca.value = '';
     if ($fundaMarcaCel) $fundaMarcaCel.value = '';
     if ($fundaModeloCel) $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>';
+    if ($fundaTipo) $fundaTipo.value = '';
+    if ($fundaDescripcion) $fundaDescripcion.value = '';
     customDropdowns['prod-funda-modelo-cel']?.refresh();
     $fundaRangos?.querySelectorAll('.form-chip.activo').forEach(c => c.classList.remove('activo'));
     if ($cargadorTipo) $cargadorTipo.value = '';
     if ($cargadorMarca) $cargadorMarca.value = '';
-    if ($cargadorWatts) $cargadorWatts.value = '';
+    if ($cargadorWatts) $cargadorWatts.value = '0';
     if ($cargadorConexion) $cargadorConexion.value = '';
-    if ($cargadorMetros) $cargadorMetros.value = '';
+    if ($cargadorMetros) $cargadorMetros.value = '1';
     if ($audifonosTipo) $audifonosTipo.value = '';
     if ($audifonosConexion) $audifonosConexion.value = '';
     if ($audifonosMarca) $audifonosMarca.value = '';
     if ($audifonosModelo) $audifonosModelo.value = '';
     if ($powerbankMarca) $powerbankMarca.value = '';
+    if ($powerbankModelo) $powerbankModelo.value = '';
     if ($powerbankMah) $powerbankMah.value = '10000';
+    if ($powerbankWatts) $powerbankWatts.value = '0';
+    if ($powerbankConexion) $powerbankConexion.value = '';
+    if ($bocinaMarca) $bocinaMarca.value = '';
+    if ($bocinaModelo) $bocinaModelo.value = '';
+    if ($bocinaBluetooth) $bocinaBluetooth.checked = false;
+    if ($bocinaAux) $bocinaAux.checked = false;
+    if ($bocinaUsb) $bocinaUsb.checked = false;
+    if ($bocinaWatts) $bocinaWatts.value = '0';
+    if ($bocinaColor) $bocinaColor.value = '';
     $precio.value = '';
     if ($stockValor) $stockValor.value = '0';
     if ($imagen) $imagen.value = '';
     if ($imagenNombre) $imagenNombre.textContent = '';
+    Object.keys(customDropdowns).forEach(id => {
+      if (id === '_closeListener') return;
+      customDropdowns[id].syncDisplay?.();
+    });
   }
 
   $categoria?.addEventListener('change', () => {
@@ -495,6 +653,7 @@ function initProductoModal() {
     if ($camposCargadores) $camposCargadores.style.display = cat === 'cargadores' ? 'block' : 'none';
     if ($camposAudifonos) $camposAudifonos.style.display = cat === 'audifonos' ? 'block' : 'none';
     if ($camposPowerbanks) $camposPowerbanks.style.display = cat === 'powerbanks' ? 'block' : 'none';
+    if ($camposBocinas) $camposBocinas.style.display = cat === 'bocinas' ? 'block' : 'none';
     if (cat === 'fundas' && $fundaMarcaCel) {
       $fundaMarcaCel.innerHTML = '<option value="">Seleccionar marca...</option>' +
         Object.keys(MARCAS_MODELOS).map(m => `<option value="${m}">${m}</option>`).join('');
@@ -629,12 +788,21 @@ function initProductoModal() {
   setupHoldRepeat($stockMas, $stockValor, 1);
   setupHoldRepeat($powerbankMahMenos, $powerbankMah, -500, { delay: 250, interval: 100 });
   setupHoldRepeat($powerbankMahMas, $powerbankMah, 500, { delay: 250, interval: 100 });
+  setupHoldRepeat($powerbankWattsMenos, $powerbankWatts, -1);
+  setupHoldRepeat($powerbankWattsMas, $powerbankWatts, 1);
+  setupHoldRepeat($cargadorWattsMenos, $cargadorWatts, -1);
+  setupHoldRepeat($cargadorWattsMas, $cargadorWatts, 1);
+  setupHoldRepeat($cargadorMetrosMenos, $cargadorMetros, -1);
+  setupHoldRepeat($cargadorMetrosMas, $cargadorMetros, 1);
+  setupHoldRepeat($bocinaWattsMenos, $bocinaWatts, -1);
+  setupHoldRepeat($bocinaWattsMas, $bocinaWatts, 1);
 
   $cancelar?.addEventListener('click', cerrarModal);
   $modal?.addEventListener('click', e => { if (e.target.id === 'modal-producto') cerrarModal(); });
 
   $form?.addEventListener('submit', (e) => {
     e.preventDefault();
+    syncDropdownsFromInput();
     const cat = $categoria.value;
     if (!cat) { alert('Selecciona una categoría'); return; }
     if (cat === 'micas') {
@@ -669,6 +837,18 @@ function initProductoModal() {
     if (cat === 'powerbanks') {
       const mah = parseInt($powerbankMah?.value || 0, 10);
       if (mah < 1) { alert('Ingresa una capacidad válida en mAh'); return; }
+    }
+    if (cat === 'bocinas') {
+      const marca = ($bocinaMarca?.value || '').trim();
+      const modelo = ($bocinaModelo?.value || '').trim();
+      if (!marca) { alert('Ingresa la marca de la bocina'); return; }
+      if (!modelo) { alert('Ingresa el modelo de la bocina'); return; }
+      const bluetooth = $bocinaBluetooth?.checked;
+      const aux = $bocinaAux?.checked;
+      const usb = $bocinaUsb?.checked;
+      if (!bluetooth && !aux && !usb) { alert('Selecciona al menos un tipo de conexión'); return; }
+      const color = $bocinaColor?.value;
+      if (!color) { alert('Selecciona un color'); return; }
     }
     const precio = parseFloat($precio?.value || 0);
     if (precio <= 0) { alert('Ingresa un precio válido'); return; }

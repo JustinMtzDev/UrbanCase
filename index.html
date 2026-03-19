@@ -443,6 +443,22 @@
                 <option value="">Seleccionar modelo...</option>
               </select>
             </div>
+            <div class="form-row form-row-inline">
+              <label>Tipo</label>
+              <select id="prod-funda-tipo">
+                <option value="">Seleccionar...</option>
+                <option value="uso-rudo">Uso Rudo</option>
+                <option value="silicon">Silicon</option>
+                <option value="360">360</option>
+                <option value="bumper">Bumper</option>
+                <option value="wallet">Wallet</option>
+                <option value="clear">Clear</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Descripción</label>
+              <input type="text" id="prod-funda-descripcion" placeholder="Ej: Funda con soporte, diseño premium...">
+            </div>
             <div class="form-row">
               <label>Rango de precios</label>
               <div class="form-chips" id="prod-funda-rangos">
@@ -470,11 +486,13 @@
               <label>Marca</label>
               <input type="text" id="prod-cargador-marca" placeholder="Ej: Anker, Baseus...">
             </div>
-            <div class="form-row form-row-inline">
+            <div class="form-row">
               <label>Velocidad de carga</label>
-              <div class="input-unidad">
-                <input type="number" id="prod-cargador-watts" min="0" step="1" placeholder="0">
+              <div class="stock-contador">
+                <button type="button" class="stock-btn" id="prod-cargador-watts-menos" aria-label="Menos">−</button>
+                <input type="number" id="prod-cargador-watts" min="0" step="1" value="0" aria-label="Velocidad en watts">
                 <span class="input-unidad-simbolo">W</span>
+                <button type="button" class="stock-btn" id="prod-cargador-watts-mas" aria-label="Más">+</button>
               </div>
             </div>
             <div class="form-row form-row-inline">
@@ -485,11 +503,13 @@
                 <option value="c-c">C-C</option>
               </select>
             </div>
-            <div class="form-row form-row-inline">
+            <div class="form-row">
               <label>Longitud del cable</label>
-              <div class="input-unidad">
-                <input type="number" id="prod-cargador-metros" min="0" step="0.1" placeholder="0">
-                <span class="input-unidad-simbolo">M</span>
+              <div class="stock-contador">
+                <button type="button" class="stock-btn" id="prod-cargador-metros-menos" aria-label="Menos">−</button>
+                <input type="number" id="prod-cargador-metros" min="0" step="1" value="1" aria-label="Longitud en metros">
+                <span class="input-unidad-simbolo">m</span>
+                <button type="button" class="stock-btn" id="prod-cargador-metros-mas" aria-label="Más">+</button>
               </div>
             </div>
           </div>
@@ -512,11 +532,21 @@
                 <option value="hibrido">Híbrido</option>
               </select>
             </div>
-            <div class="form-row">
+            <div class="form-row form-row-inline">
               <label>Marca</label>
-              <input type="text" id="prod-audifonos-marca" placeholder="Ej: Sony, JBL, Apple...">
+              <select id="prod-audifonos-marca">
+                <option value="">Seleccionar...</option>
+                <option value="Sony">Sony</option>
+                <option value="JBL">JBL</option>
+                <option value="Apple">Apple</option>
+                <option value="Samsung">Samsung</option>
+                <option value="Bose">Bose</option>
+                <option value="Xiaomi">Xiaomi</option>
+                <option value="Huawei">Huawei</option>
+                <option value="Skullcandy">Skullcandy</option>
+              </select>
             </div>
-            <div class="form-row">
+            <div class="form-row form-row-inline">
               <label>Modelo</label>
               <input type="text" id="prod-audifonos-modelo" placeholder="Ej: WH-1000XM5, AirPods Pro...">
             </div>
@@ -528,6 +558,10 @@
               <input type="text" id="prod-powerbank-marca" placeholder="Ej: Anker, Baseus, Xiaomi...">
             </div>
             <div class="form-row">
+              <label>Modelo</label>
+              <input type="text" id="prod-powerbank-modelo" placeholder="Ej: PowerCore 10000, PB-YD-01...">
+            </div>
+            <div class="form-row">
               <label>Capacidad (mAh)</label>
               <div class="stock-contador">
                 <button type="button" class="stock-btn" id="prod-powerbank-mah-menos" aria-label="Menos">−</button>
@@ -536,8 +570,88 @@
                 <button type="button" class="stock-btn" id="prod-powerbank-mah-mas" aria-label="Más">+</button>
               </div>
             </div>
+            <div class="form-row">
+              <label>Velocidad de carga</label>
+              <div class="stock-contador">
+                <button type="button" class="stock-btn" id="prod-powerbank-watts-menos" aria-label="Menos">−</button>
+                <input type="number" id="prod-powerbank-watts" min="0" step="1" value="0" aria-label="Velocidad en watts">
+                <span class="input-unidad-simbolo">W</span>
+                <button type="button" class="stock-btn" id="prod-powerbank-watts-mas" aria-label="Más">+</button>
+              </div>
+            </div>
+            <div class="form-row form-row-inline">
+              <label>Conexión</label>
+              <select id="prod-powerbank-conexion">
+                <option value="">Seleccionar...</option>
+                <option value="puertos">Puertos</option>
+                <option value="cables-integrados">Cables integrados</option>
+              </select>
+            </div>
           </div>
 
+          <div id="prod-campos-bocinas" class="prod-campos-categoria" style="display:none">
+            <div class="form-row form-row-inline">
+              <label>Marca</label>
+              <select id="prod-bocina-marca">
+                <option value="">Seleccionar...</option>
+                <option value="JBL">JBL</option>
+                <option value="Sony">Sony</option>
+                <option value="Bose">Bose</option>
+                <option value="Anker">Anker</option>
+                <option value="Xiaomi">Xiaomi</option>
+                <option value="Baseus">Baseus</option>
+                <option value="Marshall">Marshall</option>
+              </select>
+            </div>
+            <div class="form-row form-row-inline">
+              <label>Modelo</label>
+              <input type="text" id="prod-bocina-modelo" placeholder="Ej: Flip 6, XB43...">
+            </div>
+            <div class="form-row form-row-checkboxes-centered">
+              <label>Tipo de conexión</label>
+              <div class="form-checkboxes">
+                <label class="form-checkbox-label">
+                  <input type="checkbox" id="prod-bocina-bluetooth" value="Bluetooth">
+                  <span>Bluetooth</span>
+                </label>
+                <label class="form-checkbox-label">
+                  <input type="checkbox" id="prod-bocina-aux" value="AUX">
+                  <span>AUX</span>
+                </label>
+                <label class="form-checkbox-label">
+                  <input type="checkbox" id="prod-bocina-usb" value="USB">
+                  <span>USB</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-row">
+              <label>Potencia</label>
+              <div class="stock-contador">
+                <button type="button" class="stock-btn" id="prod-bocina-watts-menos" aria-label="Menos">−</button>
+                <input type="number" id="prod-bocina-watts" min="0" step="1" value="0" aria-label="Potencia en watts">
+                <span class="input-unidad-simbolo">W</span>
+                <button type="button" class="stock-btn" id="prod-bocina-watts-mas" aria-label="Más">+</button>
+              </div>
+            </div>
+            <div class="form-row form-row-inline">
+              <label>Color</label>
+              <select id="prod-bocina-color">
+                <option value="">Seleccionar...</option>
+                <option value="negro">Negro</option>
+                <option value="blanco">Blanco</option>
+                <option value="azul">Azul</option>
+                <option value="rojo">Rojo</option>
+                <option value="verde">Verde</option>
+                <option value="gris">Gris</option>
+                <option value="rosa">Rosa</option>
+                <option value="amarillo">Amarillo</option>
+                <option value="multicolor">Multicolor</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-seccion-fija">
           <div class="form-row form-row-precio">
             <label>Precio</label>
             <div class="precio-contador">
@@ -566,6 +680,7 @@
               <label for="prod-imagen" class="imagen-upload-btn">Elegir imagen</label>
               <span class="imagen-upload-nombre" id="prod-imagen-nombre"></span>
             </div>
+          </div>
           </div>
 
           <div class="modal-acciones">
