@@ -2,8 +2,18 @@
 if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
   window.location.href = 'http://localhost:3000/';
 }
-// Usar siempre el mismo servidor que sirve la app (puerto 3000) para que los datos se guarden
-const API = (typeof window !== 'undefined' && window.location.port === '3000') ? '/api' : 'http://localhost:3000/api';
+// UrbanCase API: mismo origen si la app corre en el puerto 3000 con Express; si no, Node en localhost:3000
+function ucResolveApiBase() {
+  if (typeof window === 'undefined') return '/api';
+  const { protocol, hostname, origin } = window.location;
+  const p = String(window.location.port || '');
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  if (protocol === 'file:') return 'http://localhost:3000/api';
+  if (isLocal && p === '3000') return `${origin}/api`;
+  if (isLocal) return 'http://localhost:3000/api';
+  return `${origin}/api`;
+}
+const API = ucResolveApiBase();
 let token = '';
 
 (async () => {
@@ -27,14 +37,18 @@ let token = '';
     localStorage.removeItem('uc_token');
     localStorage.removeItem('uc_usuario');
     localStorage.removeItem('uc_modulo');
+    localStorage.removeItem(SUCURSAL_KEY);
     window.location.href = '/login.html';
   });
 
   initPOS();
   initModulo();
   initModuloClientes();
-  initNav();
   initDropdownSucursales();
+  try { await restaurarSucursalGuardada(); } catch (err) { console.error('restaurarSucursalGuardada:', err); }
+  initNav();
+  try { initInventarioProductoZoom(); } catch (err) { console.error('initInventarioProductoZoom:', err); }
+  try { initInventarioVista(); } catch (err) { console.error('initInventarioVista:', err); }
   try { initProductoModal(); } catch (err) { console.error('initProductoModal:', err); }
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -65,6 +79,117 @@ function formatFecha(iso) {
 // ===================== NAVEGACIÓN =====================
 
 const MODULO_KEY = 'uc_modulo';
+const SUCURSAL_KEY = 'uc_sucursal';
+
+function guardarSucursalSeleccionada(sidRaw, nombre) {
+  try {
+    if (sidRaw == null || sidRaw === '') {
+      localStorage.removeItem(SUCURSAL_KEY);
+      return;
+    }
+    localStorage.setItem(SUCURSAL_KEY, JSON.stringify({ id: String(sidRaw), nombre: nombre || '' }));
+  } catch (_) {}
+}
+
+/** Aplica la sucursal en el dropdown, persiste y recarga inventario si aplica. */
+function aplicarSeleccionSucursal(sidRaw, nombre, opts = {}) {
+  const { cerrarMenu = false, cerrarModal = false } = opts;
+  const $label = document.getElementById('dropdown-sucursales-label');
+  const $menu = document.getElementById('dropdown-sucursales-menu');
+  if (!$label) return false;
+
+  if (sidRaw === 'all') {
+    $label.textContent = nombre || 'Todas las sucursales';
+    $label.dataset.sucursalSeleccionada = '1';
+    $label.dataset.sucursalId = 'all';
+    guardarSucursalSeleccionada('all', $label.textContent);
+  } else {
+    const sidNum = sidRaw !== '' && sidRaw != null ? Number(sidRaw) : NaN;
+    if (!Number.isFinite(sidNum)) {
+      $label.textContent = 'Sucursales';
+      delete $label.dataset.sucursalId;
+      delete $label.dataset.sucursalSeleccionada;
+      guardarSucursalSeleccionada(null);
+      actualizarEstadoBtnAgregarProducto();
+      window.ucCargarInventarioProductos?.();
+      return false;
+    }
+    $label.textContent = nombre || $label.textContent;
+    $label.dataset.sucursalSeleccionada = '1';
+    $label.dataset.sucursalId = String(sidNum);
+    guardarSucursalSeleccionada(String(sidNum), $label.textContent);
+  }
+
+  if (cerrarMenu) $menu?.classList.remove('abierto');
+  actualizarEstadoBtnAgregarProducto();
+  if (cerrarModal && sidRaw === 'all') window.ucCerrarModalProducto?.();
+  window.ucCargarInventarioProductos?.();
+  return true;
+}
+
+async function restaurarSucursalGuardada() {
+  let saved;
+  try {
+    const raw = localStorage.getItem(SUCURSAL_KEY);
+    if (!raw) return;
+    saved = JSON.parse(raw);
+  } catch {
+    localStorage.removeItem(SUCURSAL_KEY);
+    return;
+  }
+  if (!saved?.id) return;
+
+  const sid = String(saved.id).trim();
+  if (sid.toLowerCase() === 'all' || sid.toLowerCase() === 'todas') {
+    aplicarSeleccionSucursal('all', saved.nombre || 'Todas las sucursales');
+    return;
+  }
+
+  const sidNum = Number(sid);
+  if (!Number.isFinite(sidNum)) {
+    localStorage.removeItem(SUCURSAL_KEY);
+    return;
+  }
+
+  try {
+    const r = await fetch(`${API}/sucursales`, { headers: authHeaders(false) });
+    if (!r.ok) return;
+    const sucursales = await r.json();
+    const found = Array.isArray(sucursales) ? sucursales.find((s) => Number(s.id) === sidNum) : null;
+    if (found) {
+      aplicarSeleccionSucursal(String(sidNum), found.nombre || saved.nombre);
+    } else {
+      localStorage.removeItem(SUCURSAL_KEY);
+    }
+  } catch (_) {}
+}
+
+/** Lee la sucursal elegida en el dropdown (normaliza espacios y modo «todas» / «todas las sucursales»). */
+function leerDatasetSucursalInventario() {
+  const $label = document.getElementById('dropdown-sucursales-label');
+  const raw = String($label?.dataset?.sucursalId ?? '').trim();
+  const lower = raw.toLowerCase();
+  const esTodasLasSucursales = lower === 'all' || lower === 'todas';
+  return { $label, raw, esTodasLasSucursales };
+}
+
+/** Habilita “+ Agregar producto” solo con una sucursal concreta (no en “Todas las sucursales”). */
+function actualizarEstadoBtnAgregarProducto() {
+  const $btn = document.getElementById('btn-agregar-producto');
+  if (!$btn) return;
+  const { $label, raw, esTodasLasSucursales } = leerDatasetSucursalInventario();
+  const sel = $label?.dataset?.sucursalSeleccionada === '1';
+  const sidNum = raw && !esTodasLasSucursales ? Number(raw) : NaN;
+  const ok = sel && !esTodasLasSucursales && Number.isFinite(sidNum);
+  $btn.disabled = !ok;
+  if (ok) {
+    $btn.title = '';
+  } else if (esTodasLasSucursales) {
+    $btn.title = '«Todas las sucursales» solo muestra el inventario; elige una sucursal para agregar productos';
+  } else {
+    $btn.title = 'Selecciona una sucursal en la barra superior para agregar productos';
+  }
+}
 
 function initNav() {
   const $vistaPos = document.getElementById('vista-pos');
@@ -150,14 +275,28 @@ function initDropdownSucursales() {
         if (sucursales.length === 0) {
           $list.innerHTML = '<div class="dropdown-sucursales-vacio">No hay sucursales</div>';
         } else {
-          $list.innerHTML = sucursales.map(s => {
-            const esc = (s.nombre || '').replace(/</g, '&lt;');
-            return `<div class="dropdown-sucursales-item">${esc}</div>`;
-          }).join('');
-          $list.querySelectorAll('.dropdown-sucursales-item').forEach(item => {
+          const todasDiv = '<div class="dropdown-sucursales-item dropdown-sucursales-item-todas" role="menuitem" data-sucursal-id="all" title="Ver productos de todas las sucursales">Todas las sucursales</div>';
+          $list.innerHTML =
+            todasDiv
+            + sucursales.map((s) => {
+              const esc = (s.nombre || '').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+              const idNum = Number(s.id);
+              return `<div class="dropdown-sucursales-item" role="menuitem" data-sucursal-id="${Number.isFinite(idNum) ? idNum : ''}">${esc}</div>`;
+            }).join('');
+          $list.querySelectorAll('.dropdown-sucursales-item').forEach((item) => {
             item.addEventListener('click', () => {
-              $label.textContent = item.textContent;
-              $menu.classList.remove('abierto');
+              const sidRaw = item.getAttribute('data-sucursal-id');
+              const nombre = item.textContent.trim();
+              if (sidRaw === 'all') {
+                aplicarSeleccionSucursal('all', nombre, { cerrarMenu: true, cerrarModal: true });
+                return;
+              }
+              const sidNum = sidRaw !== '' && sidRaw != null ? Number(sidRaw) : NaN;
+              if (!Number.isFinite(sidNum)) {
+                aplicarSeleccionSucursal(null, null);
+                return;
+              }
+              aplicarSeleccionSucursal(String(sidNum), nombre, { cerrarMenu: true });
             });
           });
         }
@@ -170,12 +309,16 @@ function initDropdownSucursales() {
 
   document.addEventListener('click', () => $menu?.classList.remove('abierto'));
   $menu?.addEventListener('click', (e) => e.stopPropagation());
+  actualizarEstadoBtnAgregarProducto();
 }
 
 // ===================== INVENTARIO =====================
 
-const CATEGORIAS_INVENTARIO = ['todos', 'micas', 'fundas', 'cargadores', 'powerbanks', 'bocinas', 'accesorios', 'otros'];
+const CATEGORIAS_INVENTARIO = ['todos', 'micas', 'fundas', 'cargadores', 'powerbanks', 'audifonos', 'bocinas', 'accesorios', 'otros'];
+const UC_ICONO_EDITAR = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
 let productosInventario = [];
+/** Último error al cargar inventario (solo para mensaje en pantalla). */
+let ultimoErrorCargaInventario = '';
 let categoriaInventarioActiva = 'todos';
 
 function initInventarioVista() {
@@ -184,22 +327,51 @@ function initInventarioVista() {
   const $chips = document.querySelectorAll('.inventario-chip');
   const $btnAgregar = document.getElementById('btn-agregar-producto');
 
-  if (typeof initInventarioVista._inited !== 'undefined' && initInventarioVista._inited) {
+  async function cargarProductosInventario() {
+    const { raw, esTodasLasSucursales } = leerDatasetSucursalInventario();
+    productosInventario = [];
+    ultimoErrorCargaInventario = '';
+    if (!raw) {
+      renderInventarioProductos();
+      return;
+    }
+    try {
+      const url = esTodasLasSucursales
+        ? `${API}/productos/inventario-todas-sucursales`
+        : `${API}/productos?${new URLSearchParams({ sucursal_id: raw }).toString()}`;
+      const r = await fetch(url, { headers: authHeaders(false) });
+      if (!r.ok) {
+        const raw = await r.text().catch(() => r.statusText);
+        try {
+          const j = JSON.parse(raw);
+          ultimoErrorCargaInventario = (j && j.error) ? String(j.error) : raw || r.statusText;
+        } catch {
+          ultimoErrorCargaInventario = raw || r.statusText || 'Error de red';
+        }
+        console.error('productos inventario:', r.status, ultimoErrorCargaInventario);
+        productosInventario = [];
+      } else {
+        const data = await r.json();
+        productosInventario = Array.isArray(data) ? data : [];
+      }
+    } catch (err) {
+      console.error(err);
+      productosInventario = [];
+      ultimoErrorCargaInventario = err?.message ? String(err.message) : 'Error de red';
+    }
     renderInventarioProductos();
+  }
+
+  window.ucCargarInventarioProductos = cargarProductosInventario;
+
+  if (typeof initInventarioVista._inited !== 'undefined' && initInventarioVista._inited) {
+    actualizarEstadoBtnAgregarProducto();
+    void cargarProductosInventario();
     return;
   }
   initInventarioVista._inited = true;
 
-  productosInventario = [
-    { id: 1, nombre: 'Mica templada iPhone 15', precio: 89, stock: 12, imagen: '', categoria: 'micas' },
-    { id: 2, nombre: 'Funda silicona Samsung', precio: 149, stock: 8, imagen: '', categoria: 'fundas' },
-    { id: 3, nombre: 'Cargador rápido 20W', precio: 199, stock: 5, imagen: '', categoria: 'cargadores' },
-    { id: 4, nombre: 'Power bank 10000mAh', precio: 349, stock: 3, imagen: '', categoria: 'powerbanks' },
-    { id: 5, nombre: 'Bocina Bluetooth', precio: 299, stock: 7, imagen: '', categoria: 'bocinas' },
-    { id: 6, nombre: 'Soporte celular', precio: 79, stock: 15, imagen: '', categoria: 'accesorios' },
-    { id: 7, nombre: 'Cable USB-C', precio: 59, stock: 20, imagen: '', categoria: 'cargadores' },
-    { id: 8, nombre: 'Mica hidrogel', precio: 69, stock: 0, imagen: '', categoria: 'micas' },
-  ];
+  productosInventario = [];
 
   $chips.forEach(chip => {
     chip.addEventListener('click', () => {
@@ -213,22 +385,31 @@ function initInventarioVista() {
   $buscador?.addEventListener('input', () => renderInventarioProductos());
 
   $btnAgregar?.addEventListener('click', () => {
-    document.getElementById('modal-producto')?.classList.add('visible');
-    document.body.classList.add('modal-producto-abierto');
+    if ($btnAgregar.disabled) return;
+    window.ucAbrirModalAgregarProducto?.();
   });
 
-  renderInventarioProductos();
+  void cargarProductosInventario();
+  actualizarEstadoBtnAgregarProducto();
 }
 
 function renderInventarioProductos() {
   const $grid = document.getElementById('inventario-productos');
   if (!$grid) return;
+  const { raw, esTodasLasSucursales } = leerDatasetSucursalInventario();
+  if (!raw) {
+    $grid.innerHTML = '<div class="inventario-vacio">Selecciona una sucursal o «Todas las sucursales» arriba para ver productos</div>';
+    return;
+  }
+
+  const verTodasSucursales = esTodasLasSucursales;
+
   const $buscador = document.getElementById('inventario-buscador');
   const q = ($buscador?.value || '').toLowerCase().trim();
   const cat = categoriaInventarioActiva;
 
-  let lista = productosInventario.filter(p => {
-    const matchCat = cat === 'todos' || (p.categoria || '').toLowerCase() === cat;
+  let lista = productosInventario.filter((p) => {
+    const matchCat = cat === 'todos' || (String(p.categoria || '').toLowerCase() === cat);
     const matchQ = !q || (p.nombre || '').toLowerCase().includes(q);
     return matchCat && matchQ;
   });
@@ -237,26 +418,154 @@ function renderInventarioProductos() {
   const imgPlaceholder = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23999"><rect width="100" height="100"/><text x="50" y="55" font-size="12" fill="%23666" text-anchor="middle">Sin imagen</text></svg>');
 
   if (lista.length === 0) {
-    $grid.innerHTML = '<div class="inventario-vacio">No hay productos que coincidan con la búsqueda</div>';
+    if (ultimoErrorCargaInventario) {
+      const safe = ultimoErrorCargaInventario.replace(/</g, '&lt;');
+      $grid.innerHTML = `<div class="inventario-vacio inventario-vacio-error">No se pudo cargar el inventario: ${safe}</div>`;
+    } else if (productosInventario.length === 0) {
+      $grid.innerHTML = '<div class="inventario-vacio">No hay productos en esta vista.</div>';
+    } else {
+      $grid.innerHTML = '<div class="inventario-vacio">No hay productos que coincidan con la búsqueda</div>';
+    }
     return;
   }
-  $grid.innerHTML = lista.map(p => `
+  $grid.innerHTML = lista.map((p) => {
+    const nomSuc = (p.sucursal_nombre || '').replace(/</g, '&lt;');
+    const lineaSucursal =
+      verTodasSucursales && nomSuc
+        ? `<div class="inventario-producto-sucursal">${nomSuc}</div>`
+        : '';
+    return `
     <article class="inventario-producto-card" data-id="${p.id}">
-      <img class="inventario-producto-img" src="${p.imagen || imgPlaceholder}" alt="${(p.nombre || '').replace(/"/g, '&quot;')}">
+      <img class="inventario-producto-img" tabindex="0" role="button" aria-label="Ver imagen ampliada" src="${p.imagen || imgPlaceholder}" alt="${(p.nombre || '').replace(/"/g, '&quot;')}">
       <div class="inventario-producto-nombre">${(p.nombre || '').replace(/</g, '&lt;')}</div>
-      <div class="inventario-producto-precio">${formatearPrecio(p.precio)}</div>
-      <div class="inventario-producto-stock">Stock: ${p.stock ?? 0}</div>
-      <button type="button" class="inventario-producto-btn" data-id="${p.id}">Agregar al carrito</button>
+      <div class="inventario-producto-meta">
+        <div class="inventario-producto-meta-principal">
+          <div class="inventario-producto-info">
+            <div class="inventario-producto-precio">${formatearPrecio(Number(p.precio))}</div>
+            <div class="inventario-producto-stock">Stock: ${p.stock ?? 0}</div>
+          </div>
+          <button type="button" class="inventario-producto-editar" data-id="${p.id}" title="Editar producto" aria-label="Editar producto">${UC_ICONO_EDITAR}</button>
+        </div>
+        ${lineaSucursal}
+      </div>
+      <div class="inventario-producto-acciones">
+        <button type="button" class="inventario-producto-btn" data-id="${p.id}">Agregar al carrito</button>
+      </div>
     </article>
-  `).join('');
+  `;
+  }).join('');
 
   $grid.querySelectorAll('.inventario-producto-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const id = Number(btn.dataset.id);
-      const prod = productosInventario.find(p => p.id === id);
+      const prod = productosInventario.find((p) => Number(p.id) === id);
       if (prod && window.agregarAlCarrito) window.agregarAlCarrito(prod);
     });
+  });
+
+  $grid.querySelectorAll('.inventario-producto-editar').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = Number(btn.dataset.id);
+      const prod = productosInventario.find((p) => Number(p.id) === id);
+      if (prod) window.ucAbrirModalEditarProducto?.(prod);
+    });
+  });
+
+  function abrirZoomDesdeImg(img) {
+    const card = img.closest('.inventario-producto-card');
+    const id = Number(card?.dataset.id);
+    const prod = productosInventario.find((p) => Number(p.id) === id);
+    if (prod) abrirInventarioProductoZoom(prod);
+  }
+  $grid.querySelectorAll('.inventario-producto-img').forEach((img) => {
+    img.addEventListener('click', (e) => {
+      e.stopPropagation();
+      abrirZoomDesdeImg(img);
+    });
+    img.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        abrirZoomDesdeImg(img);
+      }
+    });
+  });
+}
+
+let inventarioZoomAbierto = false;
+
+function cerrarInventarioProductoZoom() {
+  const $bd = document.getElementById('inventario-producto-zoom-backdrop');
+  const $panel = document.getElementById('inventario-producto-zoom-panel');
+  if (!$bd || !$panel) return;
+  $bd.classList.remove('visible');
+  $panel.classList.remove('visible');
+  $bd.setAttribute('aria-hidden', 'true');
+  $panel.setAttribute('aria-hidden', 'true');
+  inventarioZoomAbierto = false;
+  document.body.classList.remove('inventario-zoom-abierto');
+}
+
+function abrirInventarioProductoZoom(p) {
+  const $bd = document.getElementById('inventario-producto-zoom-backdrop');
+  const $panel = document.getElementById('inventario-producto-zoom-panel');
+  const $img = document.getElementById('inventario-zoom-img');
+  const $nom = document.getElementById('inventario-zoom-nombre');
+  const $pre = document.getElementById('inventario-zoom-precio');
+  const $stock = document.getElementById('inventario-zoom-stock');
+  const $cat = document.getElementById('inventario-zoom-cat');
+  const $suc = document.getElementById('inventario-zoom-sucursal');
+  if (!$bd || !$panel || !$img || !$nom || !p) return;
+  const formatearPrecio = window.formatearPrecioPOS || (n => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 }));
+  const imgPh = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23999"><rect width="100" height="100"/><text x="50" y="55" font-size="12" fill="%23666" text-anchor="middle">Sin imagen</text></svg>');
+  $img.src = p.imagen || imgPh;
+  $img.alt = p.nombre || 'Producto';
+  $nom.textContent = p.nombre || 'Producto';
+  if ($pre) $pre.textContent = formatearPrecio(Number(p.precio));
+  if ($stock) $stock.textContent = `Stock: ${p.stock ?? 0}`;
+  if ($cat) {
+    const catRaw = (p.categoria || '').trim();
+    if (catRaw) {
+      $cat.textContent = `Categoría: ${catRaw.charAt(0).toUpperCase() + catRaw.slice(1)}`;
+      $cat.hidden = false;
+    } else {
+      $cat.textContent = '';
+      $cat.hidden = true;
+    }
+  }
+  if ($suc) {
+    const nomSuc = (p.sucursal_nombre || '').trim();
+    if (nomSuc) {
+      $suc.textContent = `Sucursal: ${nomSuc}`;
+      $suc.hidden = false;
+    } else {
+      $suc.textContent = '';
+      $suc.hidden = true;
+    }
+  }
+  $bd.classList.add('visible');
+  $panel.classList.add('visible');
+  $bd.setAttribute('aria-hidden', 'false');
+  $panel.setAttribute('aria-hidden', 'false');
+  inventarioZoomAbierto = true;
+  document.body.classList.add('inventario-zoom-abierto');
+}
+
+function initInventarioProductoZoom() {
+  const $bd = document.getElementById('inventario-producto-zoom-backdrop');
+  const $panel = document.getElementById('inventario-producto-zoom-panel');
+  const $cerrar = document.getElementById('inventario-zoom-cerrar');
+  if (!$bd || !$panel || initInventarioProductoZoom._done) return;
+  initInventarioProductoZoom._done = true;
+  $cerrar?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    cerrarInventarioProductoZoom();
+  });
+  $bd.addEventListener('click', cerrarInventarioProductoZoom);
+  $panel.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && inventarioZoomAbierto) cerrarInventarioProductoZoom();
   });
 }
 
@@ -278,6 +587,8 @@ const MARCAS_MODELOS = {
 function initProductoModal() {
   const $modal = document.getElementById('modal-producto');
   const $form = document.getElementById('form-producto');
+  const $modalTitulo = document.getElementById('modal-producto-titulo');
+  const $modalSubmit = document.getElementById('modal-producto-submit');
   const $categoria = document.getElementById('prod-categoria');
   const $camposMicas = document.getElementById('prod-campos-micas');
   const $camposFundas = document.getElementById('prod-campos-fundas');
@@ -303,6 +614,8 @@ function initProductoModal() {
   const $imagen = document.getElementById('prod-imagen');
   const $imagenNombre = document.getElementById('prod-imagen-nombre');
   const $cancelar = document.getElementById('modal-producto-cancelar');
+  const $eliminarWrap = document.getElementById('modal-producto-eliminar-wrap');
+  const $eliminar = document.getElementById('modal-producto-eliminar');
 
   const $fundaMarca = document.getElementById('prod-funda-marca');
   const $fundaMarcaCel = document.getElementById('prod-funda-marca-cel');
@@ -313,10 +626,13 @@ function initProductoModal() {
 
   const $cargadorTipo = document.getElementById('prod-cargador-tipo');
   const $cargadorMarca = document.getElementById('prod-cargador-marca');
+  const $cargadorWattsWrap = document.getElementById('prod-cargador-watts-wrap');
   const $cargadorWatts = document.getElementById('prod-cargador-watts');
   const $cargadorWattsMenos = document.getElementById('prod-cargador-watts-menos');
   const $cargadorWattsMas = document.getElementById('prod-cargador-watts-mas');
   const $cargadorConexion = document.getElementById('prod-cargador-conexion');
+  const $cargadorConexionLabel = document.getElementById('prod-cargador-conexion-label');
+  const $cargadorMetrosWrap = document.getElementById('prod-cargador-metros-wrap');
   const $cargadorMetros = document.getElementById('prod-cargador-metros');
   const $cargadorMetrosMenos = document.getElementById('prod-cargador-metros-menos');
   const $cargadorMetrosMas = document.getElementById('prod-cargador-metros-mas');
@@ -338,19 +654,23 @@ function initProductoModal() {
 
   const $bocinaMarca = document.getElementById('prod-bocina-marca');
   const $bocinaModelo = document.getElementById('prod-bocina-modelo');
-  const $bocinaBluetooth = document.getElementById('prod-bocina-bluetooth');
-  const $bocinaAux = document.getElementById('prod-bocina-aux');
-  const $bocinaUsb = document.getElementById('prod-bocina-usb');
   const $bocinaWatts = document.getElementById('prod-bocina-watts');
   const $bocinaWattsMenos = document.getElementById('prod-bocina-watts-menos');
   const $bocinaWattsMas = document.getElementById('prod-bocina-watts-mas');
   const $bocinaColor = document.getElementById('prod-bocina-color');
 
   const customDropdowns = {};
+  let cargandoEdicionProducto = false;
+  let productoEditNombre = '';
+  let rangoFundaSinAuto = false;
 
-  const iconPencil = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+  function mostrarBtnEliminarProducto(visible) {
+    if ($eliminarWrap) $eliminarWrap.hidden = !visible;
+  }
 
-  const NO_PENCIL_IDS = ['prod-categoria', 'prod-mica-tipo-cristal', 'prod-mica-tipo-hidrogel', 'prod-cargador-tipo', 'prod-cargador-conexion', 'prod-audifonos-tipo', 'prod-audifonos-conexion', 'prod-powerbank-conexion'];
+  const iconPencil = UC_ICONO_EDITAR;
+
+  const NO_PENCIL_IDS = ['prod-categoria', 'prod-mica-tipo-cristal', 'prod-mica-tipo-hidrogel', 'prod-cargador-tipo', 'prod-audifonos-tipo', 'prod-audifonos-conexion'];
 
   function createCustomDropdown($select) {
     if (!$select || customDropdowns[$select.id]) return customDropdowns[$select.id];
@@ -393,44 +713,89 @@ function initProductoModal() {
     optionsDiv.className = 'custom-select-options';
     wrap.appendChild(optionsDiv);
 
-    function removeCustomOption() {
-      const last = $select.options[$select.options.length - 1];
-      if (last?.dataset?.custom === '1') {
-        last.remove();
+    function removeCustomOption(exceptValue) {
+      for (let i = $select.options.length - 1; i >= 0; i--) {
+        const opt = $select.options[i];
+        if (opt?.dataset?.custom === '1' && opt.value !== exceptValue) {
+          opt.remove();
+        }
       }
     }
 
-    function switchToInput() {
+    function getSelectedCustomOption() {
+      const opt = $select.options[$select.selectedIndex];
+      if (opt?.dataset?.custom === '1' && opt.value) {
+        return { text: opt.textContent.trim(), value: opt.value };
+      }
+      return null;
+    }
+
+    function restoreCustomOption(keep) {
+      if (!keep?.value) return;
+      removeCustomOption(keep.value);
+      const opt = new Option(keep.text, keep.value);
+      opt.dataset.custom = '1';
+      $select.add(opt);
+      $select.value = keep.value;
+    }
+
+    function indiceOpcionPredefinida(texto) {
+      const t = String(texto || '').trim();
+      if (!t) return -1;
+      for (let i = 0; i < $select.options.length; i++) {
+        const opt = $select.options[i];
+        if (!opt.value || opt.dataset.custom === '1') continue;
+        if (opt.textContent.trim() === t || opt.value === t) return i;
+      }
+      return -1;
+    }
+
+    function switchToInput(valorInicial) {
       if (!hasPencil || !customInput || !btnToggle) return;
+      removeCustomOption();
+      $select.selectedIndex = 0;
       wrap.classList.add('input-mode');
       wrap.classList.remove('abierto');
       trigger.style.display = 'none';
       customInput.style.display = 'block';
-      const opt = $select.options[$select.selectedIndex];
-      customInput.value = (opt && opt.value) ? opt.textContent : '';
-      customInput.focus();
+      if (valorInicial !== undefined) {
+        customInput.value = String(valorInicial);
+      } else {
+        const opt = $select.options[$select.selectedIndex];
+        customInput.value = (opt && opt.value) ? opt.textContent : '';
+      }
       btnToggle.classList.add('activo');
+    }
+
+    function switchToInputWithValue(valor) {
+      switchToInput(valor ?? '');
     }
 
     function switchToDropdown() {
       if (!hasPencil || !customInput || !btnToggle) return;
+      if (!wrap.classList.contains('input-mode')) return;
       const val = customInput.value.trim();
       removeCustomOption();
-      if (val) {
-        const opt = new Option(val, val);
-        opt.dataset.custom = '1';
-        $select.add(opt);
-        $select.value = val;
-      } else {
-        $select.selectedIndex = 0;
+      const idx = indiceOpcionPredefinida(val);
+      if (idx >= 0) {
+        $select.selectedIndex = idx;
+        wrap.classList.remove('input-mode');
+        trigger.style.display = '';
+        customInput.style.display = 'none';
+        customInput.value = '';
+        btnToggle.classList.remove('activo');
+        syncDisplay();
+        $select.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
       }
-      $select.dispatchEvent(new Event('change', { bubbles: true }));
+      $select.selectedIndex = 0;
       wrap.classList.remove('input-mode');
       trigger.style.display = '';
       customInput.style.display = 'none';
       customInput.value = '';
       btnToggle.classList.remove('activo');
       syncDisplay();
+      $select.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
     function syncDisplay() {
@@ -463,14 +828,15 @@ function initProductoModal() {
     }
 
     function refresh() {
-      removeCustomOption();
+      const enModoInput = wrap.classList.contains('input-mode');
+      const textoInput = enModoInput && customInput ? customInput.value : '';
+      const keepCustom = getSelectedCustomOption();
+      removeCustomOption(keepCustom?.value);
       buildOptions();
-      if (hasPencil && wrap.classList.contains('input-mode') && btnToggle && customInput) {
-        wrap.classList.remove('input-mode');
-        trigger.style.display = '';
-        customInput.style.display = 'none';
-        customInput.value = '';
-        btnToggle.classList.remove('activo');
+      if (keepCustom) restoreCustomOption(keepCustom);
+      if (enModoInput && customInput) {
+        switchToInputWithValue(textoInput);
+        return;
       }
       syncDisplay();
     }
@@ -492,7 +858,10 @@ function initProductoModal() {
       document.querySelectorAll('#modal-producto .custom-select-wrap.abierto').forEach(w => w.classList.remove('abierto'));
       const abriendo = !wrap.classList.contains('abierto');
       wrap.classList.toggle('abierto');
-      if (abriendo) optionsDiv.scrollTop = 0;
+      if (abriendo) {
+        if (!wrap.classList.contains('input-mode')) buildOptions();
+        optionsDiv.scrollTop = 0;
+      }
     });
 
     trigger.addEventListener('keydown', (e) => {
@@ -518,19 +887,11 @@ function initProductoModal() {
     }
 
     refresh();
-    customDropdowns[$select.id] = { refresh, syncDisplay, switchToDropdown, wrap };
+    customDropdowns[$select.id] = { refresh, syncDisplay, switchToDropdown, switchToInputWithValue, wrap };
     return customDropdowns[$select.id];
   }
 
   document.querySelectorAll('#modal-producto select').forEach($s => createCustomDropdown($s));
-
-  function syncDropdownsFromInput() {
-    Object.keys(customDropdowns).forEach(id => {
-      if (id === '_closeListener') return;
-      const d = customDropdowns[id];
-      if (d.wrap?.classList.contains('input-mode')) d.switchToDropdown?.();
-    });
-  }
 
   function resetModal() {
     if ($categoria) $categoria.value = '';
@@ -556,6 +917,7 @@ function initProductoModal() {
     if ($fundaDescripcion) $fundaDescripcion.value = '';
     customDropdowns['prod-funda-modelo-cel']?.refresh();
     $fundaRangos?.querySelectorAll('.form-chip.activo').forEach(c => c.classList.remove('activo'));
+    rangoFundaSinAuto = false;
     if ($cargadorTipo) $cargadorTipo.value = '';
     if ($cargadorMarca) $cargadorMarca.value = '';
     if ($cargadorWatts) $cargadorWatts.value = '0';
@@ -572,15 +934,20 @@ function initProductoModal() {
     if ($powerbankConexion) $powerbankConexion.value = '';
     if ($bocinaMarca) $bocinaMarca.value = '';
     if ($bocinaModelo) $bocinaModelo.value = '';
-    if ($bocinaBluetooth) $bocinaBluetooth.checked = false;
-    if ($bocinaAux) $bocinaAux.checked = false;
-    if ($bocinaUsb) $bocinaUsb.checked = false;
     if ($bocinaWatts) $bocinaWatts.value = '0';
     if ($bocinaColor) $bocinaColor.value = '';
     $precio.value = '';
     if ($stockValor) $stockValor.value = '0';
     if ($imagen) $imagen.value = '';
     if ($imagenNombre) $imagenNombre.textContent = '';
+    delete $form?.dataset.editId;
+    delete $form?.dataset.editSucursalId;
+    delete $form?.dataset.imagenActual;
+    if ($modalTitulo) $modalTitulo.textContent = 'Agregar producto';
+    if ($modalSubmit) $modalSubmit.textContent = 'Agregar producto';
+    productoEditNombre = '';
+    mostrarBtnEliminarProducto(false);
+    actualizarCamposCargadorTipo();
     document.querySelectorAll('#modal-producto .custom-select-wrap.abierto').forEach(w => w.classList.remove('abierto'));
     Object.keys(customDropdowns).forEach(id => {
       if (id === '_closeListener') return;
@@ -589,11 +956,571 @@ function initProductoModal() {
     });
   }
 
+  function asignarValorSelect($select, texto) {
+    if (!$select || texto == null || texto === '') return;
+    const t = String(texto).trim();
+    const dd = customDropdowns[$select.id];
+    for (let i = 0; i < $select.options.length; i++) {
+      const opt = $select.options[i];
+      if (!opt.value || opt.dataset.custom === '1') continue;
+      if (opt.textContent.trim() === t || opt.value === t) {
+        if (dd?.wrap?.classList.contains('input-mode')) dd.switchToDropdown?.();
+        $select.value = opt.value;
+        dd?.syncDisplay?.();
+        return;
+      }
+    }
+    if (dd?.switchToInputWithValue) {
+      dd.switchToInputWithValue(t);
+      return;
+    }
+    const opt = new Option(t, t);
+    opt.dataset.custom = '1';
+    $select.add(opt);
+    $select.value = t;
+    dd?.syncDisplay?.();
+  }
+
+  function setSelectValorPorTexto($select, texto) {
+    asignarValorSelect($select, texto);
+  }
+
+  function aplicarValorSelectOTextoLibre($select, texto) {
+    asignarValorSelect($select, texto);
+  }
+
+  function poblarSelectMarcasCel($marcaSel, $modeloSel) {
+    if (!$marcaSel) return;
+    $marcaSel.innerHTML = '<option value="">Seleccionar marca...</option>' +
+      Object.keys(MARCAS_MODELOS).map((m) => `<option value="${m}">${m}</option>`).join('');
+    customDropdowns[$marcaSel.id]?.refresh?.();
+    if ($modeloSel) {
+      $modeloSel.innerHTML = '<option value="">Seleccionar modelo...</option>';
+      customDropdowns[$modeloSel.id]?.refresh?.();
+    }
+  }
+
+  function poblarModelosParaMarca($marcaSel, $modeloSel, marca) {
+    if (!$modeloSel) return;
+    const modelos = MARCAS_MODELOS[marca] || [];
+    $modeloSel.innerHTML = '<option value="">Seleccionar modelo...</option>' +
+      modelos.map((m) => `<option value="${m}">${m}</option>`).join('');
+    customDropdowns[$modeloSel.id]?.refresh?.();
+  }
+
+  function asignarMarcaYModeloEnSelects($marcaSel, $modeloSel, marcaTexto, modeloTexto) {
+    const marca = String(marcaTexto || '').trim();
+    const modelo = String(modeloTexto || '').trim();
+    if (!marca) {
+      if (modelo) asignarValorSelect($modeloSel, modelo);
+      return;
+    }
+    if (MARCAS_MODELOS[marca]) {
+      if ($marcaSel.options.length <= 1) poblarSelectMarcasCel($marcaSel, $modeloSel);
+      asignarValorSelect($marcaSel, marca);
+      poblarModelosParaMarca($marcaSel, $modeloSel, marca);
+      if (modelo) asignarValorSelect($modeloSel, modelo);
+      return;
+    }
+    if ($marcaSel.options.length <= 1) poblarSelectMarcasCel($marcaSel, $modeloSel);
+    asignarValorSelect($marcaSel, marca);
+    if (modelo) asignarValorSelect($modeloSel, modelo);
+  }
+
+  function refrescarDropdownsModalProducto() {
+    Object.keys(customDropdowns).forEach((id) => {
+      if (id === '_closeListener') return;
+      const d = customDropdowns[id];
+      d.refresh?.();
+      if (!d.wrap?.classList.contains('input-mode')) d.syncDisplay?.();
+    });
+  }
+
+  function extraerMarcaModeloCel(texto) {
+    const s = (texto || '').trim();
+    if (!s) return null;
+    let mejor = null;
+    for (const marca of Object.keys(MARCAS_MODELOS)) {
+      for (const modelo of MARCAS_MODELOS[marca]) {
+        const suf = `${marca} ${modelo}`;
+        if (s === suf || s.endsWith(` ${suf}`)) {
+          if (!mejor || suf.length > `${mejor.marca} ${mejor.modelo}`.length) {
+            mejor = { marca, modelo, resto: s.slice(0, s.length - suf.length).trim() };
+          }
+        }
+      }
+    }
+    if (mejor) return mejor;
+
+    const marcas = Object.keys(MARCAS_MODELOS).sort((a, b) => b.length - a.length);
+    for (const marca of marcas) {
+      const marcaEsc = marca.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`\\s+${marcaEsc}\\s+(.+)$`, 'i');
+      const m = s.match(re);
+      if (m) {
+        return {
+          marca,
+          modelo: m[1].trim(),
+          resto: s.slice(0, m.index).trim(),
+        };
+      }
+      if (s.toLowerCase() === marca.toLowerCase()) {
+        return { marca, modelo: '', resto: '' };
+      }
+    }
+    return null;
+  }
+
+  function opcionesTextoSelect($select) {
+    if (!$select) return [];
+    return Array.from($select.options)
+      .filter((o) => o.value)
+      .map((o) => ({ value: o.value, text: o.textContent.trim() }))
+      .sort((a, b) => b.text.length - a.text.length);
+  }
+
+  function matchPrefijoTipoFunda(texto) {
+    const opts = opcionesTextoSelect($fundaTipo);
+    for (const o of opts) {
+      if (texto === o.text) return { value: o.value, resto: '' };
+      if (texto.startsWith(o.text + ' ')) return { value: o.value, resto: texto.slice(o.text.length).trim() };
+    }
+    return { value: '', resto: texto };
+  }
+
+  function aplicarRangoFunda(rango) {
+    if (!$fundaRangos || !rango) return;
+    rangoFundaSinAuto = false;
+    $fundaRangos.querySelectorAll('.form-chip').forEach((c) => c.classList.remove('activo'));
+    const chip = $fundaRangos.querySelector(`.form-chip[data-rango="${rango}"]`);
+    if (chip) chip.classList.add('activo');
+  }
+
+  function limpiarNombreProducto(texto) {
+    return String(texto || '')
+      .replace(/^[\s·]+/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function limpiarTextoCampoProducto(texto) {
+    return String(texto || '').replace(/^[\s·]+/, '').trim();
+  }
+
+  function normalizarSeparadoresNombre(texto) {
+    return String(texto || '')
+      .replace(/\s*·\s*/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function extraerMarcaModeloDesdeRestoAudifonos(resto) {
+    const s = String(resto || '').trim();
+    if (!s) return { marca: '', modelo: '' };
+    const marcas = Array.from($audifonosMarca?.options || [])
+      .filter((o) => o.value)
+      .map((o) => o.textContent.trim())
+      .sort((a, b) => b.length - a.length);
+    for (const m of marcas) {
+      if (s === m || s.endsWith(` ${m}`)) {
+        return { marca: m, modelo: s.slice(0, s.length - m.length).trim() };
+      }
+    }
+    const sp = s.lastIndexOf(' ');
+    if (sp > 0) {
+      return { marca: s.slice(sp + 1).trim(), modelo: s.slice(0, sp).trim() };
+    }
+    return { marca: '', modelo: s };
+  }
+
+  function parsearCargadorDesdeNombre(nombre) {
+    let s = normalizarSeparadoresNombre(nombre);
+    let connText = '';
+    let wattsVal = null;
+    let metrosVal = null;
+
+    const metrosM = s.match(/\s+de\s+(\d+(?:[.,]\d+)?)\s*m\s*$/i);
+    if (metrosM) {
+      metrosVal = parseFloat(metrosM[1].replace(',', '.')) || 1;
+      s = s.slice(0, metrosM.index).trim();
+    }
+    const connM = s.match(/\s+(entrada|conexion)\s+(.+)$/i);
+    if (connM) {
+      connText = connM[2].trim();
+      s = s.slice(0, connM.index).trim();
+    }
+    const deW = s.match(/\s+de\s+(\d+)W\s*$/i);
+    if (deW) {
+      wattsVal = deW[1];
+      s = s.slice(0, deW.index).trim();
+    }
+
+    const prefijosTipo = [
+      { re: /^Cargador\s+Completo\s+/i, tipo: 'Completo' },
+      { re: /^Cable\s+/i, tipo: 'Cable' },
+      { re: /^Cubo\s+/i, tipo: 'Cubo' },
+    ];
+    let tipoOk = false;
+    for (const p of prefijosTipo) {
+      if (p.re.test(s)) {
+        asignarValorSelect($cargadorTipo, p.tipo);
+        s = s.replace(p.re, '').trim();
+        tipoOk = true;
+        break;
+      }
+    }
+    if (!tipoOk) {
+      const tiposOpts = opcionesTextoSelect($cargadorTipo).sort((a, b) => b.text.length - a.text.length);
+      for (const o of tiposOpts) {
+        if (s === o.text || s.startsWith(`${o.text} `)) {
+          asignarValorSelect($cargadorTipo, o.text);
+          s = s === o.text ? '' : s.slice(o.text.length).trim();
+          tipoOk = true;
+          break;
+        }
+      }
+    }
+    if (!tipoOk && s) asignarValorSelect($cargadorTipo, s);
+
+    actualizarCamposCargadorTipo();
+    if (s && $cargadorMarca) $cargadorMarca.value = s;
+    if (wattsVal != null && $cargadorWatts) $cargadorWatts.value = wattsVal;
+    if (metrosVal != null && $cargadorMetros) $cargadorMetros.value = String(metrosVal);
+    if (connText) asignarValorSelect($cargadorConexion, connText);
+  }
+
+  function parsearPowerbankDesdeNombre(nombre) {
+    let s = limpiarNombreProducto(nombre)
+      .replace(/^Power\s*bank\s+/i, '')
+      .trim();
+    s = normalizarSeparadoresNombre(s);
+    let connText = '';
+
+    const conMatch = s.match(/\s+con\s+(.+)$/i);
+    if (conMatch) {
+      connText = conMatch[1].trim();
+      s = s.slice(0, conMatch.index).trim();
+    }
+    const specsMatch = s.match(/\s+de\s+(\d+)\s*mAh\s+y\s+(\d+)W\s*$/i);
+    if (specsMatch) {
+      if ($powerbankMah) $powerbankMah.value = specsMatch[1];
+      if ($powerbankWatts) $powerbankWatts.value = specsMatch[2];
+      s = s.slice(0, specsMatch.index).trim();
+    } else {
+      const mahM = s.match(/\s+(\d+)\s*mAh\s+/i);
+      const wattsM = s.match(/\s+(\d+)W\s*$/i);
+      if (mahM && wattsM && $powerbankMah && $powerbankWatts) {
+        $powerbankMah.value = mahM[1];
+        $powerbankWatts.value = wattsM[1];
+        s = s.slice(0, mahM.index).trim();
+      }
+    }
+    const tokens = s.split(/\s+/).filter(Boolean);
+    if (tokens.length >= 2) {
+      if ($powerbankMarca) $powerbankMarca.value = limpiarTextoCampoProducto(tokens[0]);
+      if ($powerbankModelo) $powerbankModelo.value = tokens.slice(1).join(' ');
+    } else if (tokens.length === 1 && $powerbankMarca) {
+      $powerbankMarca.value = limpiarTextoCampoProducto(tokens[0]);
+    }
+    if (connText) asignarValorSelect($powerbankConexion, connText);
+  }
+
+  function parsearBocinaDesdeNombre(nombre) {
+    let s = limpiarNombreProducto(nombre).replace(/^Bocina\s+/i, '').trim();
+    if (!s) return;
+    s = normalizarSeparadoresNombre(s);
+
+    const colores = opcionesTextoSelect($bocinaColor).sort((a, b) => b.text.length - a.text.length);
+    let colorAsignado = false;
+    for (const o of colores) {
+      const esc = o.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`\\s+${esc}$`, 'i');
+      if (re.test(s) || s.toLowerCase() === o.text.toLowerCase()) {
+        asignarValorSelect($bocinaColor, o.text);
+        s = s.slice(0, s.length - o.text.length).trim();
+        colorAsignado = true;
+        break;
+      }
+    }
+    if (!colorAsignado && s.includes(' ')) {
+      const ult = s.lastIndexOf(' ');
+      const posibleColor = s.slice(ult + 1).trim();
+      if (posibleColor && !/^\d+W$/i.test(posibleColor)) {
+        asignarValorSelect($bocinaColor, posibleColor);
+        s = s.slice(0, ult).trim();
+      }
+    }
+
+    const wattsM = s.match(/\s+(\d+)W\s*$/i);
+    if (wattsM && $bocinaWatts) {
+      $bocinaWatts.value = wattsM[1];
+      s = s.slice(0, wattsM.index).trim();
+    }
+
+    const tokens = s.split(/\s+/).filter(Boolean);
+    if (tokens.length >= 1) asignarValorSelect($bocinaMarca, tokens[0]);
+    if (tokens.length >= 2 && $bocinaModelo) {
+      $bocinaModelo.value = tokens.slice(1).join(' ');
+    }
+  }
+
+  function normalizarConexionAudifonos(texto) {
+    const map = {
+      Alámbrico: 'Alámbrica',
+      Alámbricos: 'Alámbrica',
+      Inalámbrico: 'Inalámbrica',
+      Inalámbricos: 'Inalámbrica',
+      Híbrido: 'Híbrida',
+      Híbridos: 'Híbrida',
+    };
+    return map[String(texto || '').trim()] || String(texto || '').trim();
+  }
+
+  function extraerPartesAudifonosPorEspacios(s) {
+    let resto = String(s || '').trim();
+    let conn = '';
+    const etiquetasConn = [
+      'Alámbrica', 'Inalámbrica', 'Híbrida',
+      'Alámbricos', 'Inalámbricos', 'Híbridos',
+      'Alámbrico', 'Inalámbrico', 'Híbrido',
+    ].sort((a, b) => b.length - a.length);
+    for (const c of etiquetasConn) {
+      if (resto.endsWith(c)) {
+        conn = normalizarConexionAudifonos(c);
+        resto = resto.slice(0, resto.length - c.length).trim();
+        break;
+      }
+    }
+    let tipo = '';
+    if (resto.endsWith('In Ear')) {
+      tipo = 'In Ear';
+      resto = resto.slice(0, -6).trim();
+    } else if (resto.endsWith('Diadema')) {
+      tipo = 'Diadema';
+      resto = resto.slice(0, -7).trim();
+    }
+    const mmAud = extraerMarcaModeloDesdeRestoAudifonos(resto);
+    return { modelo: mmAud.modelo, marca: mmAud.marca, tipo, conn };
+  }
+
+  function extraerPartesAudifonosDesdeNombre(nombre) {
+    let s = limpiarNombreProducto(nombre).replace(/^Audífonos\s*(?:·\s*)?/i, '').trim();
+    if (!s) return { modelo: '', marca: '', tipo: '', conn: '' };
+
+    if (/\s+tipo\s+/i.test(s) || /\s+conexion\s+/i.test(s)) {
+      let conn = '';
+      let tipo = '';
+      let resto = s;
+      const conMatch = resto.match(/\s+conexion\s+(.+)$/i);
+      if (conMatch) {
+        conn = normalizarConexionAudifonos(conMatch[1].trim());
+        resto = resto.slice(0, conMatch.index).trim();
+      }
+      const tipoMatch = resto.match(/\s+tipo\s+(.+)$/i);
+      if (tipoMatch) {
+        tipo = tipoMatch[1].trim();
+        resto = resto.slice(0, tipoMatch.index).trim();
+      }
+      const mmAud = extraerMarcaModeloDesdeRestoAudifonos(resto);
+      return { modelo: mmAud.modelo, marca: mmAud.marca, tipo, conn };
+    }
+
+    if (s.includes(' · ')) {
+      const partes = s.split(' · ').map((p) => p.trim()).filter(Boolean);
+      const tiposConocidos = ['Diadema', 'In Ear'];
+      if (partes.length >= 4) {
+        if (tiposConocidos.includes(partes[0])) {
+          return {
+            tipo: partes[0],
+            conn: normalizarConexionAudifonos(partes[1]),
+            marca: partes[2],
+            modelo: partes[3],
+          };
+        }
+        return {
+          modelo: partes[0],
+          marca: partes[1],
+          tipo: partes[2],
+          conn: normalizarConexionAudifonos(partes[3]),
+        };
+      }
+    }
+
+    return extraerPartesAudifonosPorEspacios(s);
+  }
+
+  function parsearNombreEnFormulario(prod) {
+    const nombre = prod.nombre || '';
+    const cat = prod.categoria || '';
+
+    if (cat === 'fundas') {
+      let s = nombre.replace(/^Funda\s+/i, '').trim();
+      let rango = '';
+      const rangoM = s.match(/\s+—\s+Rango\s+([\d-]+)\s*$/i);
+      if (rangoM) {
+        rango = rangoM[1];
+        s = s.slice(0, -rangoM[0].length).trim();
+      }
+      let desc = '';
+      const dashIdx = s.indexOf(' — ');
+      if (dashIdx >= 0) {
+        desc = s.slice(dashIdx + 3).trim();
+        s = s.slice(0, dashIdx).trim();
+      }
+      const tipoMatch = matchPrefijoTipoFunda(s);
+      if (tipoMatch.value) {
+        const optTipo = Array.from($fundaTipo?.options || []).find((o) => o.value === tipoMatch.value);
+        asignarValorSelect($fundaTipo, optTipo?.textContent?.trim() || tipoMatch.value);
+        s = tipoMatch.resto;
+      } else if (s.trim()) {
+        asignarValorSelect($fundaTipo, s.trim());
+        s = '';
+      }
+      const mm = extraerMarcaModeloCel(s);
+      if (mm) {
+        asignarMarcaYModeloEnSelects($fundaMarcaCel, $fundaModeloCel, mm.marca, mm.modelo);
+        s = mm.resto;
+      }
+      if (s.trim() && $fundaMarca) $fundaMarca.value = s.trim();
+      if (desc && $fundaDescripcion) $fundaDescripcion.value = desc;
+      if (rango) {
+        aplicarRangoFunda(rango);
+      } else {
+        rangoFundaSinAuto = true;
+        $fundaRangos?.querySelectorAll('.form-chip.activo').forEach((c) => c.classList.remove('activo'));
+      }
+      return;
+    }
+
+    if (cat === 'micas') {
+      if (/^Mica\s+cristal\s+/i.test(nombre)) {
+        $chipCristal?.classList.add('activo');
+        $chipHidrogel?.classList.remove('activo');
+        $tipoCristalWrap.style.display = 'block';
+        $tipoHidrogelWrap.style.display = 'none';
+        let rest = nombre.replace(/^Mica\s+cristal\s+/i, '').trim();
+        const dash = rest.indexOf(' — ');
+        let mmPart = rest;
+        if (dash >= 0) {
+          mmPart = rest.slice(dash + 3).trim();
+          const tipoPart = rest.slice(0, dash).trim();
+          asignarValorSelect($tipoCristal, tipoPart);
+        } else {
+          const sp = rest.indexOf(' ');
+          if (sp > 0) {
+            asignarValorSelect($tipoCristal, rest.slice(0, sp));
+            mmPart = rest.slice(sp + 1).trim();
+          }
+        }
+        const mm = extraerMarcaModeloCel(mmPart);
+        if (mm) {
+          $marcaModeloWrap.style.display = 'block';
+          poblarSelectMarcasCel($marca, $modelo);
+          asignarMarcaYModeloEnSelects($marca, $modelo, mm.marca, mm.modelo);
+        } else if (mmPart) {
+          $marcaModeloWrap.style.display = 'block';
+          poblarSelectMarcasCel($marca, $modelo);
+          asignarValorSelect($marca, mmPart);
+        }
+        return;
+      }
+      if (/^Mica\s+hidrogel\s+/i.test(nombre)) {
+        $chipHidrogel?.classList.add('activo');
+        $chipCristal?.classList.remove('activo');
+        $tipoHidrogelWrap.style.display = 'block';
+        $tipoCristalWrap.style.display = 'none';
+        const tipoPart = nombre.replace(/^Mica\s+hidrogel\s+/i, '').trim();
+        asignarValorSelect($tipoHidrogel, tipoPart);
+      }
+      return;
+    }
+
+    if (cat === 'cargadores' && (/^Cargador\s+/i.test(nombre) || /^Cable\s+/i.test(nombre) || /^Cubo\s+/i.test(nombre))) {
+      parsearCargadorDesdeNombre(nombre);
+    }
+
+    if (cat === 'powerbanks') {
+      parsearPowerbankDesdeNombre(nombre);
+    }
+
+    if (cat === 'audifonos') {
+      const p = extraerPartesAudifonosDesdeNombre(nombre);
+      if (p.modelo && $audifonosModelo) $audifonosModelo.value = p.modelo;
+      if (p.marca) asignarValorSelect($audifonosMarca, p.marca);
+      if (p.tipo) asignarValorSelect($audifonosTipo, p.tipo);
+      if (p.conn) asignarValorSelect($audifonosConexion, p.conn);
+    }
+
+    if (cat === 'bocinas') {
+      parsearBocinaDesdeNombre(nombre);
+    }
+  }
+
+  function cargarProductoEnFormulario(prod) {
+    if (!prod) return;
+    cargandoEdicionProducto = true;
+    if ($precio) $precio.value = String(prod.precio ?? '');
+    if ($stockValor) $stockValor.value = String(prod.stock ?? 0);
+    if ($categoria) {
+      $categoria.value = prod.categoria || '';
+      $categoria.dispatchEvent(new Event('change'));
+    }
+    parsearNombreEnFormulario(prod);
+    refrescarDropdownsModalProducto();
+    actualizarChipRango();
+    requestAnimationFrame(() => {
+      refrescarDropdownsModalProducto();
+      cargandoEdicionProducto = false;
+    });
+  }
+
+  const $modalPanel = $modal?.querySelector('.modal-content');
+
+  function scrollModalProductoAlInicio() {
+    if ($modalPanel) $modalPanel.scrollTop = 0;
+  }
+
+  function abrirModalAgregarProducto() {
+    resetModal();
+    if ($modalTitulo) $modalTitulo.textContent = 'Agregar producto';
+    if ($modalSubmit) $modalSubmit.textContent = 'Agregar producto';
+    $modal?.classList.add('visible');
+    document.body.classList.add('modal-producto-abierto');
+  }
+
+  function abrirModalEditarProducto(prod) {
+    if (!prod || prod.id == null || prod.id === '') return;
+    resetModal();
+    if ($modalTitulo) $modalTitulo.textContent = 'Actualizar producto';
+    if ($modalSubmit) $modalSubmit.textContent = 'Actualizar producto';
+    if ($form) {
+      $form.dataset.editId = String(prod.id);
+      const sid = prod.sucursal_id ?? prod.id_sucursal;
+      if (sid != null) $form.dataset.editSucursalId = String(sid);
+      if (prod.imagen) $form.dataset.imagenActual = prod.imagen;
+    }
+    if ($imagenNombre && prod.imagen) {
+      $imagenNombre.textContent = 'Imagen actual (elige otra para reemplazar)';
+    }
+    cargarProductoEnFormulario(prod);
+    productoEditNombre = prod.nombre || 'este producto';
+    mostrarBtnEliminarProducto(true);
+    $modal?.classList.add('visible');
+    document.body.classList.add('modal-producto-abierto');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollModalProductoAlInicio());
+    });
+  }
+
+  window.ucAbrirModalAgregarProducto = abrirModalAgregarProducto;
+  window.ucAbrirModalEditarProducto = abrirModalEditarProducto;
+
   function cerrarModal() {
     $modal?.classList.remove('visible');
     document.body.classList.remove('modal-producto-abierto');
     resetModal();
   }
+  window.ucCerrarModalProducto = cerrarModal;
 
   function limpiarCamposAlCambiarCategoria() {
     $chipCristal?.classList.remove('activo');
@@ -614,6 +1541,7 @@ function initProductoModal() {
     if ($fundaDescripcion) $fundaDescripcion.value = '';
     customDropdowns['prod-funda-modelo-cel']?.refresh();
     $fundaRangos?.querySelectorAll('.form-chip.activo').forEach(c => c.classList.remove('activo'));
+    rangoFundaSinAuto = false;
     if ($cargadorTipo) $cargadorTipo.value = '';
     if ($cargadorMarca) $cargadorMarca.value = '';
     if ($cargadorWatts) $cargadorWatts.value = '0';
@@ -630,36 +1558,33 @@ function initProductoModal() {
     if ($powerbankConexion) $powerbankConexion.value = '';
     if ($bocinaMarca) $bocinaMarca.value = '';
     if ($bocinaModelo) $bocinaModelo.value = '';
-    if ($bocinaBluetooth) $bocinaBluetooth.checked = false;
-    if ($bocinaAux) $bocinaAux.checked = false;
-    if ($bocinaUsb) $bocinaUsb.checked = false;
     if ($bocinaWatts) $bocinaWatts.value = '0';
     if ($bocinaColor) $bocinaColor.value = '';
     $precio.value = '';
     if ($stockValor) $stockValor.value = '0';
     if ($imagen) $imagen.value = '';
     if ($imagenNombre) $imagenNombre.textContent = '';
-    Object.keys(customDropdowns).forEach(id => {
+    Object.keys(customDropdowns).forEach((id) => {
       if (id === '_closeListener') return;
-      customDropdowns[id].syncDisplay?.();
+      customDropdowns[id].refresh?.();
+      if (!customDropdowns[id].wrap?.classList.contains('input-mode')) {
+        customDropdowns[id].syncDisplay?.();
+      }
     });
   }
 
   $categoria?.addEventListener('change', () => {
-    limpiarCamposAlCambiarCategoria();
+    if (!cargandoEdicionProducto) limpiarCamposAlCambiarCategoria();
     const cat = $categoria.value;
     if ($camposMicas) $camposMicas.style.display = cat === 'micas' ? 'block' : 'none';
     if ($camposFundas) $camposFundas.style.display = cat === 'fundas' ? 'block' : 'none';
     if ($camposCargadores) $camposCargadores.style.display = cat === 'cargadores' ? 'block' : 'none';
+    if (cat === 'cargadores') actualizarCamposCargadorTipo();
     if ($camposAudifonos) $camposAudifonos.style.display = cat === 'audifonos' ? 'block' : 'none';
     if ($camposPowerbanks) $camposPowerbanks.style.display = cat === 'powerbanks' ? 'block' : 'none';
     if ($camposBocinas) $camposBocinas.style.display = cat === 'bocinas' ? 'block' : 'none';
-    if (cat === 'fundas' && $fundaMarcaCel) {
-      $fundaMarcaCel.innerHTML = '<option value="">Seleccionar marca...</option>' +
-        Object.keys(MARCAS_MODELOS).map(m => `<option value="${m}">${m}</option>`).join('');
-      $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>';
-      customDropdowns['prod-funda-marca-cel']?.refresh();
-      customDropdowns['prod-funda-modelo-cel']?.refresh();
+    if (cat === 'fundas') {
+      poblarSelectMarcasCel($fundaMarcaCel, $fundaModeloCel);
     }
     if (cat !== 'micas') {
       $chipCristal?.classList.remove('activo');
@@ -690,15 +1615,18 @@ function initProductoModal() {
     $marcaModeloWrap.style.display = 'none';
   });
 
+  $cargadorTipo?.addEventListener('change', () => {
+    if (!cargandoEdicionProducto) limpiarCamposCargadorDebajoTipo();
+    actualizarCamposCargadorTipo(
+      cargandoEdicionProducto ? {} : { valorConexion: '' },
+    );
+  });
+
   $tipoCristal?.addEventListener('change', () => {
     const tipo = $tipoCristal.value;
     if (tipo) {
       $marcaModeloWrap.style.display = 'block';
-      $marca.innerHTML = '<option value="">Seleccionar marca...</option>' +
-        Object.keys(MARCAS_MODELOS).map(m => `<option value="${m}">${m}</option>`).join('');
-      $modelo.innerHTML = '<option value="">Seleccionar modelo...</option>';
-      customDropdowns['prod-mica-marca']?.refresh();
-      customDropdowns['prod-mica-modelo']?.refresh();
+      poblarSelectMarcasCel($marca, $modelo);
     } else {
       $marcaModeloWrap.style.display = 'none';
     }
@@ -706,23 +1634,31 @@ function initProductoModal() {
 
   $marca?.addEventListener('change', () => {
     const marca = $marca.value;
-    const modelos = MARCAS_MODELOS[marca] || [];
-    $modelo.innerHTML = '<option value="">Seleccionar modelo...</option>' +
-      modelos.map(m => `<option value="${m}">${m}</option>`).join('');
-    customDropdowns['prod-mica-modelo']?.refresh();
+    if (marca) poblarModelosParaMarca($marca, $modelo, marca);
+    else if ($modelo) {
+      $modelo.innerHTML = '<option value="">Seleccionar modelo...</option>';
+      customDropdowns['prod-mica-modelo']?.refresh();
+    }
   });
 
   $fundaMarcaCel?.addEventListener('change', () => {
     const marca = $fundaMarcaCel.value;
-    const modelos = MARCAS_MODELOS[marca] || [];
-    $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>' +
-      modelos.map(m => `<option value="${m}">${m}</option>`).join('');
-    customDropdowns['prod-funda-modelo-cel']?.refresh();
+    if (marca) poblarModelosParaMarca($fundaMarcaCel, $fundaModeloCel, marca);
+    else if ($fundaModeloCel) {
+      $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo...</option>';
+      customDropdowns['prod-funda-modelo-cel']?.refresh();
+    }
   });
 
   $fundaRangos?.querySelectorAll('.form-chip[data-rango]').forEach(chip => {
     chip.addEventListener('click', () => {
+      const yaActivo = chip.classList.contains('activo');
       $fundaRangos.querySelectorAll('.form-chip').forEach(c => c.classList.remove('activo'));
+      if (yaActivo) {
+        rangoFundaSinAuto = true;
+        return;
+      }
+      rangoFundaSinAuto = false;
       chip.classList.add('activo');
       const rango = chip.dataset.rango;
       const [min] = rango.split('-').map(Number);
@@ -732,6 +1668,10 @@ function initProductoModal() {
 
   function actualizarChipRango() {
     if (!$fundaRangos || $categoria?.value !== 'fundas') return;
+    if (rangoFundaSinAuto) {
+      $fundaRangos.querySelectorAll('.form-chip').forEach(c => c.classList.remove('activo'));
+      return;
+    }
     const precio = parseInt($precio?.value || 0, 10);
     $fundaRangos.querySelectorAll('.form-chip').forEach(c => c.classList.remove('activo'));
     const chips = Array.from($fundaRangos.querySelectorAll('.form-chip[data-rango]'));
@@ -750,16 +1690,91 @@ function initProductoModal() {
     if ($imagenNombre) $imagenNombre.textContent = file ? file.name : '';
   });
 
+  function formatearMetrosCargador(val) {
+    const n = parseFloat(val);
+    if (!Number.isFinite(n) || n < 0) return 'de 0m';
+    return `de ${Number(n.toFixed(1))}m`;
+  }
+
+  const OPCIONES_CONEXION_CARGADOR = {
+    cableCompleto: [
+      { value: '', text: 'Seleccionar...' },
+      { value: 'usb-c', text: 'USB-C' },
+      { value: 'c-c', text: 'C-C' },
+    ],
+    cubo: [
+      { value: '', text: 'Seleccionar...' },
+      { value: 'usb', text: 'USB' },
+      { value: 'c', text: 'C' },
+    ],
+  };
+
+  function mapearConexionCargadorAlCambiarTipo(valor, haciaCubo) {
+    if (!valor) return '';
+    if (haciaCubo) {
+      if (valor === 'usb-c') return 'usb';
+      if (valor === 'c-c') return 'c';
+      return valor === 'usb' || valor === 'c' ? valor : '';
+    }
+    if (valor === 'usb') return 'usb-c';
+    if (valor === 'c') return 'c-c';
+    return valor === 'usb-c' || valor === 'c-c' ? valor : '';
+  }
+
+  function rellenarOpcionesConexionCargador(esCubo, valorPreferido) {
+    if (!$cargadorConexion) return;
+    const lista = esCubo ? OPCIONES_CONEXION_CARGADOR.cubo : OPCIONES_CONEXION_CARGADOR.cableCompleto;
+    $cargadorConexion.innerHTML = lista.map((o) => `<option value="${o.value}">${o.text}</option>`).join('');
+    const validos = new Set(lista.map((o) => o.value));
+    const v = valorPreferido && validos.has(valorPreferido) ? valorPreferido : '';
+    $cargadorConexion.value = v;
+    customDropdowns['prod-cargador-conexion']?.refresh?.();
+    customDropdowns['prod-cargador-conexion']?.syncDisplay?.();
+  }
+
+  function limpiarCamposCargadorDebajoTipo() {
+    if ($cargadorMarca) $cargadorMarca.value = '';
+    if ($cargadorWatts) $cargadorWatts.value = '0';
+    if ($cargadorMetros) $cargadorMetros.value = '1';
+    if ($cargadorConexion) $cargadorConexion.value = '';
+  }
+
+  function actualizarCamposCargadorTipo(opciones = {}) {
+    const tipo = $cargadorTipo?.value || '';
+    const esCable = tipo === 'cable';
+    const esCubo = tipo === 'cubo';
+
+    if ($cargadorWattsWrap) $cargadorWattsWrap.style.display = esCable ? 'none' : '';
+    if ($cargadorMetrosWrap) $cargadorMetrosWrap.style.display = esCubo ? 'none' : '';
+    if (esCable && $cargadorWatts) $cargadorWatts.value = '0';
+
+    if ($cargadorConexionLabel) {
+      $cargadorConexionLabel.textContent = esCubo ? 'Entrada' : 'Conexión';
+    }
+
+    const valorConexion = opciones.valorConexion !== undefined
+      ? opciones.valorConexion
+      : mapearConexionCargadorAlCambiarTipo($cargadorConexion?.value || '', esCubo);
+    rellenarOpcionesConexionCargador(esCubo, valorConexion);
+  }
+
   function setupHoldRepeat($btn, $input, delta, opts = {}) {
     let timer = null;
     let interval = null;
     const delay = opts.delay ?? 400;
     const intervalMs = opts.interval ?? 150;
     const onUpdate = opts.onUpdate;
+    const decimal = opts.decimal ?? false;
+    const precision = opts.precision ?? 1;
 
     function update() {
-      const v = Math.max(0, parseInt($input?.value || 0, 10) + delta);
-      if ($input) $input.value = v;
+      const current = decimal
+        ? parseFloat($input?.value || 0)
+        : parseInt($input?.value || 0, 10);
+      const v = Math.max(0, (Number.isFinite(current) ? current : 0) + delta);
+      if ($input) {
+        $input.value = decimal ? String(Number(v.toFixed(precision))) : String(v);
+      }
       onUpdate?.();
     }
 
@@ -792,27 +1807,67 @@ function initProductoModal() {
   setupHoldRepeat($powerbankWattsMas, $powerbankWatts, 1);
   setupHoldRepeat($cargadorWattsMenos, $cargadorWatts, -1);
   setupHoldRepeat($cargadorWattsMas, $cargadorWatts, 1);
-  setupHoldRepeat($cargadorMetrosMenos, $cargadorMetros, -1);
-  setupHoldRepeat($cargadorMetrosMas, $cargadorMetros, 1);
+  setupHoldRepeat($cargadorMetrosMenos, $cargadorMetros, -0.5, { delay: 250, interval: 100, decimal: true });
+  setupHoldRepeat($cargadorMetrosMas, $cargadorMetros, 0.5, { delay: 250, interval: 100, decimal: true });
   setupHoldRepeat($bocinaWattsMenos, $bocinaWatts, -1);
   setupHoldRepeat($bocinaWattsMas, $bocinaWatts, 1);
 
+  function textoOpcionSeleccionada(selectEl) {
+    if (!selectEl) return '';
+    const dd = customDropdowns[selectEl.id];
+    if (dd?.wrap?.classList.contains('input-mode')) {
+      const inp = dd.wrap.querySelector('.custom-select-input');
+      if (inp) return inp.value.trim();
+    }
+    const o = selectEl.options[selectEl.selectedIndex];
+    return o?.value ? (o.textContent || '').trim() : '';
+  }
+
+  function leerImagenComoDataUrl(input) {
+    return new Promise((resolve) => {
+      const f = input?.files?.[0];
+      if (!f || f.size > 700000) resolve(null);
+      else {
+        const r = new FileReader();
+        r.onload = () => resolve(typeof r.result === 'string' ? r.result : null);
+        r.onerror = () => resolve(null);
+        r.readAsDataURL(f);
+      }
+    });
+  }
+
   $cancelar?.addEventListener('click', cerrarModal);
+  $eliminar?.addEventListener('click', () => {
+    const editId = $form?.dataset.editId;
+    if (!editId) return;
+    const nombre = productoEditNombre || 'este producto';
+    abrirConfirmar(`¿Eliminar el producto "${nombre}"?`, async () => {
+      const r = await fetch(`${API}/productos/${editId}`, { method: 'DELETE', headers: authHeaders(false) });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        alert(d.error || 'No se pudo eliminar el producto');
+        return;
+      }
+      cerrarModal();
+      window.ucCargarInventarioProductos?.();
+    });
+  });
   $modal?.addEventListener('click', e => { if (e.target.id === 'modal-producto') cerrarModal(); });
 
-  $form?.addEventListener('submit', (e) => {
+  $form?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    syncDropdownsFromInput();
     const cat = $categoria.value;
     if (!cat) { alert('Selecciona una categoría'); return; }
+
+    let tipoMica = null;
     if (cat === 'micas') {
-      const tipoMica = $chipCristal?.classList.contains('activo') ? 'cristal' : ($chipHidrogel?.classList.contains('activo') ? 'hidrogel' : null);
+      tipoMica = $chipCristal?.classList.contains('activo') ? 'cristal' : ($chipHidrogel?.classList.contains('activo') ? 'hidrogel' : null);
       if (!tipoMica) { alert('Selecciona tipo de mica (Cristal o Hidrogel)'); return; }
       if (tipoMica === 'cristal') {
         const tipoCristal = $tipoCristal.value;
         if (!tipoCristal) { alert('Selecciona tipo de cristal'); return; }
-        const marca = $marca.value;
-        const modelo = $modelo.value;
+        const marca = textoOpcionSeleccionada($marca);
+        const modelo = textoOpcionSeleccionada($modelo);
         if (!marca || !modelo) { alert('Selecciona marca y modelo'); return; }
       } else if (tipoMica === 'hidrogel') {
         const tipoHidrogel = $tipoHidrogel.value;
@@ -820,8 +1875,8 @@ function initProductoModal() {
       }
     }
     if (cat === 'fundas') {
-      const marcaCel = $fundaMarcaCel?.value;
-      const modeloCel = $fundaModeloCel?.value;
+      const marcaCel = textoOpcionSeleccionada($fundaMarcaCel);
+      const modeloCel = textoOpcionSeleccionada($fundaModeloCel);
       if (!marcaCel || !modeloCel) { alert('Selecciona marca y modelo del celular'); return; }
     }
     if (cat === 'cargadores') {
@@ -843,20 +1898,161 @@ function initProductoModal() {
       const modelo = ($bocinaModelo?.value || '').trim();
       if (!marca) { alert('Ingresa la marca de la bocina'); return; }
       if (!modelo) { alert('Ingresa el modelo de la bocina'); return; }
-      const bluetooth = $bocinaBluetooth?.checked;
-      const aux = $bocinaAux?.checked;
-      const usb = $bocinaUsb?.checked;
-      if (!bluetooth && !aux && !usb) { alert('Selecciona al menos un tipo de conexión'); return; }
-      const color = $bocinaColor?.value;
+      const color = textoOpcionSeleccionada($bocinaColor);
       if (!color) { alert('Selecciona un color'); return; }
     }
     const precio = parseFloat($precio?.value || 0);
     if (precio <= 0) { alert('Ingresa un precio válido'); return; }
     const stock = parseInt($stockValor?.value || 0, 10);
     if (stock < 1) { alert('El stock debe ser al menos 1'); return; }
-    console.log('Producto a agregar:', { categoria: cat, stock, /* otros campos */ });
-    alert('Producto agregado (frontend listo, falta backend)');
-    cerrarModal();
+
+    const editId = $form?.dataset?.editId ? Number($form.dataset.editId) : NaN;
+    const esEdicion = Number.isFinite(editId);
+    let sidProd = NaN;
+    if (!esEdicion) {
+      const { raw: sidRaw, esTodasLasSucursales } = leerDatasetSucursalInventario();
+      if (esTodasLasSucursales) {
+        alert('Con «Todas las sucursales» solo ves el inventario reunido; elige una sucursal concreta para agregar productos.');
+        return;
+      }
+      if (!sidRaw) {
+        alert('Selecciona una sucursal en la barra superior');
+        return;
+      }
+      sidProd = Number(sidRaw);
+      if (!Number.isFinite(sidProd)) {
+        alert('Selecciona una sucursal válida en la barra superior');
+        return;
+      }
+    }
+
+    let nombreProducto = '';
+    if (cat === 'micas') {
+      if (tipoMica === 'cristal') {
+        nombreProducto = `Mica cristal ${$tipoCristal.value} — ${textoOpcionSeleccionada($marca)} ${textoOpcionSeleccionada($modelo)}`;
+      } else {
+        nombreProducto = `Mica hidrogel ${$tipoHidrogel.value}`;
+      }
+    } else if (cat === 'fundas') {
+      const partes = ['Funda'];
+      const tipoFunda = textoOpcionSeleccionada($fundaTipo);
+      if (tipoFunda) partes.push(tipoFunda);
+      const marcaFunda = ($fundaMarca?.value || '').trim();
+      if (marcaFunda) partes.push(marcaFunda);
+      const marcaCel = textoOpcionSeleccionada($fundaMarcaCel);
+      const modeloCel = textoOpcionSeleccionada($fundaModeloCel);
+      if (marcaCel) partes.push(marcaCel);
+      if (modeloCel) partes.push(modeloCel);
+      nombreProducto = partes.join(' ');
+      const desc = ($fundaDescripcion?.value || '').trim();
+      if (desc) nombreProducto += ` — ${desc}`;
+      const rangoChip = $fundaRangos?.querySelector('.form-chip.activo[data-rango]');
+      if (rangoChip?.dataset?.rango) {
+        nombreProducto += ` — Rango ${rangoChip.dataset.rango}`;
+      }
+    } else if (cat === 'cargadores') {
+      const tipoCargador = textoOpcionSeleccionada($cargadorTipo);
+      const tipoVal = $cargadorTipo?.value;
+      const sinPrefijoCargador = tipoVal === 'cable' || tipoVal === 'cubo';
+      const partesCargador = [sinPrefijoCargador ? tipoCargador : `Cargador ${tipoCargador}`];
+      const marcaCargador = ($cargadorMarca?.value || '').trim();
+      if (marcaCargador) partesCargador.push(marcaCargador);
+      if ($cargadorTipo?.value !== 'cable') {
+        partesCargador.push(`de ${$cargadorWatts?.value || 0}W`);
+      }
+      const connCargador = textoOpcionSeleccionada($cargadorConexion);
+      if (connCargador) {
+        const prefijoConn = tipoVal === 'cubo' ? 'entrada' : 'conexion';
+        partesCargador.push(`${prefijoConn} ${connCargador}`);
+      }
+      if ($cargadorTipo?.value !== 'cubo') {
+        partesCargador.push(formatearMetrosCargador($cargadorMetros?.value));
+      }
+      nombreProducto = partesCargador.filter(Boolean).join(' ');
+    } else if (cat === 'audifonos') {
+      const partesAud = [];
+      const modeloAud = ($audifonosModelo?.value || '').trim();
+      const marcaAud = textoOpcionSeleccionada($audifonosMarca);
+      const tipoAud = textoOpcionSeleccionada($audifonosTipo);
+      const connAud = normalizarConexionAudifonos(textoOpcionSeleccionada($audifonosConexion));
+      if (modeloAud) partesAud.push(modeloAud);
+      if (marcaAud) partesAud.push(marcaAud);
+      if (tipoAud) partesAud.push(`tipo ${tipoAud}`);
+      if (connAud) partesAud.push(`conexion ${connAud}`);
+      nombreProducto = limpiarNombreProducto(partesAud.join(' '));
+    } else if (cat === 'powerbanks') {
+      const partesPb = [];
+      const marcaPb = limpiarTextoCampoProducto($powerbankMarca?.value);
+      const modeloPb = limpiarTextoCampoProducto($powerbankModelo?.value);
+      if (marcaPb) partesPb.push(marcaPb);
+      if (modeloPb) partesPb.push(modeloPb);
+      nombreProducto = partesPb.join(' ');
+      const mahPb = $powerbankMah?.value || 0;
+      const wattsPb = $powerbankWatts?.value || 0;
+      nombreProducto += ` de ${mahPb} mAh y ${wattsPb}W`;
+      const connPb = textoOpcionSeleccionada($powerbankConexion);
+      if (connPb) nombreProducto += ` con ${connPb}`;
+      nombreProducto = limpiarNombreProducto(nombreProducto);
+    } else if (cat === 'bocinas') {
+      nombreProducto = [
+        'Bocina',
+        textoOpcionSeleccionada($bocinaMarca),
+        ($bocinaModelo?.value || '').trim(),
+        `${$bocinaWatts?.value || 0}W`,
+        textoOpcionSeleccionada($bocinaColor),
+      ].filter(Boolean).join(' ');
+    } else if (cat === 'accesorios') {
+      nombreProducto = 'Accesorio';
+    } else if (cat === 'otros') {
+      nombreProducto = 'Otro — producto';
+    } else {
+      nombreProducto = `Producto (${cat})`;
+    }
+
+    try {
+      let imagenData = await leerImagenComoDataUrl($imagen);
+      if (!imagenData && $form?.dataset?.imagenActual) {
+        imagenData = $form.dataset.imagenActual;
+      }
+      const url = esEdicion ? `${API}/productos/${editId}` : `${API}/productos`;
+      const payload = {
+        nombre: nombreProducto,
+        precio,
+        stock,
+        categoria: cat,
+        imagen: imagenData,
+      };
+      if (!esEdicion) payload.sucursal_id = sidProd;
+      const r = await fetch(url, {
+        method: esEdicion ? 'PUT' : 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const ct = r.headers.get('content-type') || '';
+        let errMsg = '';
+        if (ct.includes('application/json')) {
+          try {
+            const j = await r.json();
+            errMsg = j.error || JSON.stringify(j);
+          } catch (_) {
+            errMsg = r.statusText;
+          }
+        } else if (r.status === 404) {
+          errMsg =
+            'No se encontró la API de productos (404). Cierra cualquier otro servidor en el puerto 3000. En la carpeta UrbanCase ejecuta: npm start y entra en http://localhost:3000/index.html';
+        } else {
+          errMsg = r.statusText || 'Error al guardar';
+        }
+        alert(errMsg || 'No se pudo guardar');
+        return;
+      }
+      await window.ucCargarInventarioProductos?.();
+      cerrarModal();
+    } catch (err) {
+      console.error(err);
+      alert('No se pudo guardar el producto');
+    }
   });
 }
 
