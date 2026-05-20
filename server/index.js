@@ -11,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '4mb' }));
 
 app.get('/api/health', async (req, res) => {
   try {
@@ -33,6 +33,7 @@ app.use('/api/usuarios', authMiddleware, require('./routes/usuarios'));
 app.use('/api/sucursales', authMiddleware, require('./routes/sucursales'));
 app.use('/api/clientes', authMiddleware, require('./routes/clientes'));
 app.use('/api/proveedores', authMiddleware, require('./routes/proveedores'));
+app.use('/api/productos', authMiddleware, require('./routes/productos'));
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'login.html'));
@@ -42,4 +43,5 @@ app.use(express.static(path.join(__dirname, '..')));
 
 app.listen(PORT, () => {
   console.log(`UrbanCase corriendo en http://localhost:${PORT}`);
+  console.log('API reg.: auth, usuarios, sucursales, clientes, proveedores, productos');
 });
