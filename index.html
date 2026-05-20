@@ -16,7 +16,7 @@
   </script>
   <style>
     body.app-loading .app{visibility:hidden!important;opacity:0!important;transition:none!important}
-    html.uc-restore-modulo .categoria-btn[data-categoria="todos"].activo{background:transparent!important;color:#5c5c66!important;font-weight:600!important;border-right-color:rgba(0,0,0,0.12)!important;box-shadow:inset 0 2px 4px rgba(255,255,255,0.5),0 2px 6px rgba(0,0,0,0.06)!important}
+    html.uc-restore-modulo .categoria-btn[data-categoria="todos"].activo{background:transparent!important;color:#2c2c2e!important;font-weight:600!important;border-right-color:rgba(0,0,0,0.12)!important;box-shadow:inset 0 2px 4px rgba(255,255,255,0.5),0 2px 6px rgba(0,0,0,0.06)!important}
     html.theme-dark.uc-restore-modulo .categoria-btn[data-categoria="todos"].activo{color:#8888a0!important;font-weight:600!important;border-right-color:rgba(255,255,255,0.06)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),0 2px 6px rgba(0,0,0,0.15)!important}
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,6 +28,13 @@
   <div class="blob blob1" aria-hidden="true"></div>
   <div class="blob blob2" aria-hidden="true"></div>
   <div class="blob blob3" aria-hidden="true"></div>
+  <div class="blob blob4 blob-extra" aria-hidden="true"></div>
+  <div class="blob blob5 blob-extra" aria-hidden="true"></div>
+  <div class="blob blob6 blob-extra" aria-hidden="true"></div>
+  <div class="blob blob7 blob-extra" aria-hidden="true"></div>
+  <div class="blob blob8 blob-extra" aria-hidden="true"></div>
+  <div class="blob blob9 blob-extra" aria-hidden="true"></div>
+  <div class="blob blob10 blob-extra" aria-hidden="true"></div>
   <div class="app">
     <header>
       <div class="logo">
@@ -58,6 +65,20 @@
     </header>
 
     <div id="carrito-overlay" class="carrito-overlay" aria-hidden="true"></div>
+    <div id="inventario-producto-zoom-backdrop" class="inventario-producto-zoom-backdrop" aria-hidden="true"></div>
+    <div id="inventario-producto-zoom-panel" class="inventario-producto-zoom-panel" role="dialog" aria-modal="true" aria-labelledby="inventario-zoom-nombre" aria-hidden="true">
+      <button type="button" class="inventario-zoom-cerrar" id="inventario-zoom-cerrar" title="Cerrar" aria-label="Cerrar"><span class="inventario-zoom-cerrar-icon" aria-hidden="true">✕</span></button>
+      <div class="inventario-zoom-img-wrap">
+        <img id="inventario-zoom-img" src="" alt="">
+      </div>
+      <div class="inventario-zoom-info">
+        <h3 id="inventario-zoom-nombre" class="inventario-zoom-titulo"></h3>
+        <p class="inventario-zoom-precio" id="inventario-zoom-precio"></p>
+        <p class="inventario-zoom-meta" id="inventario-zoom-stock"></p>
+        <p class="inventario-zoom-meta inventario-zoom-cat" id="inventario-zoom-cat"></p>
+        <p class="inventario-zoom-meta inventario-zoom-sucursal" id="inventario-zoom-sucursal" hidden></p>
+      </div>
+    </div>
     <div class="app-glass" id="vista-pos">
       <div class="vista-main-col">
         <div id="productos" class="productos-grid contenido-home"></div>
@@ -75,7 +96,7 @@
               <button type="button" class="inventario-chip" data-cat="accesorios">Accesorios</button>
               <button type="button" class="inventario-chip" data-cat="otros">Otros</button>
             </div>
-            <button type="button" class="btn btn-cobrar" id="btn-agregar-producto">+ Agregar producto</button>
+            <button type="button" class="btn btn-cobrar" id="btn-agregar-producto" disabled title="Selecciona una sucursal concreta (no «Todas las sucursales») para agregar productos">+ Agregar producto</button>
           </div>
           <div class="inventario-grid" id="inventario-productos"></div>
         </div>
@@ -366,7 +387,7 @@
     <!-- Modal Agregar Producto -->
     <div id="modal-producto" class="modal-overlay">
       <div class="modal-content modal-form">
-        <h3>Agregar producto</h3>
+        <h3 id="modal-producto-titulo">Agregar producto</h3>
         <form id="form-producto">
           <div class="form-row form-row-inline">
             <label>Categoría</label>
@@ -486,7 +507,7 @@
               <label>Marca</label>
               <input type="text" id="prod-cargador-marca" placeholder="Ej: Anker, Baseus...">
             </div>
-            <div class="form-row">
+            <div class="form-row" id="prod-cargador-watts-wrap">
               <label>Velocidad de carga</label>
               <div class="stock-contador">
                 <button type="button" class="stock-btn" id="prod-cargador-watts-menos" aria-label="Menos">−</button>
@@ -496,18 +517,18 @@
               </div>
             </div>
             <div class="form-row form-row-inline">
-              <label>Tipo de conexión</label>
+              <label id="prod-cargador-conexion-label">Tipo de conexión</label>
               <select id="prod-cargador-conexion">
                 <option value="">Seleccionar...</option>
                 <option value="usb-c">USB-C</option>
                 <option value="c-c">C-C</option>
               </select>
             </div>
-            <div class="form-row">
+            <div class="form-row" id="prod-cargador-metros-wrap">
               <label>Longitud del cable</label>
               <div class="stock-contador">
                 <button type="button" class="stock-btn" id="prod-cargador-metros-menos" aria-label="Menos">−</button>
-                <input type="number" id="prod-cargador-metros" min="0" step="1" value="1" aria-label="Longitud en metros">
+                <input type="number" id="prod-cargador-metros" min="0" step="0.1" value="1" aria-label="Longitud en metros">
                 <span class="input-unidad-simbolo">m</span>
                 <button type="button" class="stock-btn" id="prod-cargador-metros-mas" aria-label="Más">+</button>
               </div>
@@ -527,9 +548,9 @@
               <label>Tipo de conexión</label>
               <select id="prod-audifonos-conexion">
                 <option value="">Seleccionar...</option>
-                <option value="alambrico">Alámbrico</option>
-                <option value="inalambrico">Inalámbrico</option>
-                <option value="hibrido">Híbrido</option>
+                <option value="alambrico">Alámbrica</option>
+                <option value="inalambrico">Inalámbrica</option>
+                <option value="hibrido">Híbrida</option>
               </select>
             </div>
             <div class="form-row form-row-inline">
@@ -607,23 +628,6 @@
               <label>Modelo</label>
               <input type="text" id="prod-bocina-modelo" placeholder="Ej: Flip 6, XB43...">
             </div>
-            <div class="form-row form-row-checkboxes-centered">
-              <label>Tipo de conexión</label>
-              <div class="form-checkboxes">
-                <label class="form-checkbox-label">
-                  <input type="checkbox" id="prod-bocina-bluetooth" value="Bluetooth">
-                  <span>Bluetooth</span>
-                </label>
-                <label class="form-checkbox-label">
-                  <input type="checkbox" id="prod-bocina-aux" value="AUX">
-                  <span>AUX</span>
-                </label>
-                <label class="form-checkbox-label">
-                  <input type="checkbox" id="prod-bocina-usb" value="USB">
-                  <span>USB</span>
-                </label>
-              </div>
-            </div>
             <div class="form-row">
               <label>Potencia</label>
               <div class="stock-contador">
@@ -685,7 +689,10 @@
 
           <div class="modal-acciones">
             <button type="button" class="btn btn-vaciar" id="modal-producto-cancelar">Cancelar</button>
-            <button type="submit" class="btn btn-cobrar">Agregar producto</button>
+            <button type="submit" class="btn btn-cobrar" id="modal-producto-submit">Agregar producto</button>
+          </div>
+          <div class="modal-acciones modal-acciones-secundarias" id="modal-producto-eliminar-wrap" hidden>
+            <button type="button" class="btn btn-vaciar" id="modal-producto-eliminar">Eliminar producto</button>
           </div>
         </form>
       </div>
