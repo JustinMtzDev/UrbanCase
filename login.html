@@ -273,6 +273,7 @@
     }
     .login-error.visible { display: block; }
   </style>
+  <script src="js/theme.js"></script>
 </head>
 <body>
   <div class="blob blob1"></div>
@@ -311,28 +312,37 @@
 
   <script>
     const API = (window.location.protocol === 'file:') ? 'http://localhost:3000/api' : '/api';
-    const THEME_KEY = 'urbancase-theme';
+    const T = window.UrbanCaseTheme;
 
-    function aplicarTemaLogin(oscuro) {
-      document.body.classList.toggle('theme-dark', oscuro);
-      try { localStorage.setItem(THEME_KEY, oscuro ? 'dark' : 'light'); } catch (_) {}
-      actualizarIconosOjo();
-    }
     function actualizarIconosOjo() {
       const dark = document.body.classList.contains('theme-dark');
       document.querySelectorAll('#icon-ojo-default, #icon-ojo-hover').forEach(img => {
         if (img.dataset.src) img.src = dark ? img.dataset.srcDark : img.dataset.src;
       });
     }
-    document.body.classList.remove('theme-dark');
+    T?.aplicarTemaDesdePreferencia();
+    T?.iniciarTemaAutomatico(actualizarIconosOjo);
     actualizarIconosOjo();
     const $logoBtn = document.getElementById('login-logo-btn');
-    if ($logoBtn) $logoBtn.addEventListener('click', () => aplicarTemaLogin(!document.body.classList.contains('theme-dark')));
+    if ($logoBtn) {
+      $logoBtn.addEventListener('click', () => {
+        T?.alternarTemaManual();
+        actualizarIconosOjo();
+      });
+    }
+
+    function irAlInicioTrasLogin() {
+      try {
+        localStorage.removeItem('uc_modulo');
+        localStorage.removeItem('uc_sucursal');
+      } catch (_) {}
+      window.location.href = (window.location.protocol === 'file:' ? 'http://localhost:3000' : '') + '/index.html';
+    }
 
     if (localStorage.getItem('uc_token')) {
       fetch(API + '/auth/me', {
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('uc_token') }
-      }).then(r => { if (r.ok) window.location.href = (window.location.protocol === 'file:' ? 'http://localhost:3000' : '') + '/index.html'; });
+      }).then(r => { if (r.ok) irAlInicioTrasLogin(); });
     }
 
     const $togglePass = document.getElementById('btn-toggle-pass');
@@ -376,7 +386,7 @@
         localStorage.setItem('uc_usuario', JSON.stringify(data.usuario));
         var usr = (data.usuario && data.usuario.usuario) ? String(data.usuario.usuario).toLowerCase() : '';
         try { localStorage.setItem('urbancase-texto-grande', usr === 'edgar' ? '1' : '0'); } catch(_){}
-        window.location.href = (window.location.protocol === 'file:' ? 'http://localhost:3000' : '') + '/index.html';
+        irAlInicioTrasLogin();
       } catch (err) {
         $error.textContent = 'No se pudo conectar con el servidor. ¿Está corriendo node index.js en la carpeta server?';
         $error.classList.add('visible');
