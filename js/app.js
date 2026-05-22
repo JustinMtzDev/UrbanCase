@@ -45,7 +45,13 @@ let token = '';
   initModulo();
   initModuloClientes();
   initDropdownSucursales();
-  try { await restaurarSucursalGuardada(); } catch (err) { console.error('restaurarSucursalGuardada:', err); }
+  try {
+    if (localStorage.getItem(SUCURSAL_KEY)) {
+      await restaurarSucursalGuardada();
+    } else {
+      aplicarSeleccionSucursal(null);
+    }
+  } catch (err) { console.error('restaurarSucursalGuardada:', err); }
   initNav();
   try { initInventarioProductoZoom(); } catch (err) { console.error('initInventarioProductoZoom:', err); }
   try { initInventarioVista(); } catch (err) { console.error('initInventarioVista:', err); }
@@ -224,18 +230,21 @@ function initNav() {
       categoriaInventarioActiva = 'todos';
       try { initInventarioVista(); } catch (err) { console.error('initInventarioVista:', err); }
       if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
+      window.actualizarBtnMostrarCarrito?.();
     } else if (btn.dataset.categoria === 'ventas') {
       document.body.classList.add('modulo-ventas');
       $vistaPos.style.display = 'grid';
       document.getElementById('productos').style.display = 'grid';
       document.getElementById('contenido-inventario').style.display = 'none';
       if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
+      window.actualizarBtnMostrarCarrito?.();
     } else {
       document.body.classList.remove('modulo-ventas');
       $vistaPos.style.display = 'grid';
       document.getElementById('productos').style.display = 'grid';
       document.getElementById('contenido-inventario').style.display = 'none';
       if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
+      window.actualizarBtnMostrarCarrito?.();
     }
   }
 
@@ -246,11 +255,16 @@ function initNav() {
     });
   });
 
+  const $home = document.querySelector('.categoria-btn[data-categoria="todos"]');
   const saved = localStorage.getItem(MODULO_KEY);
-  if (saved) {
+  if (saved && saved !== 'todos') {
     const mod = saved === 'reportes' ? 'ventas' : saved;
     const $btn = document.querySelector(`.categoria-btn[data-categoria="${mod}"]`);
     if ($btn) irAModulo($btn);
+    else if ($home) irAModulo($home);
+  } else if ($home) {
+    try { localStorage.removeItem(MODULO_KEY); } catch (_) {}
+    irAModulo($home);
   }
 }
 
@@ -320,6 +334,141 @@ let productosInventario = [];
 /** Último error al cargar inventario (solo para mensaje en pantalla). */
 let ultimoErrorCargaInventario = '';
 let categoriaInventarioActiva = 'todos';
+let paginaInventarioActual = 1;
+let inventarioFiltroClave = '';
+let inventarioVistaModo = 'cards';
+const INVENTARIO_FILAS_POR_PAGINA = 4;
+const INVENTARIO_FILAS_TABLA_POR_PAGINA = 10;
+const INVENTARIO_COL_MIN_PX = 160;
+const INVENTARIO_COL_MIN_PX_EXPANDIDO = 220;
+
+function inventarioColMinPx() {
+  const oculto = document.getElementById('vista-pos')?.classList.contains('carrito-oculto');
+  return oculto ? INVENTARIO_COL_MIN_PX_EXPANDIDO : INVENTARIO_COL_MIN_PX;
+}
+
+function getInventarioItemsPorPagina() {
+  if (inventarioVistaModo === 'tabla') return INVENTARIO_FILAS_TABLA_POR_PAGINA;
+  const $grid = document.getElementById('inventario-productos');
+  const cols = calcularColumnasInventarioGrid($grid);
+  return cols * INVENTARIO_FILAS_POR_PAGINA;
+}
+
+function getInventarioTotalPaginas(cantidad) {
+  return Math.max(1, Math.ceil(cantidad / getInventarioItemsPorPagina()));
+}
+
+function calcularColumnasInventarioGrid($grid) {
+  if (!$grid) return 1;
+  const style = getComputedStyle($grid);
+  const gap = parseFloat(style.columnGap) || 16;
+  const pad = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+  const w = $grid.clientWidth - pad;
+  if (w <= 0) return 1;
+  return Math.max(1, Math.floor((w + gap) / (inventarioColMinPx() + gap)));
+}
+
+function claveFiltroInventario() {
+  const { raw } = leerDatasetSucursalInventario();
+  const q = document.getElementById('inventario-buscador')?.value || '';
+  return `${raw}|${categoriaInventarioActiva}|${q}`;
+}
+
+function filtrarProductosInventario() {
+  const q = (document.getElementById('inventario-buscador')?.value || '').toLowerCase().trim();
+  const cat = categoriaInventarioActiva;
+  return productosInventario.filter((p) => {
+    const matchCat = cat === 'todos' || (String(p.categoria || '').toLowerCase() === cat);
+    const matchQ = !q || (p.nombre || '').toLowerCase().includes(q);
+    return matchCat && matchQ;
+  });
+}
+
+function escHtmlInventario(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function etiquetaCategoriaInventario(cat) {
+  const map = {
+    micas: 'Micas',
+    fundas: 'Fundas',
+    cargadores: 'Cargadores',
+    powerbanks: 'Power banks',
+    audifonos: 'Audífonos',
+    bocinas: 'Bocinas',
+    accesorios: 'Accesorios',
+    otros: 'Otros',
+  };
+  const key = String(cat || '').toLowerCase();
+  return map[key] || (cat ? String(cat) : '—');
+}
+
+function actualizarContenedoresInventarioVista() {
+  const $grid = document.getElementById('inventario-productos');
+  const $tablaWrap = document.getElementById('inventario-tabla-wrap');
+  const esTabla = inventarioVistaModo === 'tabla';
+  if ($grid) $grid.hidden = esTabla;
+  if ($tablaWrap) $tablaWrap.hidden = !esTabla;
+}
+
+function actualizarBtnLimpiarBuscadorInventario() {
+  const $buscador = document.getElementById('inventario-buscador');
+  const $btn = document.getElementById('btn-inventario-buscador-limpiar');
+  if (!$buscador || !$btn) return;
+  $btn.hidden = !$buscador.value;
+}
+
+function mensajeVacioInventario() {
+  if (ultimoErrorCargaInventario) {
+    const safe = escHtmlInventario(ultimoErrorCargaInventario);
+    return `<div class="inventario-vacio inventario-vacio-error">No se pudo cargar el inventario: ${safe}</div>`;
+  }
+  if (productosInventario.length === 0) {
+    return '<div class="inventario-vacio">No hay productos en esta vista.</div>';
+  }
+  return '<div class="inventario-vacio">No hay productos que coincidan con la búsqueda</div>';
+}
+
+function mensajeVacioInventarioTexto() {
+  if (ultimoErrorCargaInventario) return `No se pudo cargar el inventario: ${ultimoErrorCargaInventario}`;
+  if (productosInventario.length === 0) return 'No hay productos en esta vista.';
+  return 'No hay productos que coincidan con la búsqueda';
+}
+
+function renderInventarioPaginacion($pag, paginaActual, totalPaginas, mostrar = true) {
+  if (!$pag) return;
+  if (!mostrar) {
+    $pag.hidden = true;
+    $pag.innerHTML = '';
+    return;
+  }
+  const paginas = Math.max(1, totalPaginas);
+  const pagina = Math.min(Math.max(1, paginaActual), paginas);
+  $pag.hidden = false;
+
+  const maxVisible = 5;
+  let start = Math.max(1, pagina - 2);
+  let end = Math.min(paginas, start + maxVisible - 1);
+  start = Math.max(1, end - maxVisible + 1);
+
+  let html = `<button type="button" class="inventario-pag-btn" data-pag="prev" ${pagina <= 1 ? 'disabled' : ''} aria-label="Página anterior">‹ Anterior</button>`;
+  html += '<div class="inventario-pag-numeros">';
+  if (start > 1) {
+    html += '<button type="button" class="inventario-pag-num" data-pag="1">1</button>';
+    if (start > 2) html += '<span class="inventario-pag-ellipsis" aria-hidden="true">…</span>';
+  }
+  for (let i = start; i <= end; i++) {
+    html += `<button type="button" class="inventario-pag-num${i === pagina ? ' activo' : ''}" data-pag="${i}"${i === pagina ? ' aria-current="page"' : ''}>${i}</button>`;
+  }
+  if (end < paginas) {
+    if (end < paginas - 1) html += '<span class="inventario-pag-ellipsis" aria-hidden="true">…</span>';
+    html += `<button type="button" class="inventario-pag-num" data-pag="${paginas}">${paginas}</button>`;
+  }
+  html += '</div>';
+  html += `<button type="button" class="inventario-pag-btn" data-pag="next" ${pagina >= paginas ? 'disabled' : ''} aria-label="Página siguiente">Siguiente ›</button>`;
+  html += `<span class="inventario-pag-info">Página ${pagina} de ${paginas}</span>`;
+  $pag.innerHTML = html;
+}
 
 function initInventarioVista() {
   const $buscador = document.getElementById('inventario-buscador');
@@ -382,7 +531,55 @@ function initInventarioVista() {
     });
   });
 
-  $buscador?.addEventListener('input', () => renderInventarioProductos());
+  $buscador?.addEventListener('input', () => {
+    actualizarBtnLimpiarBuscadorInventario();
+    renderInventarioProductos();
+  });
+
+  const $btnLimpiarBuscador = document.getElementById('btn-inventario-buscador-limpiar');
+  $btnLimpiarBuscador?.addEventListener('click', () => {
+    if (!$buscador) return;
+    $buscador.value = '';
+    actualizarBtnLimpiarBuscadorInventario();
+    $buscador.focus();
+    renderInventarioProductos();
+  });
+  actualizarBtnLimpiarBuscadorInventario();
+
+  const $btnVistaTabla = document.getElementById('btn-inventario-vista-tabla');
+  $btnVistaTabla?.addEventListener('click', () => {
+    inventarioVistaModo = inventarioVistaModo === 'tabla' ? 'cards' : 'tabla';
+    paginaInventarioActual = 1;
+    const esTabla = inventarioVistaModo === 'tabla';
+    $btnVistaTabla.classList.toggle('activo', esTabla);
+    $btnVistaTabla.setAttribute('aria-pressed', esTabla ? 'true' : 'false');
+    const titulo = esTabla ? 'Ver como tarjetas' : 'Ver como tabla';
+    $btnVistaTabla.title = titulo;
+    $btnVistaTabla.setAttribute('aria-label', titulo);
+    renderInventarioProductos();
+  });
+
+  const $pag = document.getElementById('inventario-paginacion');
+  $pag?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-pag]');
+    if (!btn || btn.disabled) return;
+    const val = btn.dataset.pag;
+    const totalPaginas = getInventarioTotalPaginas(filtrarProductosInventario().length);
+    if (val === 'prev') paginaInventarioActual = Math.max(1, paginaInventarioActual - 1);
+    else if (val === 'next') paginaInventarioActual = Math.min(totalPaginas, paginaInventarioActual + 1);
+    else paginaInventarioActual = Number(val);
+    renderInventarioProductos();
+  });
+
+  if ($grid && typeof initInventarioVista._resizeObs === 'undefined') {
+    let inventarioResizeTimer;
+    initInventarioVista._resizeObs = new ResizeObserver(() => {
+      if (inventarioVistaModo !== 'cards') return;
+      clearTimeout(inventarioResizeTimer);
+      inventarioResizeTimer = setTimeout(() => renderInventarioProductos(), 150);
+    });
+    initInventarioVista._resizeObs.observe($grid);
+  }
 
   $btnAgregar?.addEventListener('click', () => {
     if ($btnAgregar.disabled) return;
@@ -394,41 +591,136 @@ function initInventarioVista() {
 }
 
 function renderInventarioProductos() {
+  actualizarContenedoresInventarioVista();
+  if (inventarioVistaModo === 'tabla') {
+    renderInventarioVistaTabla();
+  } else {
+    renderInventarioVistaCards();
+  }
+}
+
+function renderInventarioVistaTabla() {
+  const $tablaWrap = document.getElementById('inventario-tabla-wrap');
+  const $tbody = document.getElementById('tbody-inventario-productos');
+  const $pag = document.getElementById('inventario-paginacion');
   const $grid = document.getElementById('inventario-productos');
-  if (!$grid) return;
+  if (!$tbody || !$tablaWrap) return;
+
   const { raw, esTodasLasSucursales } = leerDatasetSucursalInventario();
   if (!raw) {
-    $grid.innerHTML = '<div class="inventario-vacio">Selecciona una sucursal o «Todas las sucursales» arriba para ver productos</div>';
+    paginaInventarioActual = 1;
+    inventarioFiltroClave = '';
+    $tbody.innerHTML = '<tr><td colspan="7" class="inventario-tabla-vacio">Selecciona una sucursal o «Todas las sucursales» arriba para ver productos</td></tr>';
+    document.querySelectorAll('.inventario-col-sucursal').forEach((el) => { el.hidden = true; });
+    if ($grid) $grid.innerHTML = '';
+    renderInventarioPaginacion($pag, 1, 1, false);
     return;
   }
 
+  const filtroActual = claveFiltroInventario();
+  if (filtroActual !== inventarioFiltroClave) {
+    paginaInventarioActual = 1;
+    inventarioFiltroClave = filtroActual;
+  }
+
   const verTodasSucursales = esTodasLasSucursales;
+  document.querySelectorAll('.inventario-col-sucursal').forEach((el) => { el.hidden = !verTodasSucursales; });
 
-  const $buscador = document.getElementById('inventario-buscador');
-  const q = ($buscador?.value || '').toLowerCase().trim();
-  const cat = categoriaInventarioActiva;
+  const lista = filtrarProductosInventario();
+  const formatearPrecio = window.formatearPrecioPOS || (n => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 }));
+  const totalPaginas = getInventarioTotalPaginas(lista.length);
+  if (paginaInventarioActual > totalPaginas) paginaInventarioActual = totalPaginas;
 
-  let lista = productosInventario.filter((p) => {
-    const matchCat = cat === 'todos' || (String(p.categoria || '').toLowerCase() === cat);
-    const matchQ = !q || (p.nombre || '').toLowerCase().includes(q);
-    return matchCat && matchQ;
+  if ($grid) $grid.innerHTML = '';
+
+  if (lista.length === 0) {
+    $tbody.innerHTML = `<tr><td colspan="7" class="inventario-tabla-vacio">${escHtmlInventario(mensajeVacioInventarioTexto())}</td></tr>`;
+    renderInventarioPaginacion($pag, 1, 1, false);
+    return;
+  }
+
+  const inicio = (paginaInventarioActual - 1) * INVENTARIO_FILAS_TABLA_POR_PAGINA;
+  const paginaLista = lista.slice(inicio, inicio + INVENTARIO_FILAS_TABLA_POR_PAGINA);
+
+  $tbody.innerHTML = paginaLista.map((p) => {
+    const celSucursal = verTodasSucursales
+      ? `<td class="inventario-col-sucursal">${escHtmlInventario(p.sucursal_nombre) || '<span style="opacity:.4">—</span>'}</td>`
+      : '';
+    return `
+    <tr data-id="${p.id}">
+      <td>${p.id}</td>
+      <td>${escHtmlInventario(p.nombre)}</td>
+      <td>${escHtmlInventario(etiquetaCategoriaInventario(p.categoria))}</td>
+      <td>${formatearPrecio(Number(p.precio))}</td>
+      <td>${p.stock ?? 0}</td>
+      ${celSucursal}
+      <td>
+        <button type="button" class="btn-tabla inventario-tabla-editar" data-id="${p.id}">Editar</button>
+        <button type="button" class="btn-tabla inventario-tabla-carrito" data-id="${p.id}">Carrito</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  $tbody.querySelectorAll('.inventario-tabla-editar').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.dataset.id);
+      const prod = productosInventario.find((item) => Number(item.id) === id);
+      if (prod) window.ucAbrirModalEditarProducto?.(prod);
+    });
   });
+
+  $tbody.querySelectorAll('.inventario-tabla-carrito').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.dataset.id);
+      const prod = productosInventario.find((item) => Number(item.id) === id);
+      if (prod && window.agregarAlCarrito) window.agregarAlCarrito(prod);
+    });
+  });
+
+  renderInventarioPaginacion($pag, paginaInventarioActual, totalPaginas, true);
+  if ($tablaWrap) $tablaWrap.scrollTop = 0;
+}
+
+function renderInventarioVistaCards() {
+  const $grid = document.getElementById('inventario-productos');
+  const $pag = document.getElementById('inventario-paginacion');
+  const $tbody = document.getElementById('tbody-inventario-productos');
+  if (!$grid) return;
+  if ($tbody) $tbody.innerHTML = '';
+  const { raw, esTodasLasSucursales } = leerDatasetSucursalInventario();
+  if (!raw) {
+    paginaInventarioActual = 1;
+    inventarioFiltroClave = '';
+    $grid.innerHTML = '<div class="inventario-vacio">Selecciona una sucursal o «Todas las sucursales» arriba para ver productos</div>';
+    renderInventarioPaginacion($pag, 1, 1, false);
+    return;
+  }
+
+  const filtroActual = claveFiltroInventario();
+  if (filtroActual !== inventarioFiltroClave) {
+    paginaInventarioActual = 1;
+    inventarioFiltroClave = filtroActual;
+  }
+
+  const verTodasSucursales = esTodasLasSucursales;
+  const lista = filtrarProductosInventario();
+  const totalPaginas = getInventarioTotalPaginas(lista.length);
+  if (paginaInventarioActual > totalPaginas) paginaInventarioActual = totalPaginas;
+  const porPagina = getInventarioItemsPorPagina();
 
   const formatearPrecio = window.formatearPrecioPOS || (n => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 }));
   const imgPlaceholder = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23999"><rect width="100" height="100"/><text x="50" y="55" font-size="12" fill="%23666" text-anchor="middle">Sin imagen</text></svg>');
 
   if (lista.length === 0) {
-    if (ultimoErrorCargaInventario) {
-      const safe = ultimoErrorCargaInventario.replace(/</g, '&lt;');
-      $grid.innerHTML = `<div class="inventario-vacio inventario-vacio-error">No se pudo cargar el inventario: ${safe}</div>`;
-    } else if (productosInventario.length === 0) {
-      $grid.innerHTML = '<div class="inventario-vacio">No hay productos en esta vista.</div>';
-    } else {
-      $grid.innerHTML = '<div class="inventario-vacio">No hay productos que coincidan con la búsqueda</div>';
-    }
+    $grid.innerHTML = mensajeVacioInventario();
+    renderInventarioPaginacion($pag, 1, 1, false);
     return;
   }
-  $grid.innerHTML = lista.map((p) => {
+
+  const inicio = (paginaInventarioActual - 1) * porPagina;
+  const paginaLista = lista.slice(inicio, inicio + porPagina);
+
+  $grid.innerHTML = paginaLista.map((p) => {
     const nomSuc = (p.sucursal_nombre || '').replace(/</g, '&lt;');
     const lineaSucursal =
       verTodasSucursales && nomSuc
@@ -454,6 +746,9 @@ function renderInventarioProductos() {
     </article>
   `;
   }).join('');
+
+  renderInventarioPaginacion($pag, paginaInventarioActual, totalPaginas, true);
+  $grid.scrollTop = 0;
 
   $grid.querySelectorAll('.inventario-producto-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -2164,6 +2459,7 @@ function initPOS() {
     $carritoOverlay?.classList.toggle('visible', maximizado);
     $carritoOverlay?.setAttribute('aria-hidden', !maximizado);
     $btnExpand?.setAttribute('title', maximizado ? 'Minimizar carrito' : 'Maximizar carrito');
+    $btnExpand?.setAttribute('aria-label', maximizado ? 'Minimizar carrito' : 'Maximizar carrito');
     if ($expandIcon) $expandIcon.textContent = maximizado ? '✕' : '⛶';
     if (maximizado && $carritoPanel && $vistaPos && $carritoOverlay) {
       document.body.appendChild($carritoOverlay);
@@ -2174,7 +2470,36 @@ function initPOS() {
       $vistaPos.appendChild($carritoPanel);
     }
   }
+
+  function actualizarBtnMostrarCarrito() {
+    const oculto = $vistaPos?.classList.contains('carrito-oculto');
+    const enInventario = document.getElementById('contenido-inventario')?.style.display === 'flex';
+    const $btnMostrar = document.getElementById('btn-mostrar-carrito');
+    const $btnMostrarHome = document.getElementById('btn-mostrar-carrito-home');
+    if ($btnMostrar) $btnMostrar.hidden = !oculto || !enInventario;
+    if ($btnMostrarHome) $btnMostrarHome.hidden = !oculto || enInventario;
+  }
+
+  function ocultarCarritoPanel() {
+    if ($carritoPanel?.classList.contains('carrito-maximizado')) toggleCarritoMaximizado();
+    $vistaPos?.classList.add('carrito-oculto');
+    actualizarBtnMostrarCarrito();
+    renderInventarioProductos();
+  }
+
+  function mostrarCarritoPanel() {
+    $vistaPos?.classList.remove('carrito-oculto');
+    actualizarBtnMostrarCarrito();
+    renderInventarioProductos();
+  }
+
+  window.actualizarBtnMostrarCarrito = actualizarBtnMostrarCarrito;
+
   $btnExpand?.addEventListener('click', toggleCarritoMaximizado);
+  document.getElementById('btn-carrito-ocultar')?.addEventListener('click', ocultarCarritoPanel);
+  document.getElementById('btn-mostrar-carrito')?.addEventListener('click', mostrarCarritoPanel);
+  document.getElementById('btn-mostrar-carrito-home')?.addEventListener('click', mostrarCarritoPanel);
+  actualizarBtnMostrarCarrito();
   $carritoOverlay?.addEventListener('click', () => {
     if ($carritoPanel?.classList.contains('carrito-maximizado')) toggleCarritoMaximizado();
   });
@@ -2211,21 +2536,20 @@ function initPOS() {
   };
   window.formatearPrecioPOS = formatearPrecio;
 
-  const THEME_KEY = 'urbancase-theme';
+  const T = window.UrbanCaseTheme;
   const $themeToggle = document.getElementById('theme-toggle');
   const $themeLabel = $themeToggle?.querySelector('.theme-label');
-  function aplicarTema(oscuro) {
-    document.body.classList.toggle('theme-dark', oscuro);
-    document.documentElement.classList.toggle('theme-dark', oscuro);
+  function actualizarEtiquetaTema(oscuro) {
     if ($themeLabel) $themeLabel.textContent = oscuro ? 'Claro' : 'Obscuro';
-    try { localStorage.setItem(THEME_KEY, oscuro ? 'dark' : 'light'); } catch (_) {}
   }
-  aplicarTema(localStorage.getItem(THEME_KEY) === 'dark');
-  if ($themeToggle) {
-    $themeToggle.addEventListener('click', () => aplicarTema(!document.body.classList.contains('theme-dark')));
+  if (T) {
+    actualizarEtiquetaTema(T.aplicarTemaDesdePreferencia());
+    T.iniciarTemaAutomatico(actualizarEtiquetaTema);
+    const toggleManual = () => actualizarEtiquetaTema(T.alternarTemaManual());
+    if ($themeToggle) $themeToggle.addEventListener('click', toggleManual);
+    const $logo = document.querySelector('.logo');
+    if ($logo) $logo.addEventListener('click', toggleManual);
   }
-  const $logo = document.querySelector('.logo');
-  if ($logo) $logo.addEventListener('click', () => aplicarTema(!document.body.classList.contains('theme-dark')));
 }
 
 // ===================== MÓDULO: TABS =====================
