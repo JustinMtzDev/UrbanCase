@@ -34,6 +34,8 @@ app.use('/api/sucursales', authMiddleware, require('./routes/sucursales'));
 app.use('/api/clientes', authMiddleware, require('./routes/clientes'));
 app.use('/api/proveedores', authMiddleware, require('./routes/proveedores'));
 app.use('/api/productos', authMiddleware, require('./routes/productos'));
+app.use('/api/productos-consignados', authMiddleware, require('./routes/productos-consignados'));
+app.use('/api/inventario-favoritos', authMiddleware, require('./routes/inventario-favoritos'));
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'login.html'));
@@ -43,5 +45,5 @@ app.use(express.static(path.join(__dirname, '..')));
 
 app.listen(PORT, () => {
   console.log(`UrbanCase corriendo en http://localhost:${PORT}`);
-  console.log('API reg.: auth, usuarios, sucursales, clientes, proveedores, productos');
+  console.log('API reg.: auth, usuarios, sucursales, clientes, proveedores, productos, productos-consignados, inventario-favoritos');
 });

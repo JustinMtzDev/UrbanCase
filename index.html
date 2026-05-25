@@ -100,6 +100,9 @@
                   </svg>
                 </button>
               </div>
+              <button type="button" class="inventario-vista-btn" id="btn-inventario-filtros" title="Filtros de búsqueda" aria-label="Filtros de búsqueda" aria-haspopup="dialog">
+                <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+              </button>
               <button type="button" class="inventario-vista-btn" id="btn-inventario-vista-tabla" title="Ver como tabla" aria-label="Ver como tabla" aria-pressed="false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <rect x="3" y="4" width="18" height="16" rx="2"/>
@@ -115,6 +118,7 @@
             </div>
             <div class="inventario-header-tools">
             <div class="inventario-chips-wrap">
+              <button type="button" class="inventario-chip" data-cat="consignados">Productos Consignados</button>
               <button type="button" class="inventario-chip activo" data-cat="todos">Todos</button>
               <button type="button" class="inventario-chip" data-cat="micas">Micas</button>
               <button type="button" class="inventario-chip" data-cat="fundas">Fundas</button>
@@ -126,6 +130,7 @@
               <button type="button" class="inventario-chip" data-cat="otros">Otros</button>
             </div>
             <button type="button" class="btn btn-cobrar" id="btn-agregar-producto" disabled title="Selecciona una sucursal concreta (no «Todas las sucursales») para agregar productos">+ Agregar producto</button>
+            <button type="button" class="btn btn-cobrar" id="btn-agregar-consignado" hidden disabled title="Selecciona una sucursal concreta para agregar productos consignados">+ Producto consignado</button>
             </div>
           </div>
           <div class="inventario-productos-wrap">
@@ -162,11 +167,6 @@
                 <i class="fa-solid fa-xmark" aria-hidden="true"></i>
               </button>
             </div>
-          </div>
-          <div class="carrito-consignada-row">
-            <button type="button" class="btn-consignada" id="btn-consignada" title="Venta de productos de otros locales (comisión)">
-              Venta consignada
-            </button>
           </div>
         </div>
         <div class="carrito-lista" id="carrito-lista">
@@ -438,6 +438,80 @@
       </div>
     </div>
 
+    <!-- Modal Filtros Inventario -->
+    <div id="modal-inventario-filtros" class="modal-overlay" aria-hidden="true">
+      <div class="modal-content modal-form">
+        <div class="modal-filtros-cabecera">
+          <h3>Filtros de búsqueda</h3>
+          <button type="button" class="modal-filtros-cerrar" id="modal-filtros-cerrar" title="Cerrar" aria-label="Cerrar"><span class="modal-filtros-cerrar-icon" aria-hidden="true">✕</span></button>
+        </div>
+        <form id="form-inventario-filtros">
+          <div class="form-row form-row-inline">
+            <label for="filtro-orden">Ordenar por</label>
+            <select id="filtro-orden">
+              <option value="" disabled selected hidden>Seleccionar</option>
+              <option value="categoria">Por categorías</option>
+              <option value="mas-vendidos">Top más vendidos</option>
+            </select>
+          </div>
+          <div class="form-row form-row-precio-rango" id="filtro-row-precio">
+            <div class="filtro-precio-rango">
+              <div class="filtro-precio-rango-cabecera">
+                <span class="filtro-precio-rango-titulo">Rango de precios</span>
+                <span class="filtro-precio-rango-subtitulo">Precio de venta del producto</span>
+              </div>
+              <div class="filtro-precio-rango-chart-wrap">
+                <div class="filtro-precio-rango-histograma" id="filtro-precio-rango-histograma" aria-hidden="true"></div>
+                <div class="filtro-precio-rango-slider" id="filtro-precio-rango-slider">
+                  <div class="filtro-precio-rango-track" aria-hidden="true"></div>
+                  <button type="button" class="filtro-precio-rango-thumb" id="filtro-precio-thumb-min" aria-label="Precio mínimo"></button>
+                  <button type="button" class="filtro-precio-rango-thumb" id="filtro-precio-thumb-max" aria-label="Precio máximo"></button>
+                  <input type="hidden" id="filtro-precio-rango-min" value="0">
+                  <input type="hidden" id="filtro-precio-rango-max" value="1000">
+                </div>
+              </div>
+              <div class="filtro-precio-rango-inputs">
+                <div class="filtro-precio-rango-campo">
+                  <label for="filtro-precio-input-min">Mínimo</label>
+                  <div class="filtro-precio-rango-input-wrap">
+                    <span class="filtro-precio-rango-simbolo" aria-hidden="true">$</span>
+                    <input type="number" id="filtro-precio-input-min" min="0" step="1" inputmode="decimal" aria-label="Precio mínimo en pesos">
+                  </div>
+                </div>
+                <div class="filtro-precio-rango-campo">
+                  <label for="filtro-precio-input-max">Máximo</label>
+                  <div class="filtro-precio-rango-input-wrap">
+                    <span class="filtro-precio-rango-simbolo" aria-hidden="true">$</span>
+                    <input type="number" id="filtro-precio-input-max" min="0" step="1" inputmode="decimal" aria-label="Precio máximo en pesos">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="form-row" id="filtro-row-stock">
+            <label>Stock</label>
+            <div class="form-chips">
+              <button type="button" class="form-chip activo" data-filtro-stock="todos">Todos</button>
+              <button type="button" class="form-chip" data-filtro-stock="con">Con stock</button>
+              <button type="button" class="form-chip" data-filtro-stock="sin">Sin stock</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Imagen</label>
+            <div class="form-chips">
+              <button type="button" class="form-chip activo" data-filtro-imagen="todos">Todas</button>
+              <button type="button" class="form-chip" data-filtro-imagen="con">Con imagen</button>
+              <button type="button" class="form-chip" data-filtro-imagen="sin">Sin imagen</button>
+            </div>
+          </div>
+          <div class="modal-acciones modal-acciones-filtros">
+            <button type="button" class="btn btn-vaciar" id="modal-filtros-limpiar">Limpiar</button>
+            <button type="submit" class="btn btn-cobrar" id="modal-filtros-aplicar">Aplicar filtros</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Modal Agregar Producto -->
     <div id="modal-producto" class="modal-overlay">
       <div class="modal-content modal-form">
@@ -446,7 +520,7 @@
           <div class="form-row form-row-inline">
             <label>Categoría</label>
             <select id="prod-categoria">
-              <option value="">Seleccionar...</option>
+              <option value="">Seleccionar</option>
               <option value="micas">Micas</option>
               <option value="fundas">Fundas</option>
               <option value="cargadores">Cargadores</option>
@@ -469,7 +543,7 @@
             <div id="prod-mica-cristal-opciones" class="form-row" style="display:none">
               <label>Tipo cristal</label>
               <select id="prod-mica-tipo-cristal">
-                <option value="">Seleccionar...</option>
+                <option value="">Seleccionar</option>
                 <option value="9H">9H</option>
                 <option value="9D">9D</option>
                 <option value="privacidad">Privacidad</option>
@@ -479,7 +553,7 @@
             <div id="prod-mica-hidrogel-opciones" class="form-row" style="display:none">
               <label>Tipo hidrogel</label>
               <select id="prod-mica-tipo-hidrogel">
-                <option value="">Seleccionar...</option>
+                <option value="">Seleccionar</option>
                 <option value="HD">HD</option>
                 <option value="mate">Mate</option>
                 <option value="privacidad">Privacidad</option>
@@ -489,13 +563,13 @@
               <div class="form-row form-row-inline">
                 <label>Marca</label>
                 <select id="prod-mica-marca">
-                  <option value="">Seleccionar marca...</option>
+                  <option value="">Seleccionar marca</option>
                 </select>
               </div>
               <div class="form-row form-row-inline">
                 <label>Modelo</label>
                 <select id="prod-mica-modelo">
-                  <option value="">Seleccionar modelo...</option>
+                  <option value="">Seleccionar modelo</option>
                 </select>
               </div>
             </div>
@@ -509,19 +583,19 @@
             <div class="form-row form-row-inline">
               <label>Marca</label>
               <select id="prod-funda-marca-cel">
-                <option value="">Seleccionar marca...</option>
+                <option value="">Seleccionar marca</option>
               </select>
             </div>
             <div class="form-row form-row-inline">
               <label>Modelo</label>
               <select id="prod-funda-modelo-cel">
-                <option value="">Seleccionar modelo...</option>
+                <option value="">Seleccionar modelo</option>
               </select>
             </div>
             <div class="form-row form-row-inline">
               <label>Tipo</label>
               <select id="prod-funda-tipo">
-                <option value="">Seleccionar...</option>
+                <option value="">Seleccionar</option>
                 <option value="uso-rudo">Uso Rudo</option>
                 <option value="silicon">Silicon</option>
                 <option value="360">360</option>
@@ -551,7 +625,7 @@
             <div class="form-row">
               <label>Tipo</label>
               <select id="prod-cargador-tipo">
-                <option value="">Seleccionar...</option>
+                <option value="">Seleccionar</option>
                 <option value="completo">Completo</option>
                 <option value="cable">Cable</option>
                 <option value="cubo">Cubo</option>
@@ -573,7 +647,7 @@
             <div class="form-row form-row-inline">
               <label id="prod-cargador-conexion-label">Tipo de conexión</label>
               <select id="prod-cargador-conexion">
-                <option value="">Seleccionar...</option>
+                <option value="">Seleccionar</option>
                 <option value="usb-c">USB-C</option>
                 <option value="c-c">C-C</option>
               </select>
@@ -593,7 +667,7 @@
             <div class="form-row">
               <label>Tipo</label>
               <select id="prod-audifonos-tipo">
-                <option value="">Seleccionar...</option>
+                <option value="">Seleccionar</option>
                 <option value="diadema">Diadema</option>
                 <option value="in-ear">In Ear</option>
               </select>
@@ -601,7 +675,7 @@
             <div class="form-row">
               <label>Tipo de conexión</label>
               <select id="prod-audifonos-conexion">
-                <option value="">Seleccionar...</option>
+                <option value="">Seleccionar</option>
                 <option value="alambrico">Alámbrica</option>
                 <option value="inalambrico">Inalámbrica</option>
                 <option value="hibrido">Híbrida</option>
@@ -610,7 +684,7 @@
             <div class="form-row form-row-inline">
               <label>Marca</label>
               <select id="prod-audifonos-marca">
-                <option value="">Seleccionar...</option>
+                <option value="">Seleccionar</option>
                 <option value="Sony">Sony</option>
                 <option value="JBL">JBL</option>
                 <option value="Apple">Apple</option>
@@ -657,7 +731,7 @@
             <div class="form-row form-row-inline">
               <label>Conexión</label>
               <select id="prod-powerbank-conexion">
-                <option value="">Seleccionar...</option>
+                <option value="">Seleccionar</option>
                 <option value="puertos">Puertos</option>
                 <option value="cables-integrados">Cables integrados</option>
               </select>
@@ -668,7 +742,7 @@
             <div class="form-row form-row-inline">
               <label>Marca</label>
               <select id="prod-bocina-marca">
-                <option value="">Seleccionar...</option>
+                <option value="">Seleccionar</option>
                 <option value="JBL">JBL</option>
                 <option value="Sony">Sony</option>
                 <option value="Bose">Bose</option>
@@ -694,7 +768,7 @@
             <div class="form-row form-row-inline">
               <label>Color</label>
               <select id="prod-bocina-color">
-                <option value="">Seleccionar...</option>
+                <option value="">Seleccionar</option>
                 <option value="negro">Negro</option>
                 <option value="blanco">Blanco</option>
                 <option value="azul">Azul</option>
@@ -711,7 +785,7 @@
 
           <div class="form-seccion-fija">
           <div class="form-row form-row-precio">
-            <label>Precio</label>
+            <label id="prod-label-precio">Precio</label>
             <div class="precio-contador">
               <button type="button" class="stock-btn" id="prod-precio-menos" aria-label="Menos">−</button>
               <span class="precio-simbolo">$</span>
@@ -720,19 +794,29 @@
             </div>
           </div>
 
-          <div class="form-row form-row-stock">
-            <label>Stock</label>
+          <div class="form-row form-row-precio" id="prod-precio-venta-wrap" hidden>
+            <label id="prod-label-precio-venta">Precio de venta</label>
+            <div class="precio-contador">
+              <button type="button" class="stock-btn" id="prod-precio-venta-menos" aria-label="Menos">−</button>
+              <span class="precio-simbolo">$</span>
+              <input type="number" id="prod-precio-venta" min="0" step="1" placeholder="0" aria-label="Precio de venta">
+              <button type="button" class="stock-btn" id="prod-precio-venta-mas" aria-label="Más">+</button>
+            </div>
+          </div>
+
+          <div class="form-row form-row-stock" id="prod-stock-wrap">
+            <label id="prod-label-stock">Stock</label>
             <div class="stock-contador">
               <button type="button" class="stock-btn" id="prod-stock-menos" aria-label="Menos">−</button>
               <span class="stock-icono" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
               </span>
-              <input type="number" id="prod-stock-valor" min="0" step="1" value="0" aria-label="Cantidad en stock">
+              <input type="number" id="prod-stock-valor" min="0" step="1" placeholder="0" aria-label="Cantidad en stock">
               <button type="button" class="stock-btn" id="prod-stock-mas" aria-label="Más">+</button>
             </div>
           </div>
 
-          <div class="form-row form-row-imagen">
+          <div class="form-row form-row-imagen" id="prod-imagen-wrap">
             <div class="imagen-upload">
               <input type="file" id="prod-imagen" accept="image/*" aria-label="Subir imagen">
               <label for="prod-imagen" class="imagen-upload-btn">Elegir imagen</label>

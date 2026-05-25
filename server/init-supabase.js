@@ -27,6 +27,18 @@ async function init() {
     const migracionProductos = fs.readFileSync(path.join(__dirname, 'sql', 'migration_productos.sql'), 'utf-8');
     await pool.query(migracionProductos);
 
+    const migracionConsignados = fs.readFileSync(
+      path.join(__dirname, 'sql', 'migration_productos_consignados.sql'),
+      'utf-8'
+    );
+    await pool.query(migracionConsignados);
+
+    const migracionDropCantidad = fs.readFileSync(
+      path.join(__dirname, 'sql', 'migration_productos_consignados_drop_cantidad.sql'),
+      'utf-8'
+    );
+    await pool.query(migracionDropCantidad);
+
     const { rows: tbl } = await pool.query(
       `SELECT to_regclass('public.productos') AS ref`
     );
@@ -36,7 +48,14 @@ async function init() {
       console.log('✅ Tabla public.productos:', tbl[0].ref);
     }
 
-    console.log('✅ Esquema aplicado (sucursales, usuarios, clientes, proveedores, productos).');
+    const { rows: tblConsignados } = await pool.query(
+      `SELECT to_regclass('public.productos_consignados') AS ref`
+    );
+    if (tblConsignados[0]?.ref) {
+      console.log('✅ Tabla public.productos_consignados:', tblConsignados[0].ref);
+    }
+
+    console.log('✅ Esquema aplicado (sucursales, usuarios, clientes, proveedores, productos, productos_consignados, inventario_favoritos).');
 
     const { rows } = await pool.query('SELECT COUNT(*)::text AS c FROM usuarios');
     console.log('   Usuarios en Supabase:', rows[0].c);

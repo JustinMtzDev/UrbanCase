@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node index.js",
     "init-supabase": "node init-supabase.js",
-    "migrate-productos": "node migrate-productos.js"
+    "migrate-productos": "node migrate-productos.js",
+    "migrate-productos-consignados": "node migrate-productos-consignados.js",
+    "migrate-inventario-favoritos": "node migrate-inventario-favoritos.js"
   },
   "keywords": [],
   "author": "",
