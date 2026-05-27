@@ -2,9 +2,12 @@ const { Router } = require('express');
 const pool = require('../config/db');
 
 const router = Router();
+const IMAGEN_MAX_BASE64 = 3_500_000;
 
 const SQL_LISTAR_TODAS_SUCURSALES = `
-  SELECT p.id, p.nombre, p.precio::float8 AS precio, p.stock, p.categoria, p.imagen, p.sucursal_id,
+  SELECT p.id, p.nombre, p.precio::float8 AS precio, p.precio_max::float8 AS precio_max,
+         p.costo_compra::float8 AS costo_compra,
+         p.stock, p.categoria, p.imagen, p.sucursal_id,
          p.created_at, COALESCE(s.nombre, 'Sin sucursal') AS sucursal_nombre
   FROM productos p
   LEFT JOIN sucursales s ON s.id = p.sucursal_id
@@ -45,8 +48,9 @@ router.get('/', async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      `SELECT id, nombre, precio::float8 AS precio, stock, categoria, imagen, sucursal_id,
-              created_at
+      `SELECT id, nombre, precio::float8 AS precio, precio_max::float8 AS precio_max,
+              costo_compra::float8 AS costo_compra,
+              stock, categoria, imagen, sucursal_id, created_at
        FROM productos
        WHERE sucursal_id = $1
        ORDER BY id`,
@@ -58,8 +62,22 @@ router.get('/', async (req, res) => {
   }
 });
 
+function normalizarPrecioMaxProducto(precioNum, precioMaxRaw) {
+  if (precioMaxRaw == null || precioMaxRaw === '') return null;
+  const precioMaxNum = Number(precioMaxRaw);
+  if (!Number.isFinite(precioMaxNum) || precioMaxNum <= precioNum) return null;
+  return precioMaxNum;
+}
+
+function normalizarCostoCompraProducto(costoCompraRaw) {
+  if (costoCompraRaw == null || costoCompraRaw === '') return null;
+  const costoNum = Number(costoCompraRaw);
+  if (!Number.isFinite(costoNum) || costoNum <= 0) return null;
+  return costoNum;
+}
+
 router.post('/', async (req, res) => {
-  let { nombre, precio, stock, categoria, imagen, sucursal_id, id_sucursal } = req.body || {};
+  let { nombre, precio, precio_max, costo_compra, stock, categoria, imagen, sucursal_id, id_sucursal } = req.body || {};
   const sid = sucursal_id != null ? sucursal_id : id_sucursal;
   if (!nombre || typeof nombre !== 'string' || nombre.trim().length === 0) {
     return res.status(400).json({ error: 'El nombre del producto es requerido' });
@@ -79,12 +97,17 @@ router.post('/', async (req, res) => {
   try {
     const check = await pool.query('SELECT 1 FROM sucursales WHERE id = $1', [Number(sid)]);
     if (check.rows.length === 0) return res.status(400).json({ error: 'Sucursal no válida' });
-    const img = typeof imagen === 'string' && imagen.length > 500000 ? null : imagen || null;
+    const img = normalizarImagenProducto(imagen);
+    if (img === false) return res.status(400).json({ error: 'La imagen es demasiado grande' });
+    const precioMaxNum = normalizarPrecioMaxProducto(precioNum, precio_max);
+    const costoCompraNum = normalizarCostoCompraProducto(costo_compra);
     const { rows } = await pool.query(
-      `INSERT INTO productos (sucursal_id, nombre, precio, stock, categoria, imagen)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, nombre, precio::float8 AS precio, stock, categoria, imagen, sucursal_id, created_at`,
-      [Number(sid), nombre.trim(), precioNum, stockNum, catNorm, img]
+      `INSERT INTO productos (sucursal_id, nombre, precio, precio_max, costo_compra, stock, categoria, imagen)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, nombre, precio::float8 AS precio, precio_max::float8 AS precio_max,
+                 costo_compra::float8 AS costo_compra,
+                 stock, categoria, imagen, sucursal_id, created_at`,
+      [Number(sid), nombre.trim(), precioNum, precioMaxNum, costoCompraNum, stockNum, catNorm, img]
     );
     const row = rows[0];
     res.status(201).json({ ...row, id_sucursal: row.sucursal_id });
@@ -96,7 +119,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'ID inválido' });
-  const { nombre, precio, stock, categoria, imagen } = req.body || {};
+  const { nombre, precio, precio_max, costo_compra, stock, categoria, imagen } = req.body || {};
   try {
     const set = [];
     const vals = [];
@@ -113,6 +136,22 @@ router.put('/:id', async (req, res) => {
       set.push(`precio = $${idx++}`);
       vals.push(precioNum);
     }
+    if (precio_max !== undefined) {
+      let precioRef = precio != null ? Number(precio) : NaN;
+      if (!Number.isFinite(precioRef)) {
+        const cur = await pool.query('SELECT precio::float8 AS precio FROM productos WHERE id = $1', [id]);
+        if (cur.rows.length === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+        precioRef = Number(cur.rows[0].precio);
+      }
+      const precioMaxNum = normalizarPrecioMaxProducto(precioRef, precio_max);
+      set.push(`precio_max = $${idx++}`);
+      vals.push(precioMaxNum);
+    }
+    if (costo_compra !== undefined) {
+      const costoCompraNum = normalizarCostoCompraProducto(costo_compra);
+      set.push(`costo_compra = $${idx++}`);
+      vals.push(costoCompraNum);
+    }
     if (stock != null) {
       const stockNum = parseInt(stock, 10);
       if (!Number.isFinite(stockNum) || stockNum < 0) return res.status(400).json({ error: 'stock inválido' });
@@ -124,7 +163,8 @@ router.put('/:id', async (req, res) => {
       vals.push(categoria ? String(categoria).slice(0, 80) : null);
     }
     if (imagen !== undefined) {
-      const img = typeof imagen === 'string' && imagen.length > 500000 ? null : imagen || null;
+      const img = normalizarImagenProducto(imagen);
+      if (img === false) return res.status(400).json({ error: 'La imagen es demasiado grande' });
       set.push(`imagen = $${idx++}`);
       vals.push(img);
     }
@@ -132,7 +172,9 @@ router.put('/:id', async (req, res) => {
     vals.push(id);
     const { rows } = await pool.query(
       `UPDATE productos SET ${set.join(', ')} WHERE id = $${idx}
-       RETURNING id, nombre, precio::float8 AS precio, stock, categoria, imagen, sucursal_id, created_at`,
+       RETURNING id, nombre, precio::float8 AS precio, precio_max::float8 AS precio_max,
+                 costo_compra::float8 AS costo_compra,
+                 stock, categoria, imagen, sucursal_id, created_at`,
       vals
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Producto no encontrado' });
@@ -140,6 +182,135 @@ router.put('/:id', async (req, res) => {
     res.json({ ...row, id_sucursal: row.sucursal_id });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+function normalizarImagenProducto(imagen) {
+  if (imagen == null || imagen === '') return null;
+  if (typeof imagen !== 'string') return null;
+  if (imagen.length > IMAGEN_MAX_BASE64) return false;
+  return imagen;
+}
+
+router.post('/trasladar', async (req, res) => {
+  const productoId = Number(req.body?.producto_id);
+  const cantidad = parseInt(req.body?.cantidad, 10);
+  const sucursalDestinoId = Number(req.body?.sucursal_destino_id ?? req.body?.sucursalDestinoId);
+
+  if (!Number.isFinite(productoId)) {
+    return res.status(400).json({ error: 'producto_id inválido' });
+  }
+  if (!Number.isFinite(cantidad) || cantidad < 1) {
+    return res.status(400).json({ error: 'cantidad inválida' });
+  }
+  if (!Number.isFinite(sucursalDestinoId)) {
+    return res.status(400).json({ error: 'sucursal_destino_id inválido' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const origRes = await client.query(
+      `SELECT id, nombre, precio, precio_max, costo_compra, stock, categoria, imagen, sucursal_id
+       FROM productos
+       WHERE id = $1
+       FOR UPDATE`,
+      [productoId]
+    );
+    if (origRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+    const origen = origRes.rows[0];
+    const stockOrigen = Number(origen.stock) || 0;
+    if (cantidad > stockOrigen) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Stock insuficiente (disponible: ${stockOrigen})` });
+    }
+    if (Number(origen.sucursal_id) === sucursalDestinoId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'La sucursal destino debe ser distinta a la de origen' });
+    }
+
+    const sucCheck = await client.query(
+      'SELECT id FROM sucursales WHERE id = $1 AND activo IS NOT FALSE',
+      [sucursalDestinoId]
+    );
+    if (sucCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Sucursal destino no válida' });
+    }
+
+    await client.query('UPDATE productos SET stock = stock - $1 WHERE id = $2', [cantidad, productoId]);
+
+    const matchRes = await client.query(
+      `SELECT id FROM productos
+       WHERE sucursal_id = $1
+         AND nombre = $2
+         AND COALESCE(categoria, '') = COALESCE($3, '')
+         AND precio = $4
+         AND precio_max IS NOT DISTINCT FROM $5
+         AND costo_compra IS NOT DISTINCT FROM $6
+       ORDER BY id
+       LIMIT 1
+       FOR UPDATE`,
+      [
+        sucursalDestinoId,
+        origen.nombre,
+        origen.categoria,
+        origen.precio,
+        origen.precio_max,
+        origen.costo_compra,
+      ]
+    );
+
+    let productoDestinoId;
+    if (matchRes.rows.length > 0) {
+      productoDestinoId = matchRes.rows[0].id;
+      await client.query('UPDATE productos SET stock = stock + $1 WHERE id = $2', [cantidad, productoDestinoId]);
+    } else {
+      const insRes = await client.query(
+        `INSERT INTO productos (sucursal_id, nombre, precio, precio_max, costo_compra, stock, categoria, imagen)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id`,
+        [
+          sucursalDestinoId,
+          origen.nombre,
+          origen.precio,
+          origen.precio_max,
+          origen.costo_compra,
+          cantidad,
+          origen.categoria,
+          origen.imagen,
+        ]
+      );
+      productoDestinoId = insRes.rows[0].id;
+    }
+
+    const usuarioId = req.usuario?.id != null ? Number(req.usuario.id) : null;
+    await client.query(
+      `INSERT INTO inventario_traslados
+         (producto_origen_id, producto_destino_id, sucursal_origen_id, sucursal_destino_id, cantidad, usuario_id)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [productoId, productoDestinoId, origen.sucursal_id, sucursalDestinoId, cantidad, usuarioId]
+    );
+
+    await client.query('COMMIT');
+    res.json({
+      ok: true,
+      producto_origen_id: productoId,
+      producto_destino_id: productoDestinoId,
+      sucursal_origen_id: Number(origen.sucursal_id),
+      sucursal_destino_id: sucursalDestinoId,
+      cantidad,
+      stock_origen: stockOrigen - cantidad,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
