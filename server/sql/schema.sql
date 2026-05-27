@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS public.productos (
   sucursal_id INTEGER NOT NULL REFERENCES public.sucursales(id) ON DELETE CASCADE,
   nombre VARCHAR(500) NOT NULL,
   precio NUMERIC(12,2) NOT NULL DEFAULT 0,
+  precio_max NUMERIC(12,2),
+  costo_compra NUMERIC(12,2),
   stock INTEGER NOT NULL DEFAULT 0,
   categoria VARCHAR(80),
   imagen TEXT,
@@ -73,6 +75,13 @@ CREATE TABLE IF NOT EXISTS public.productos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_productos_sucursal ON public.productos(sucursal_id);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='productos' AND column_name='costo_compra') THEN
+    ALTER TABLE public.productos ADD COLUMN costo_compra NUMERIC(12,2);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.productos_consignados (
   id SERIAL PRIMARY KEY,
@@ -98,3 +107,18 @@ CREATE TABLE IF NOT EXISTS public.inventario_favoritos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_inventario_favoritos_usuario ON public.inventario_favoritos(usuario_id);
+
+CREATE TABLE IF NOT EXISTS public.inventario_traslados (
+  id SERIAL PRIMARY KEY,
+  producto_origen_id INTEGER NOT NULL,
+  producto_destino_id INTEGER NOT NULL,
+  sucursal_origen_id INTEGER NOT NULL REFERENCES public.sucursales(id) ON DELETE RESTRICT,
+  sucursal_destino_id INTEGER NOT NULL REFERENCES public.sucursales(id) ON DELETE RESTRICT,
+  cantidad INTEGER NOT NULL CHECK (cantidad > 0),
+  usuario_id INTEGER REFERENCES public.usuarios(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventario_traslados_origen ON public.inventario_traslados(sucursal_origen_id);
+CREATE INDEX IF NOT EXISTS idx_inventario_traslados_destino ON public.inventario_traslados(sucursal_destino_id);
+CREATE INDEX IF NOT EXISTS idx_inventario_traslados_created ON public.inventario_traslados(created_at DESC);

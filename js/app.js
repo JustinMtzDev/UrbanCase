@@ -55,6 +55,7 @@ let token = '';
   initNav();
   try { initInventarioProductoZoom(); } catch (err) { console.error('initInventarioProductoZoom:', err); }
   try { initInventarioVista(); } catch (err) { console.error('initInventarioVista:', err); }
+  try { initModalTrasladarInventario(); } catch (err) { console.error('initModalTrasladarInventario:', err); }
   try { initProductoModal(); } catch (err) { console.error('initProductoModal:', err); }
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -591,9 +592,10 @@ function filtrarProductosInventario() {
       if (!matchCat || !matchQ) return false;
     }
 
-    const precio = Number(p.precio) || 0;
-    if (precioMin != null && Number.isFinite(precioMin) && precio < precioMin) return false;
-    if (precioMax != null && Number.isFinite(precioMax) && precio > precioMax) return false;
+    const pMin = getPrecioMinProducto(p);
+    const pMax = getPrecioMaxProducto(p);
+    if (precioMin != null && Number.isFinite(precioMin) && pMax < precioMin) return false;
+    if (precioMax != null && Number.isFinite(precioMax) && pMin > precioMax) return false;
 
     if (f.imagen === 'con' && !productoTieneImagenInventario(p)) return false;
     if (f.imagen === 'sin' && productoTieneImagenInventario(p)) return false;
@@ -628,6 +630,450 @@ function inventarioFiltrosPorDefecto() {
   };
 }
 
+const FUNDAS_RANGO_PRECIO_MIN = 50;
+const FUNDAS_RANGO_PRECIO_MAX = 650;
+const FUNDAS_RANGO_PRECIO_STEP = 50;
+
+function getPrecioMinProducto(p) {
+  return Number(p?.precio) || 0;
+}
+
+function getPrecioMaxProducto(p) {
+  const maxRaw = p?.precio_max ?? p?.precioMax;
+  const min = getPrecioMinProducto(p);
+  if (maxRaw != null && maxRaw !== '' && Number(maxRaw) > min) return Number(maxRaw);
+  return min;
+}
+
+function productoFundaTieneRangoPrecio(p) {
+  return String(p?.categoria || '').toLowerCase() === 'fundas'
+    && getPrecioMaxProducto(p) > getPrecioMinProducto(p);
+}
+
+function formatearPrecioRangoSimple(n) {
+  return '$' + Number(n).toLocaleString('es-MX', { maximumFractionDigits: 0 });
+}
+
+function formatearPrecioProductoInventario(p) {
+  const fmt = window.formatearPrecioPOS || ((n) => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 }));
+  if (productoFundaTieneRangoPrecio(p)) {
+    return `${formatearPrecioRangoSimple(getPrecioMinProducto(p))} - ${formatearPrecioRangoSimple(getPrecioMaxProducto(p))}`;
+  }
+  return fmt(Number(p?.precio));
+}
+
+function getCostoCompraProducto(p) {
+  const raw = p?.costo_compra ?? p?.costoCompra;
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function formatearCostoCompraInventario(p) {
+  const costo = getCostoCompraProducto(p);
+  if (costo == null) return '—';
+  const fmt = window.formatearPrecioPOS || ((n) => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 }));
+  return fmt(costo);
+}
+
+function claveAgrupacionProductoInventario(p) {
+  const esConsignado = Boolean(p.es_consignado);
+  const cat = String(p.categoria || '').trim().toLowerCase();
+  const nom = String(p.nombre || '').trim().toLowerCase();
+  return `${esConsignado ? 'c' : 'p'}:${cat}:${nom}`;
+}
+
+function detalleSucursalDesdeProducto(p) {
+  return {
+    id: p.id,
+    sucursal_id: p.sucursal_id ?? p.id_sucursal,
+    sucursal_nombre: p.sucursal_nombre,
+    stock: p.stock,
+    precio: p.precio,
+    precio_max: p.precio_max,
+    precio_venta: p.precio_venta,
+    costo_consignacion: p.costo_consignacion,
+    costo_compra: p.costo_compra,
+    categoria: p.categoria,
+    imagen: p.imagen,
+    es_consignado: Boolean(p.es_consignado),
+  };
+}
+
+function consolidarProductosInventarioTodasSucursales(lista) {
+  const map = new Map();
+  for (const p of lista) {
+    const key = claveAgrupacionProductoInventario(p);
+    if (!map.has(key)) {
+      map.set(key, {
+        ...p,
+        inventario_agrupado_todas: true,
+        sucursales_detalle: [],
+      });
+    }
+    map.get(key).sucursales_detalle.push(detalleSucursalDesdeProducto(p));
+  }
+  return Array.from(map.values()).map((grupo) => {
+    grupo.sucursales_detalle.sort((a, b) =>
+      String(a.sucursal_nombre || '').localeCompare(String(b.sucursal_nombre || ''), 'es', { sensitivity: 'base' })
+    );
+    const rep = grupo.sucursales_detalle.find((s) => productoTieneImagenInventario({ imagen: s.imagen }))
+      || grupo.sucursales_detalle[0];
+    grupo.id = rep.id;
+    grupo.imagen = rep.imagen;
+    grupo.es_consignado = grupo.sucursales_detalle.some((s) => s.es_consignado);
+    return grupo;
+  });
+}
+
+function productoLikeDesdeDetalleSucursal(s, p) {
+  return {
+    ...p,
+    precio: s.precio,
+    precio_max: s.precio_max,
+    precio_venta: s.precio_venta,
+    costo_consignacion: s.costo_consignacion,
+    categoria: s.categoria ?? p.categoria,
+    es_consignado: s.es_consignado,
+  };
+}
+
+function sucursalesTienenPreciosVentaDistintos(detalle) {
+  if (!detalle || detalle.length <= 1) return false;
+  const keys = detalle.map((s) => {
+    if (s.es_consignado) return String(Number(s.precio_venta ?? s.precio) || 0);
+    return `${getPrecioMinProducto(s)}|${getPrecioMaxProducto(s)}`;
+  });
+  return new Set(keys).size > 1;
+}
+
+function productoSinStockEnTodasSucursales(p) {
+  const detalle = p.sucursales_detalle || [];
+  if (p.es_consignado) return false;
+  return detalle.length > 0 && detalle.every((s) => (Number(s.stock) || 0) <= 0);
+}
+
+function htmlDetalleSucursalesInventarioCard(p, formatearPrecio) {
+  const detalle = p.sucursales_detalle || [];
+  const preciosDistintos = sucursalesTienenPreciosVentaDistintos(detalle);
+  const esConsignado = Boolean(p.es_consignado);
+  return detalle.map((s) => {
+    const stockNum = Number(s.stock) || 0;
+    const sinStock = !esConsignado && stockNum <= 0;
+    let precioHtml = '';
+    if (preciosDistintos) {
+      if (esConsignado) {
+        const pv = Number(s.precio_venta ?? s.precio) || 0;
+        const cc = Number(s.costo_consignacion) || 0;
+        precioHtml = `<div class="inventario-producto-precio inventario-producto-precio-sucursal">Venta: ${formatearPrecio(pv)}</div><div class="inventario-consignado-costo inventario-producto-precio-sucursal">Costo: ${formatearPrecio(cc)}</div>`;
+      } else {
+        precioHtml = `<div class="inventario-producto-precio inventario-producto-precio-sucursal">${formatearPrecioProductoInventario(productoLikeDesdeDetalleSucursal(s, p))}</div>`;
+      }
+    }
+    const stockHtml = esConsignado
+      ? ''
+      : `<div class="inventario-producto-stock${sinStock ? ' inventario-producto-stock--agotado' : ''}">Stock: ${stockNum}</div>`;
+    const sucursalHtml = `<div class="inventario-producto-sucursal">${escHtmlInventario(s.sucursal_nombre) || '—'}</div>`;
+    if (preciosDistintos && precioHtml) {
+      return `
+      <div class="inventario-producto-sucursal-item inventario-producto-sucursal-item--con-precio">
+        <div class="inventario-producto-sucursal-item-info">
+          ${stockHtml}
+          ${sucursalHtml}
+        </div>
+        <div class="inventario-producto-sucursal-item-precio">${precioHtml}</div>
+      </div>`;
+    }
+    return `
+      <div class="inventario-producto-sucursal-item">
+        ${stockHtml}
+        ${sucursalHtml}
+      </div>`;
+  }).join('');
+}
+
+function htmlPrecioUnicoAgrupadoInventario(p, formatearPrecio) {
+  const detalle = p.sucursales_detalle || [];
+  if (detalle.length === 0) return '';
+  const rep = productoLikeDesdeDetalleSucursal(detalle[0], p);
+  if (p.es_consignado) {
+    const precioVenta = Number(rep.precio_venta ?? rep.precio) || 0;
+    const costo = Number(rep.costo_consignacion) || 0;
+    return `<div class="inventario-producto-precio inventario-consignado-venta">Venta: ${formatearPrecio(precioVenta)}</div><div class="inventario-consignado-costo">Costo: ${formatearPrecio(costo)}</div>`;
+  }
+  return `<div class="inventario-producto-precio">${formatearPrecioProductoInventario(rep)}</div>`;
+}
+
+function aplicarListaInventarioParaVista(lista, esTodasLasSucursales) {
+  return esTodasLasSucursales ? consolidarProductosInventarioTodasSucursales(lista) : lista;
+}
+
+function opcionesPrecioEnRangoFundas(min, max, step = FUNDAS_RANGO_PRECIO_STEP) {
+  const a = Math.round(min / step) * step;
+  const b = Math.round(max / step) * step;
+  const opts = [];
+  for (let v = a; v <= b; v += step) opts.push(v);
+  return opts;
+}
+
+function getLimitesSliderRangoFundas() {
+  const $slider = document.getElementById('prod-funda-precio-slider');
+  if (!$slider) {
+    return { min: FUNDAS_RANGO_PRECIO_MIN, max: FUNDAS_RANGO_PRECIO_MAX, step: FUNDAS_RANGO_PRECIO_STEP };
+  }
+  return {
+    min: Number($slider.dataset.limiteMin ?? FUNDAS_RANGO_PRECIO_MIN),
+    max: Number($slider.dataset.limiteMax ?? FUNDAS_RANGO_PRECIO_MAX),
+    step: Number($slider.dataset.step ?? FUNDAS_RANGO_PRECIO_STEP),
+  };
+}
+
+function actualizarUiSliderRangoFundas() {
+  const $rMin = document.getElementById('prod-funda-precio-rango-min');
+  const $rMax = document.getElementById('prod-funda-precio-rango-max');
+  const $thumbMin = document.getElementById('prod-funda-precio-thumb-min');
+  const $thumbMax = document.getElementById('prod-funda-precio-thumb-max');
+  const $inMin = document.getElementById('prod-funda-precio-input-min');
+  const $inMax = document.getElementById('prod-funda-precio-input-max');
+  if (!$rMin || !$rMax) return;
+
+  const limites = getLimitesSliderRangoFundas();
+  let vMin = Number($rMin.value);
+  let vMax = Number($rMax.value);
+
+  if (vMin > vMax) {
+    if (document.activeElement === $inMin) {
+      vMin = vMax;
+      $rMin.value = String(vMin);
+    } else {
+      vMax = vMin;
+      $rMax.value = String(vMax);
+    }
+  }
+
+  const pctMin = pctDesdeValorPrecioFiltro(vMin, limites);
+  const pctMax = pctDesdeValorPrecioFiltro(vMax, limites);
+  if ($thumbMin) {
+    $thumbMin.style.left = `${pctMin}%`;
+    $thumbMin.setAttribute('aria-valuenow', String(vMin));
+  }
+  if ($thumbMax) {
+    $thumbMax.style.left = `${pctMax}%`;
+    $thumbMax.setAttribute('aria-valuenow', String(vMax));
+  }
+  if ($inMin && document.activeElement !== $inMin) $inMin.value = String(vMin);
+  if ($inMax && document.activeElement !== $inMax) $inMax.value = String(vMax);
+}
+
+function establecerRangoPrecioFundasForm(min, max) {
+  const limites = getLimitesSliderRangoFundas();
+  let vMin = Math.round(Number(min) / limites.step) * limites.step;
+  let vMax = Math.round(Number(max) / limites.step) * limites.step;
+  if (!Number.isFinite(vMin)) vMin = FUNDAS_RANGO_PRECIO_MIN;
+  if (!Number.isFinite(vMax)) vMax = FUNDAS_RANGO_PRECIO_MAX;
+  vMin = Math.max(limites.min, Math.min(vMin, limites.max));
+  vMax = Math.max(vMin, Math.min(vMax, limites.max));
+  const $rMin = document.getElementById('prod-funda-precio-rango-min');
+  const $rMax = document.getElementById('prod-funda-precio-rango-max');
+  if ($rMin) $rMin.value = String(vMin);
+  if ($rMax) $rMax.value = String(vMax);
+  actualizarUiSliderRangoFundas();
+}
+
+function leerRangoPrecioFundasForm() {
+  const limites = getLimitesSliderRangoFundas();
+  const $inMin = document.getElementById('prod-funda-precio-input-min');
+  const $inMax = document.getElementById('prod-funda-precio-input-max');
+  const $rMin = document.getElementById('prod-funda-precio-rango-min');
+  const $rMax = document.getElementById('prod-funda-precio-rango-max');
+  if (!$rMin || !$rMax) return { ok: false, msg: 'No se pudo leer el rango de precio' };
+
+  const rawMin = $inMin?.value !== '' && $inMin?.value != null ? $inMin.value : $rMin.value;
+  const rawMax = $inMax?.value !== '' && $inMax?.value != null ? $inMax.value : $rMax.value;
+  let vMin = Math.round(Number(rawMin) / limites.step) * limites.step;
+  let vMax = Math.round(Number(rawMax) / limites.step) * limites.step;
+
+  if (!Number.isFinite(vMin) || !Number.isFinite(vMax)) {
+    return { ok: false, msg: 'Ingresa un rango de precio válido' };
+  }
+  vMin = Math.max(limites.min, Math.min(vMin, limites.max));
+  vMax = Math.max(vMin, Math.min(vMax, limites.max));
+  if (vMin <= 0) return { ok: false, msg: 'Ingresa un rango de precio válido' };
+
+  $rMin.value = String(vMin);
+  $rMax.value = String(vMax);
+  if ($inMin && document.activeElement !== $inMin) $inMin.value = String(vMin);
+  if ($inMax && document.activeElement !== $inMax) $inMax.value = String(vMax);
+  actualizarUiSliderRangoFundas();
+
+  return { ok: true, min: vMin, max: vMax };
+}
+
+function initSliderRangoFundasProducto() {
+  if (initSliderRangoFundasProducto._done) return;
+  initSliderRangoFundasProducto._done = true;
+
+  const $rMin = document.getElementById('prod-funda-precio-rango-min');
+  const $rMax = document.getElementById('prod-funda-precio-rango-max');
+  const $thumbMin = document.getElementById('prod-funda-precio-thumb-min');
+  const $thumbMax = document.getElementById('prod-funda-precio-thumb-max');
+  const $slider = document.getElementById('prod-funda-precio-slider');
+  const $inMin = document.getElementById('prod-funda-precio-input-min');
+  const $inMax = document.getElementById('prod-funda-precio-input-max');
+  if (!$rMin || !$rMax || !$slider) return;
+
+  const limites = getLimitesSliderRangoFundas();
+  [$inMin, $inMax].forEach(($in) => {
+    if (!$in) return;
+    $in.min = String(limites.min);
+    $in.max = String(limites.max);
+    $in.step = String(limites.step);
+  });
+
+  const $wrapMin = $inMin?.closest('.filtro-precio-rango-input-wrap');
+  const $wrapMax = $inMax?.closest('.filtro-precio-rango-input-wrap');
+
+  function setCampoRangoFundasActivo(tipo) {
+    $wrapMin?.classList.toggle('es-activo', tipo === 'min');
+    $wrapMax?.classList.toggle('es-activo', tipo === 'max');
+  }
+
+  function syncCampoRangoFundasActivo() {
+    if ($thumbMin?.classList.contains('es-activo')) {
+      setCampoRangoFundasActivo('min');
+      return;
+    }
+    if ($thumbMax?.classList.contains('es-activo')) {
+      setCampoRangoFundasActivo('max');
+      return;
+    }
+    if (document.activeElement === $inMin) setCampoRangoFundasActivo('min');
+    else if (document.activeElement === $inMax) setCampoRangoFundasActivo('max');
+    else setCampoRangoFundasActivo(null);
+  }
+
+  function moverThumb(tipo, clientX) {
+    const rect = $slider.getBoundingClientRect();
+    if (!rect.width) return;
+    const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    const lim = getLimitesSliderRangoFundas();
+    let val = valorDesdePctPrecioFiltro(pct, lim);
+    let vMin = Number($rMin.value);
+    let vMax = Number($rMax.value);
+    if (tipo === 'min') {
+      val = Math.min(val, vMax);
+      $rMin.value = String(val);
+    } else {
+      val = Math.max(val, vMin);
+      $rMax.value = String(val);
+    }
+    actualizarUiSliderRangoFundas();
+  }
+
+  function initArrastre($thumb, tipo) {
+    if (!$thumb) return;
+    $thumb.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      $thumb.classList.add('es-activo');
+      setCampoRangoFundasActivo(tipo);
+      $thumb.setPointerCapture(e.pointerId);
+      const move = (ev) => moverThumb(tipo, ev.clientX);
+      const up = (ev) => {
+        $thumb.classList.remove('es-activo');
+        if ($thumb.hasPointerCapture(ev.pointerId)) $thumb.releasePointerCapture(ev.pointerId);
+        $thumb.removeEventListener('pointermove', move);
+        $thumb.removeEventListener('pointerup', up);
+        $thumb.removeEventListener('pointercancel', up);
+        requestAnimationFrame(syncCampoRangoFundasActivo);
+      };
+      $thumb.addEventListener('pointermove', move);
+      $thumb.addEventListener('pointerup', up);
+      $thumb.addEventListener('pointercancel', up);
+      moverThumb(tipo, e.clientX);
+    });
+  }
+
+  initArrastre($thumbMin, 'min');
+  initArrastre($thumbMax, 'max');
+
+  $inMin?.addEventListener('focus', () => setCampoRangoFundasActivo('min'));
+  $inMax?.addEventListener('focus', () => setCampoRangoFundasActivo('max'));
+  $inMin?.addEventListener('blur', () => requestAnimationFrame(syncCampoRangoFundasActivo));
+  $inMax?.addEventListener('blur', () => requestAnimationFrame(syncCampoRangoFundasActivo));
+
+  $inMin?.addEventListener('input', () => {
+    const lim = getLimitesSliderRangoFundas();
+    let vMin = Math.round(Number($inMin.value) / lim.step) * lim.step;
+    let vMax = Number($rMax.value);
+    if (!Number.isFinite(vMin)) return;
+    vMin = Math.max(lim.min, Math.min(vMin, lim.max));
+    if (vMin > vMax) vMax = vMin;
+    $rMin.value = String(vMin);
+    $rMax.value = String(vMax);
+    actualizarUiSliderRangoFundas();
+  });
+
+  $inMax?.addEventListener('input', () => {
+    const lim = getLimitesSliderRangoFundas();
+    let vMin = Number($rMin.value);
+    let vMax = Math.round(Number($inMax.value) / lim.step) * lim.step;
+    if (!Number.isFinite(vMax)) return;
+    vMax = Math.max(lim.min, Math.min(vMax, lim.max));
+    if (vMax < vMin) vMin = vMax;
+    $rMin.value = String(vMin);
+    $rMax.value = String(vMax);
+    actualizarUiSliderRangoFundas();
+  });
+
+  $inMin?.addEventListener('change', () => {
+    const lim = getLimitesSliderRangoFundas();
+    let vMin = Number($inMin.value);
+    let vMax = Number($rMax.value);
+    if (!Number.isFinite(vMin)) vMin = lim.min;
+    vMin = Math.max(lim.min, Math.min(vMin, lim.max));
+    if (vMin > vMax) vMax = vMin;
+    $rMin.value = String(vMin);
+    $rMax.value = String(vMax);
+    actualizarUiSliderRangoFundas();
+  });
+
+  $inMax?.addEventListener('change', () => {
+    const lim = getLimitesSliderRangoFundas();
+    let vMin = Number($rMin.value);
+    let vMax = Number($inMax.value);
+    if (!Number.isFinite(vMax)) vMax = lim.max;
+    vMax = Math.max(lim.min, Math.min(vMax, lim.max));
+    if (vMax < vMin) vMin = vMax;
+    $rMin.value = String(vMin);
+    $rMax.value = String(vMax);
+    actualizarUiSliderRangoFundas();
+  });
+
+  actualizarUiSliderRangoFundas();
+}
+
+function resetRangoPrecioFundasForm() {
+  establecerRangoPrecioFundasForm(FUNDAS_RANGO_PRECIO_MIN, FUNDAS_RANGO_PRECIO_MAX);
+}
+
+function leerPrecioFundasParaGuardar(esPrecioFijo) {
+  if (esPrecioFijo) {
+    const $fijo = document.getElementById('prod-funda-precio-fijo');
+    const precio = parseFloat($fijo?.value || 0);
+    if (!Number.isFinite(precio) || precio <= 0) {
+      return { ok: false, msg: 'Ingresa un precio válido' };
+    }
+    return { ok: true, precio, precioMax: null };
+  }
+  const rango = leerRangoPrecioFundasForm();
+  if (!rango.ok) return rango;
+  return {
+    ok: true,
+    precio: rango.min,
+    precioMax: rango.max > rango.min ? rango.max : null,
+  };
+}
+
 function listarProductosParaLimitesPrecioFiltro() {
   const q = (document.getElementById('inventario-buscador')?.value || '').toLowerCase().trim();
   const cat = categoriaInventarioActiva;
@@ -641,12 +1087,12 @@ function listarProductosParaLimitesPrecioFiltro() {
 }
 
 function obtenerLimitesPrecioInventarioFiltro() {
-  const precios = listarProductosParaLimitesPrecioFiltro()
-    .map((p) => Number(p.precio))
-    .filter((n) => Number.isFinite(n) && n >= 0);
-  if (!precios.length) return { min: 0, max: 1000 };
-  let min = Math.floor(Math.min(...precios));
-  let max = Math.ceil(Math.max(...precios));
+  const rangos = listarProductosParaLimitesPrecioFiltro()
+    .map((p) => ({ min: getPrecioMinProducto(p), max: getPrecioMaxProducto(p) }))
+    .filter((r) => Number.isFinite(r.min) && r.min >= 0);
+  if (!rangos.length) return { min: 0, max: 1000 };
+  let min = Math.floor(Math.min(...rangos.map((r) => r.min)));
+  let max = Math.ceil(Math.max(...rangos.map((r) => r.max)));
   if (max <= min) max = min + 1;
   return { min, max };
 }
@@ -658,17 +1104,18 @@ function formatearPrecioFiltroInventario(n) {
 }
 
 function calcularHistogramaPreciosInventarioFiltro(limites, numBuckets = 28) {
-  const precios = listarProductosParaLimitesPrecioFiltro()
-    .map((p) => Number(p.precio))
-    .filter((n) => Number.isFinite(n) && n >= 0);
+  const rangos = listarProductosParaLimitesPrecioFiltro()
+    .map((p) => ({ min: getPrecioMinProducto(p), max: getPrecioMaxProducto(p) }))
+    .filter((r) => Number.isFinite(r.min) && r.min >= 0);
   const buckets = Array(numBuckets).fill(0);
-  if (!precios.length) return buckets.map(() => 0);
+  if (!rangos.length) return buckets.map(() => 0);
   const span = (limites.max - limites.min) || 1;
-  precios.forEach((precio) => {
-    let idx = Math.floor(((precio - limites.min) / span) * numBuckets);
-    if (idx >= numBuckets) idx = numBuckets - 1;
-    if (idx < 0) idx = 0;
-    buckets[idx] += 1;
+  rangos.forEach(({ min, max }) => {
+    let idxMin = Math.floor(((min - limites.min) / span) * numBuckets);
+    let idxMax = Math.floor(((max - limites.min) / span) * numBuckets);
+    if (idxMin < 0) idxMin = 0;
+    if (idxMax >= numBuckets) idxMax = numBuckets - 1;
+    for (let i = idxMin; i <= idxMax; i++) buckets[i] += 1;
   });
   const peak = Math.max(...buckets, 1);
   return buckets.map((c) => c / peak);
@@ -1119,12 +1566,32 @@ function ocultarImagenInventarioSiRota(img) {
   }
 }
 
-function htmlInventarioCardImagen(p) {
+const MARCAS_CEL_DISPLAY = ['Apple', 'Samsung', 'Xiaomi', 'Motorola', 'Huawei', 'Google', 'OnePlus', 'OPPO', 'Realme', 'Honor'];
+
+function nombreProductoInventarioDisplay(prod) {
+  const nombre = String(prod?.nombre || '');
+  if (prod?.categoria !== 'fundas') return nombre;
+  let s = nombre.replace(/^Funda\s+/i, '').trim();
+  for (const marca of MARCAS_CEL_DISPLAY) {
+    const re = new RegExp(`^${marca}\\s+`, 'i');
+    if (re.test(s)) {
+      s = s.replace(re, '').trim();
+      break;
+    }
+  }
+  return s ? `Funda ${s}` : nombre;
+}
+
+function htmlInventarioCardImagen(p, sinStock = false) {
+  const capaSinStock = sinStock
+    ? '<div class="inventario-producto-sin-stock-layer" aria-hidden="true"><span class="inventario-producto-sin-stock-etiqueta">Sin stock</span></div>'
+    : '';
+  const claseSinStock = sinStock ? ' inventario-producto-img-wrap--sin-stock' : '';
   if (!productoTieneImagenInventario(p)) {
-    return '<div class="inventario-producto-img-wrap inventario-producto-img-wrap--vacia" tabindex="0" role="button" aria-label="Ver detalle ampliado"></div>';
+    return `<div class="inventario-producto-img-wrap inventario-producto-img-wrap--vacia${claseSinStock}" tabindex="0" role="button" aria-label="Ver detalle ampliado">${capaSinStock}</div>`;
   }
   const src = escHtmlInventario(String(p.imagen).trim());
-  return `<div class="inventario-producto-img-wrap" tabindex="0" role="button" aria-label="Ver imagen ampliada"><img class="inventario-producto-img" src="${src}" alt=""></div>`;
+  return `<div class="inventario-producto-img-wrap${claseSinStock}" tabindex="0" role="button" aria-label="Ver imagen ampliada"><img class="inventario-producto-img" src="${src}" alt="">${capaSinStock}</div>`;
 }
 
 function etiquetaCategoriaInventario(cat) {
@@ -1388,7 +1855,7 @@ function renderInventarioVistaTabla() {
   if (!raw) {
     paginaInventarioActual = 1;
     inventarioFiltroClave = '';
-    $tbody.innerHTML = '<tr><td colspan="7" class="inventario-tabla-vacio">Selecciona una sucursal o «Todas las sucursales» arriba para ver productos</td></tr>';
+    $tbody.innerHTML = '<tr><td colspan="8" class="inventario-tabla-vacio">Selecciona una sucursal o «Todas las sucursales» arriba para ver productos</td></tr>';
     document.querySelectorAll('.inventario-col-sucursal').forEach((el) => { el.hidden = true; });
     if ($grid) $grid.innerHTML = '';
     renderInventarioPaginacion($pag, 1, 1, false);
@@ -1404,7 +1871,7 @@ function renderInventarioVistaTabla() {
   const verTodasSucursales = esTodasLasSucursales;
   document.querySelectorAll('.inventario-col-sucursal').forEach((el) => { el.hidden = !verTodasSucursales; });
 
-  const lista = filtrarProductosInventario();
+  const lista = aplicarListaInventarioParaVista(filtrarProductosInventario(), verTodasSucursales);
   const formatearPrecio = window.formatearPrecioPOS || (n => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 }));
   const totalPaginas = getInventarioTotalPaginas(lista.length);
   if (paginaInventarioActual > totalPaginas) paginaInventarioActual = totalPaginas;
@@ -1412,7 +1879,7 @@ function renderInventarioVistaTabla() {
   if ($grid) $grid.innerHTML = '';
 
   if (lista.length === 0) {
-    $tbody.innerHTML = `<tr><td colspan="7" class="inventario-tabla-vacio">${escHtmlInventario(mensajeVacioInventarioTexto())}</td></tr>`;
+    $tbody.innerHTML = `<tr><td colspan="8" class="inventario-tabla-vacio">${escHtmlInventario(mensajeVacioInventarioTexto())}</td></tr>`;
     renderInventarioPaginacion($pag, 1, 1, false);
     return;
   }
@@ -1421,26 +1888,57 @@ function renderInventarioVistaTabla() {
   const paginaLista = lista.slice(inicio, inicio + INVENTARIO_FILAS_TABLA_POR_PAGINA);
 
   $tbody.innerHTML = paginaLista.map((p) => {
-    const celSucursal = verTodasSucursales
-      ? `<td class="inventario-col-sucursal">${escHtmlInventario(p.sucursal_nombre) || '<span style="opacity:.4">—</span>'}</td>`
-      : '';
     const esConsignado = Boolean(p.es_consignado);
-    const colStock = esConsignado ? '—' : (p.stock ?? 0);
-    const btnEditar = `<button type="button" class="btn-tabla inventario-tabla-editar" data-id="${p.id}">Editar</button>`;
-    return `
-    <tr data-id="${p.id}"${esConsignado ? ' data-consignado="1"' : ''}>
-      <td>${p.id}</td>
-      <td>${escHtmlInventario(p.nombre)}</td>
-      <td>${escHtmlInventario(esConsignado ? 'Consignado' : etiquetaCategoriaInventario(p.categoria))}</td>
-      <td>${formatearPrecio(Number(p.precio))}</td>
-      <td>${colStock}</td>
-      ${celSucursal}
-      <td class="inventario-tabla-acciones">
-        <div class="inventario-tabla-acciones-fila">
-          ${btnEditar}
+    const agrupado = Boolean(p.inventario_agrupado_todas);
+    let celSucursalInner = '';
+    let colPrecioVenta;
+    let colStock;
+    if (agrupado) {
+      celSucursalInner = `<div class="inventario-producto-sucursales-lista inventario-tabla-sucursales-lista${sucursalesTienenPreciosVentaDistintos(p.sucursales_detalle) ? ' inventario-producto-sucursales-lista--precios-distintos' : ''}">${htmlDetalleSucursalesInventarioCard(p, formatearPrecio)}</div>`;
+      if (sucursalesTienenPreciosVentaDistintos(p.sucursales_detalle)) {
+        colPrecioVenta = (p.sucursales_detalle || []).map((s) => {
+          const nom = escHtmlInventario(s.sucursal_nombre) || '—';
+          if (esConsignado) {
+            return `${nom}: ${formatearPrecio(Number(s.precio_venta ?? s.precio) || 0)}`;
+          }
+          return `${nom}: ${formatearPrecioProductoInventario(productoLikeDesdeDetalleSucursal(s, p))}`;
+        }).join('<br>');
+      } else {
+        colPrecioVenta = esConsignado
+          ? formatearPrecio(Number(p.sucursales_detalle[0]?.precio_venta ?? p.sucursales_detalle[0]?.precio) || 0)
+          : formatearPrecioProductoInventario(productoLikeDesdeDetalleSucursal(p.sucursales_detalle[0], p));
+      }
+      colStock = '—';
+    } else {
+      if (verTodasSucursales) {
+        celSucursalInner = escHtmlInventario(p.sucursal_nombre) || '<span style="opacity:.4">—</span>';
+      }
+      colStock = esConsignado ? '—' : (p.stock ?? 0);
+      colPrecioVenta = esConsignado
+        ? formatearPrecio(Number(p.precio_venta ?? p.precio) || 0)
+        : formatearPrecioProductoInventario(p);
+    }
+    const colCostoCompra = esConsignado
+      ? formatearPrecio(Number(p.costo_consignacion) || 0)
+      : formatearCostoCompraInventario(p);
+    const accionesHtml = verTodasSucursales
+      ? '<span class="inventario-tabla-solo-sucursal">Elige una sucursal</span>'
+      : `<div class="inventario-tabla-acciones-fila">
+          <button type="button" class="btn-tabla inventario-tabla-editar" data-id="${p.id}">Editar</button>
           <button type="button" class="btn-tabla btn-tabla-danger inventario-tabla-eliminar" data-id="${p.id}">Eliminar</button>
         </div>
-        <button type="button" class="btn-tabla inventario-tabla-carrito" data-id="${p.id}">Agregar al carrito</button>
+        <button type="button" class="btn-tabla inventario-tabla-carrito" data-id="${p.id}">Agregar al carrito</button>`;
+    return `
+    <tr data-id="${p.id}"${esConsignado ? ' data-consignado="1"' : ''}${agrupado ? ' data-agrupado="1"' : ''}>
+      <td>${agrupado ? '—' : p.id}</td>
+      <td>${escHtmlInventario(nombreProductoInventarioDisplay(p))}</td>
+      <td>${escHtmlInventario(esConsignado ? 'Consignado' : etiquetaCategoriaInventario(p.categoria))}</td>
+      <td>${colPrecioVenta}</td>
+      <td>${colCostoCompra}</td>
+      <td>${colStock}</td>
+      ${verTodasSucursales ? `<td class="inventario-col-sucursal inventario-tabla-multisucursal">${celSucursalInner}</td>` : ''}
+      <td class="inventario-tabla-acciones">
+        ${accionesHtml}
       </td>
     </tr>`;
   }).join('');
@@ -1521,7 +2019,7 @@ function renderInventarioVistaCards() {
   }
 
   const verTodasSucursales = esTodasLasSucursales;
-  const lista = filtrarProductosInventario();
+  const lista = aplicarListaInventarioParaVista(filtrarProductosInventario(), verTodasSucursales);
   const totalPaginas = getInventarioTotalPaginas(lista.length);
   if (paginaInventarioActual > totalPaginas) paginaInventarioActual = totalPaginas;
   const porPagina = getInventarioItemsPorPagina();
@@ -1538,12 +2036,37 @@ function renderInventarioVistaCards() {
   const paginaLista = lista.slice(inicio, inicio + porPagina);
 
   $grid.innerHTML = paginaLista.map((p) => {
+    const esConsignado = Boolean(p.es_consignado);
+    const agrupado = Boolean(p.inventario_agrupado_todas);
+    if (agrupado) {
+      const sinStock = productoSinStockEnTodasSucursales(p);
+      const preciosDistintos = sucursalesTienenPreciosVentaDistintos(p.sucursales_detalle);
+      const precioUnicoInner = preciosDistintos ? '' : htmlPrecioUnicoAgrupadoInventario(p, formatearPrecio);
+      const precioSlotHtml = `<div class="inventario-producto-precio-slot${preciosDistintos ? ' inventario-producto-precio-slot--vacio' : ''}">${precioUnicoInner}</div>`;
+      const detalleSucursalesHtml = htmlDetalleSucursalesInventarioCard(p, formatearPrecio);
+      const claseConsignado = esConsignado ? ' inventario-producto-card--consignado' : '';
+      const etiquetaConsignado = esConsignado ? '<div class="inventario-consignado-etiqueta">Consignado</div>' : '';
+      return `
+    <article class="inventario-producto-card inventario-producto-card--agrupado-todas${claseConsignado}${sinStock ? ' inventario-producto-card--sin-stock' : ''}" data-id="${p.id}" data-agrupado="1"${esConsignado ? ' data-consignado="1"' : ''}>
+      ${etiquetaConsignado}
+      ${htmlInventarioCardImagen(p, sinStock && !esConsignado)}
+      <div class="inventario-producto-nombre">${escHtmlInventario(nombreProductoInventarioDisplay(p))}</div>
+      <div class="inventario-producto-meta">
+        <div class="inventario-producto-meta-principal inventario-producto-meta-principal--agrupado">
+          <div class="inventario-producto-info">
+            ${precioSlotHtml}
+            <div class="inventario-producto-sucursales-lista${preciosDistintos ? ' inventario-producto-sucursales-lista--precios-distintos' : ''}">${detalleSucursalesHtml}</div>
+          </div>
+        </div>
+      </div>
+    </article>
+  `;
+    }
     const nomSuc = (p.sucursal_nombre || '').replace(/</g, '&lt;');
     const lineaSucursal =
       verTodasSucursales && nomSuc
         ? `<div class="inventario-producto-sucursal">${nomSuc}</div>`
         : '';
-    const esConsignado = Boolean(p.es_consignado);
     if (esConsignado) {
       const precioVenta = Number(p.precio_venta ?? p.precio) || 0;
       const costo = Number(p.costo_consignacion) || 0;
@@ -1552,7 +2075,7 @@ function renderInventarioVistaCards() {
     <article class="inventario-producto-card inventario-producto-card--consignado" data-id="${p.id}" data-consignado="1">
       ${htmlBotonFavoritoInventario(p)}
       <div class="inventario-consignado-etiqueta">Consignado</div>
-      <div class="inventario-producto-nombre">${(p.nombre || '').replace(/</g, '&lt;')}</div>
+      <div class="inventario-producto-nombre">${escHtmlInventario(nombreProductoInventarioDisplay(p))}</div>
       <div class="inventario-producto-meta">
         <div class="inventario-producto-meta-principal">
           <div class="inventario-consignado-datos">
@@ -1569,18 +2092,20 @@ function renderInventarioVistaCards() {
     </article>
   `;
     }
-    const cantidadLabel = `Stock: ${p.stock ?? 0}`;
+    const stockNum = Number(p.stock) || 0;
+    const sinStock = stockNum <= 0;
+    const cantidadLabel = `Stock: ${stockNum}`;
     const btnEditar = `<button type="button" class="inventario-producto-editar" data-id="${p.id}" title="Editar producto" aria-label="Editar producto">${UC_ICONO_EDITAR}</button>`;
     return `
-    <article class="inventario-producto-card" data-id="${p.id}">
+    <article class="inventario-producto-card${sinStock ? ' inventario-producto-card--sin-stock' : ''}" data-id="${p.id}">
       ${htmlBotonFavoritoInventario(p)}
-      ${htmlInventarioCardImagen(p)}
-      <div class="inventario-producto-nombre">${(p.nombre || '').replace(/</g, '&lt;')}</div>
+      ${htmlInventarioCardImagen(p, sinStock)}
+      <div class="inventario-producto-nombre">${escHtmlInventario(nombreProductoInventarioDisplay(p))}</div>
       <div class="inventario-producto-meta">
         <div class="inventario-producto-meta-principal">
           <div class="inventario-producto-info">
-            <div class="inventario-producto-precio">${formatearPrecio(Number(p.precio))}</div>
-            <div class="inventario-producto-stock">${cantidadLabel}</div>
+            <div class="inventario-producto-precio">${formatearPrecioProductoInventario(p)}</div>
+            <div class="inventario-producto-stock${sinStock ? ' inventario-producto-stock--agotado' : ''}">${cantidadLabel}</div>
           </div>
           ${btnEditar}
         </div>
@@ -1663,6 +2188,7 @@ function renderInventarioVistaCards() {
 
   function abrirZoomDesdeCardEl(el) {
     const card = el.closest('.inventario-producto-card');
+    if (card?.dataset?.agrupado === '1') return;
     const id = Number(card?.dataset.id);
     const prod = productosInventario.find((p) => Number(p.id) === id);
     if (prod) abrirInventarioProductoZoom(prod);
@@ -1692,6 +2218,31 @@ function renderInventarioVistaCards() {
 }
 
 let inventarioZoomAbierto = false;
+let inventarioZoomProducto = null;
+
+function puedeTrasladarProductoInventario(p) {
+  if (!p || p.es_consignado) return false;
+  const stock = Number(p.stock) || 0;
+  return stock > 0;
+}
+
+function getSucursalIdProductoInventario(p) {
+  const sid = p?.sucursal_id ?? p?.id_sucursal;
+  const n = Number(sid);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+/** Evita que la rueda del mouse cambie inputs type=number; desplaza el panel scrollable. */
+function redirigirWheelScrollPanelDesdeInputNumerico($scrollContainer) {
+  if (!$scrollContainer || $scrollContainer.dataset.wheelNumeroPanel === '1') return;
+  $scrollContainer.dataset.wheelNumeroPanel = '1';
+  $scrollContainer.addEventListener('wheel', (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'number') return;
+    e.preventDefault();
+    $scrollContainer.scrollTop += e.deltaY;
+  }, { passive: false });
+}
 
 function cerrarInventarioProductoZoom() {
   const $bd = document.getElementById('inventario-producto-zoom-backdrop');
@@ -1702,6 +2253,7 @@ function cerrarInventarioProductoZoom() {
   $bd.setAttribute('aria-hidden', 'true');
   $panel.setAttribute('aria-hidden', 'true');
   inventarioZoomAbierto = false;
+  inventarioZoomProducto = null;
   document.body.classList.remove('inventario-zoom-abierto');
 }
 
@@ -1732,6 +2284,7 @@ function abrirInventarioProductoZoom(p) {
   const $img = document.getElementById('inventario-zoom-img');
   const $nom = document.getElementById('inventario-zoom-nombre');
   const $pre = document.getElementById('inventario-zoom-precio');
+  const $costoCompra = document.getElementById('inventario-zoom-costo-compra');
   const $stock = document.getElementById('inventario-zoom-stock');
   const $cat = document.getElementById('inventario-zoom-cat');
   const $suc = document.getElementById('inventario-zoom-sucursal');
@@ -1742,8 +2295,33 @@ function abrirInventarioProductoZoom(p) {
   } else {
     configurarImagenZoomInventario($img, null);
   }
-  $nom.textContent = p.nombre || 'Producto';
-  if ($pre) $pre.textContent = formatearPrecio(Number(p.precio));
+  $nom.textContent = nombreProductoInventarioDisplay(p) || 'Producto';
+  const esConsignado = Boolean(p.es_consignado);
+  if ($pre) {
+    if (esConsignado) {
+      $pre.textContent = `Venta: ${formatearPrecio(Number(p.precio_venta ?? p.precio) || 0)}`;
+    } else {
+      $pre.textContent = `Venta: ${formatearPrecioProductoInventario(p)}`;
+    }
+  }
+  if ($costoCompra) {
+    let costo = null;
+    if (esConsignado) {
+      const c = Number(p.costo_consignacion);
+      costo = Number.isFinite(c) && c > 0 ? c : null;
+    } else {
+      costo = getCostoCompraProducto(p);
+    }
+    if (costo != null) {
+      $costoCompra.textContent = esConsignado
+        ? `Costo de consignación: ${formatearPrecio(costo)}`
+        : `Costo de compra: ${formatearPrecio(costo)}`;
+      $costoCompra.hidden = false;
+    } else {
+      $costoCompra.textContent = '';
+      $costoCompra.hidden = true;
+    }
+  }
   if ($stock) $stock.textContent = `Stock: ${p.stock ?? 0}`;
   if ($cat) {
     const catRaw = (p.categoria || '').trim();
@@ -1765,6 +2343,9 @@ function abrirInventarioProductoZoom(p) {
       $suc.hidden = true;
     }
   }
+  inventarioZoomProducto = p;
+  const $btnTrasladar = document.getElementById('inventario-zoom-trasladar');
+  if ($btnTrasladar) $btnTrasladar.hidden = !puedeTrasladarProductoInventario(p);
   $bd.classList.add('visible');
   $panel.classList.add('visible');
   $bd.setAttribute('aria-hidden', 'false');
@@ -1777,11 +2358,16 @@ function initInventarioProductoZoom() {
   const $bd = document.getElementById('inventario-producto-zoom-backdrop');
   const $panel = document.getElementById('inventario-producto-zoom-panel');
   const $cerrar = document.getElementById('inventario-zoom-cerrar');
+  const $trasladar = document.getElementById('inventario-zoom-trasladar');
   if (!$bd || !$panel || initInventarioProductoZoom._done) return;
   initInventarioProductoZoom._done = true;
   $cerrar?.addEventListener('click', (e) => {
     e.stopPropagation();
     cerrarInventarioProductoZoom();
+  });
+  $trasladar?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (inventarioZoomProducto) window.ucAbrirModalTrasladarProducto?.(inventarioZoomProducto);
   });
   $bd.addEventListener('click', cerrarInventarioProductoZoom);
   $panel.addEventListener('click', (e) => e.stopPropagation());
@@ -1790,11 +2376,206 @@ function initInventarioProductoZoom() {
   });
 }
 
+function initModalTrasladarInventario() {
+  if (initModalTrasladarInventario._done) return;
+  initModalTrasladarInventario._done = true;
+
+  const $modal = document.getElementById('modal-trasladar-inventario');
+  const $nombre = document.getElementById('trasladar-producto-nombre');
+  const $stockInfo = document.getElementById('trasladar-stock-disponible');
+  const $cantidad = document.getElementById('trasladar-cantidad');
+  const $cantidadMenos = document.getElementById('trasladar-cantidad-menos');
+  const $cantidadMas = document.getElementById('trasladar-cantidad-mas');
+  const $sucursalDestino = document.getElementById('trasladar-sucursal-destino');
+  const $cancelar = document.getElementById('trasladar-cancelar');
+  const $confirmar = document.getElementById('trasladar-confirmar');
+  let productoTrasladoActual = null;
+  let guardandoTraslado = false;
+
+  function cerrarModalTraslado() {
+    $modal?.classList.remove('visible');
+    $modal?.setAttribute('aria-hidden', 'true');
+    productoTrasladoActual = null;
+    guardandoTraslado = false;
+    if ($confirmar) {
+      $confirmar.disabled = false;
+      $confirmar.textContent = 'Trasladar';
+    }
+  }
+
+  async function poblarSucursalesDestino(sucursalOrigenId) {
+    if (!$sucursalDestino) return;
+    $sucursalDestino.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Seleccionar sucursal';
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    placeholder.hidden = true;
+    $sucursalDestino.appendChild(placeholder);
+    try {
+      const r = await fetch(`${API}/sucursales`, { headers: authHeaders(false) });
+      if (!r.ok) throw new Error('No se pudieron cargar las sucursales');
+      const sucursales = await r.json();
+      if (!Array.isArray(sucursales)) return;
+      sucursales.forEach((s) => {
+        const sid = Number(s.id);
+        if (!Number.isFinite(sid) || sid === sucursalOrigenId) return;
+        const opt = document.createElement('option');
+        opt.value = String(sid);
+        opt.textContent = s.nombre || `Sucursal ${sid}`;
+        $sucursalDestino.appendChild(opt);
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function actualizarMaxCantidadTraslado() {
+    if (!$cantidad || !productoTrasladoActual) return;
+    const max = Number(productoTrasladoActual.stock) || 0;
+    $cantidad.max = String(Math.max(1, max));
+    let val = parseInt($cantidad.value || '1', 10);
+    if (!Number.isFinite(val) || val < 1) val = 1;
+    if (val > max) val = max;
+    $cantidad.value = String(val);
+  }
+
+  async function abrirModalTrasladarProducto(prod) {
+    if (!prod || !puedeTrasladarProductoInventario(prod)) {
+      alert('Este producto no tiene stock disponible para trasladar');
+      return;
+    }
+    const sucursalOrigenId = getSucursalIdProductoInventario(prod);
+    if (!Number.isFinite(sucursalOrigenId)) {
+      alert('No se pudo determinar la sucursal de origen del producto');
+      return;
+    }
+    productoTrasladoActual = prod;
+    if ($nombre) $nombre.textContent = nombreProductoInventarioDisplay(prod) || prod.nombre || 'Producto';
+    if ($stockInfo) $stockInfo.textContent = `Stock disponible: ${prod.stock ?? 0}`;
+    if ($cantidad) $cantidad.value = '1';
+    await poblarSucursalesDestino(sucursalOrigenId);
+    actualizarMaxCantidadTraslado();
+    $modal?.classList.add('visible');
+    $modal?.setAttribute('aria-hidden', 'false');
+  }
+
+  async function confirmarTraslado() {
+    if (guardandoTraslado || !productoTrasladoActual) return;
+    const cantidad = parseInt($cantidad?.value || '0', 10);
+    const sucursalDestinoId = Number($sucursalDestino?.value);
+    const stockMax = Number(productoTrasladoActual.stock) || 0;
+    if (!Number.isFinite(cantidad) || cantidad < 1) {
+      alert('Ingresa una cantidad válida');
+      return;
+    }
+    if (cantidad > stockMax) {
+      alert(`Solo hay ${stockMax} unidades disponibles`);
+      return;
+    }
+    if (!Number.isFinite(sucursalDestinoId)) {
+      alert('Selecciona una sucursal destino');
+      return;
+    }
+    guardandoTraslado = true;
+    if ($confirmar) {
+      $confirmar.disabled = true;
+      $confirmar.textContent = 'Trasladando…';
+    }
+    try {
+      const r = await fetch(`${API}/productos/trasladar`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          producto_id: productoTrasladoActual.id,
+          cantidad,
+          sucursal_destino_id: sucursalDestinoId,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        alert(data.error || 'No se pudo trasladar el inventario');
+        return;
+      }
+      cerrarModalTraslado();
+      cerrarInventarioProductoZoom();
+      window.ucCerrarModalProducto?.();
+      await window.ucCargarInventarioProductos?.();
+    } catch (err) {
+      console.error(err);
+      alert('Error de red al trasladar inventario');
+    } finally {
+      guardandoTraslado = false;
+      if ($confirmar) {
+        $confirmar.disabled = false;
+        $confirmar.textContent = 'Trasladar';
+      }
+    }
+  }
+
+  $cantidadMenos?.addEventListener('click', () => {
+    if (!$cantidad) return;
+    const val = Math.max(1, parseInt($cantidad.value || '1', 10) - 1);
+    $cantidad.value = String(val);
+  });
+  $cantidadMas?.addEventListener('click', () => {
+    if (!$cantidad || !productoTrasladoActual) return;
+    const max = Number(productoTrasladoActual.stock) || 1;
+    const val = Math.min(max, parseInt($cantidad.value || '1', 10) + 1);
+    $cantidad.value = String(val);
+  });
+  $cantidad?.addEventListener('input', actualizarMaxCantidadTraslado);
+  redirigirWheelScrollPanelDesdeInputNumerico($modal?.querySelector('.modal-content'));
+  $cancelar?.addEventListener('click', cerrarModalTraslado);
+  $confirmar?.addEventListener('click', confirmarTraslado);
+  $modal?.addEventListener('click', (e) => {
+    if (e.target === $modal) cerrarModalTraslado();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && $modal?.classList.contains('visible')) cerrarModalTraslado();
+  });
+
+  window.ucAbrirModalTrasladarProducto = abrirModalTrasladarProducto;
+}
+
 // ===================== MODAL AGREGAR PRODUCTO =====================
 
+const SAMSUNG_SERIES = {
+  'Galaxy S': [
+    'Galaxy S21', 'Galaxy S21+', 'Galaxy S21 Ultra', 'Galaxy S21 FE',
+    'Galaxy S22', 'Galaxy S22+', 'Galaxy S22 Ultra',
+    'Galaxy S23', 'Galaxy S23+', 'Galaxy S23 Ultra', 'Galaxy S23 FE',
+    'Galaxy S24', 'Galaxy S24+', 'Galaxy S24 Ultra', 'Galaxy S24 FE',
+    'Galaxy S25', 'Galaxy S25+', 'Galaxy S25 Ultra',
+    'Galaxy S26', 'Galaxy S26+', 'Galaxy S26 Ultra',
+  ],
+  'Galaxy A': [
+    'Galaxy A12', 'Galaxy A13', 'Galaxy A14', 'Galaxy A15', 'Galaxy A16',
+    'Galaxy A20', 'Galaxy A21', 'Galaxy A22', 'Galaxy A23', 'Galaxy A24', 'Galaxy A25', 'Galaxy A26',
+    'Galaxy A30', 'Galaxy A31', 'Galaxy A32', 'Galaxy A33', 'Galaxy A34', 'Galaxy A35', 'Galaxy A36',
+    'Galaxy A50', 'Galaxy A51', 'Galaxy A52', 'Galaxy A53', 'Galaxy A54', 'Galaxy A55', 'Galaxy A56',
+  ],
+  'Galaxy Z': [
+    'Galaxy Z Flip 3', 'Galaxy Z Flip 4', 'Galaxy Z Flip 5', 'Galaxy Z Flip 6',
+    'Galaxy Z Fold 3', 'Galaxy Z Fold 4', 'Galaxy Z Fold 5', 'Galaxy Z Fold 6',
+  ],
+  'Galaxy Note': [
+    'Galaxy Note 10', 'Galaxy Note 10+', 'Galaxy Note 20', 'Galaxy Note 20 Ultra',
+  ],
+};
+
 const MARCAS_MODELOS = {
-  Apple: ['iPhone 15', 'iPhone 15 Pro', 'iPhone 14', 'iPhone 14 Pro', 'iPhone 13', 'iPhone 12', 'iPhone SE'],
-  Samsung: ['Galaxy S24', 'Galaxy S23', 'Galaxy A54', 'Galaxy A34', 'Galaxy Z Flip', 'Galaxy Z Fold'],
+  Apple: [
+    'iPhone 12 mini', 'iPhone 12', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
+    'iPhone 13 mini', 'iPhone 13', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
+    'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
+    'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
+    'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+    'iPhone 17', 'iPhone 17 Air', 'iPhone 17 Pro', 'iPhone 17 Pro Max',
+    'iPhone SE',
+  ],
+  Samsung: Object.values(SAMSUNG_SERIES).flat(),
   Xiaomi: ['Redmi Note 13', 'Redmi 12', 'POCO X6', 'Mi 14'],
   Motorola: ['Edge 40', 'Edge 30', 'Moto G84', 'Razr'],
   Huawei: ['P60', 'P50', 'Mate 60', 'Nova 12'],
@@ -1805,11 +2586,36 @@ const MARCAS_MODELOS = {
   Honor: ['Honor 90', 'Honor Magic 5', 'Honor X9b'],
 };
 
+const IMAGEN_PRODUCTO_MAX_BYTES = 3 * 1024 * 1024;
+const IMAGEN_PRODUCTO_MAX_BASE64 = 3_500_000;
+
 function initProductoModal() {
   const $modal = document.getElementById('modal-producto');
   const $form = document.getElementById('form-producto');
   const $modalTitulo = document.getElementById('modal-producto-titulo');
   const $modalSubmit = document.getElementById('modal-producto-submit');
+  let guardandoProductoModal = false;
+
+  function bloquearEnvioProductoModal() {
+    if (guardandoProductoModal) return false;
+    guardandoProductoModal = true;
+    if ($modalSubmit) {
+      $modalSubmit.dataset.textoOriginal = $modalSubmit.textContent || '';
+      $modalSubmit.disabled = true;
+      $modalSubmit.textContent = 'Guardando…';
+    }
+    return true;
+  }
+
+  function desbloquearEnvioProductoModal() {
+    guardandoProductoModal = false;
+    if (!$modalSubmit) return;
+    $modalSubmit.disabled = false;
+    if ($modalSubmit.dataset.textoOriginal) {
+      $modalSubmit.textContent = $modalSubmit.dataset.textoOriginal;
+    }
+  }
+
   const $categoria = document.getElementById('prod-categoria');
   const $camposMicas = document.getElementById('prod-campos-micas');
   const $camposFundas = document.getElementById('prod-campos-fundas');
@@ -1825,10 +2631,26 @@ function initProductoModal() {
   const $tipoHidrogel = document.getElementById('prod-mica-tipo-hidrogel');
   const $marcaModeloWrap = document.getElementById('prod-mica-marca-modelo');
   const $marca = document.getElementById('prod-mica-marca');
+  const $micaSerieWrap = document.getElementById('prod-mica-serie-wrap');
+  const $micaSerieCel = document.getElementById('prod-mica-serie-cel');
   const $modelo = document.getElementById('prod-mica-modelo');
   const $precio = document.getElementById('prod-precio');
   const $precioMenos = document.getElementById('prod-precio-menos');
   const $precioMas = document.getElementById('prod-precio-mas');
+  const $prodPrecioWrap = document.getElementById('prod-precio-wrap');
+  const $costoCompraWrap = document.getElementById('prod-costo-compra-wrap');
+  const $costoCompra = document.getElementById('prod-costo-compra');
+  const $costoCompraMenos = document.getElementById('prod-costo-compra-menos');
+  const $costoCompraMas = document.getElementById('prod-costo-compra-mas');
+  const $fundaRangoPrecioWrap = document.getElementById('prod-funda-rango-precio-wrap');
+  const $fundaPrecioRangoTab = document.getElementById('prod-funda-precio-rango-tab');
+  const $fundaPrecioFijoTab = document.getElementById('prod-funda-precio-fijo-tab');
+  const $fundaPrecioRangoPanel = document.getElementById('prod-funda-precio-rango-panel');
+  const $fundaPrecioFijoPanel = document.getElementById('prod-funda-precio-fijo-panel');
+  const $fundaPrecioFijo = document.getElementById('prod-funda-precio-fijo');
+  const $fundaPrecioFijoMenos = document.getElementById('prod-funda-precio-fijo-menos');
+  const $fundaPrecioFijoMas = document.getElementById('prod-funda-precio-fijo-mas');
+  let fundaModoPrecioFijo = false;
   const $labelPrecio = document.getElementById('prod-label-precio');
   const $precioVentaWrap = document.getElementById('prod-precio-venta-wrap');
   const $precioVenta = document.getElementById('prod-precio-venta');
@@ -1842,16 +2664,20 @@ function initProductoModal() {
   const $imagen = document.getElementById('prod-imagen');
   const $imagenNombre = document.getElementById('prod-imagen-nombre');
   const $imagenWrap = document.getElementById('prod-imagen-wrap');
+  const $imagenPreviewWrap = document.getElementById('prod-imagen-preview-wrap');
+  const $imagenPreview = document.getElementById('prod-imagen-preview');
+  let imagenProductoActual = '';
+  let imagenPendienteDataUrl = '';
   const $cancelar = document.getElementById('modal-producto-cancelar');
   const $eliminarWrap = document.getElementById('modal-producto-eliminar-wrap');
   const $eliminar = document.getElementById('modal-producto-eliminar');
+  const $trasladarWrap = document.getElementById('modal-producto-trasladar-wrap');
+  const $trasladar = document.getElementById('modal-producto-trasladar');
 
-  const $fundaMarca = document.getElementById('prod-funda-marca');
   const $fundaMarcaCel = document.getElementById('prod-funda-marca-cel');
+  const $fundaSerieWrap = document.getElementById('prod-funda-serie-wrap');
+  const $fundaSerieCel = document.getElementById('prod-funda-serie-cel');
   const $fundaModeloCel = document.getElementById('prod-funda-modelo-cel');
-  const $fundaTipo = document.getElementById('prod-funda-tipo');
-  const $fundaDescripcion = document.getElementById('prod-funda-descripcion');
-  const $fundaRangos = document.getElementById('prod-funda-rangos');
 
   const $cargadorTipo = document.getElementById('prod-cargador-tipo');
   const $cargadorMarca = document.getElementById('prod-cargador-marca');
@@ -1891,7 +2717,6 @@ function initProductoModal() {
   const customDropdowns = {};
   let cargandoEdicionProducto = false;
   let productoEditNombre = '';
-  let rangoFundaSinAuto = false;
 
   function mostrarBtnEliminarProducto(visible, esConsignado = false) {
     if ($eliminarWrap) $eliminarWrap.hidden = !visible;
@@ -1900,12 +2725,154 @@ function initProductoModal() {
     }
   }
 
+  function mostrarBtnTrasladarProducto(visible) {
+    if ($trasladarWrap) $trasladarWrap.hidden = !visible;
+  }
+
   const iconPencil = UC_ICONO_EDITAR;
 
   const NO_PENCIL_IDS = ['prod-categoria', 'prod-mica-tipo-cristal', 'prod-mica-tipo-hidrogel', 'prod-cargador-tipo', 'prod-audifonos-tipo', 'prod-audifonos-conexion'];
+  const MODELO_CEL_SELECT_IDS = new Set(['prod-mica-modelo', 'prod-funda-modelo-cel']);
+  const MARCA_POR_MODELO_ID = {
+    'prod-mica-modelo': 'prod-mica-marca',
+    'prod-funda-modelo-cel': 'prod-funda-marca-cel',
+  };
+  const PREFIJO_MODELO_APPLE = 'iPhone ';
+
+  function esMarcaAppleEnModelo($modeloSel) {
+    const marcaId = MARCA_POR_MODELO_ID[$modeloSel?.id];
+    if (!marcaId) return false;
+    const $marcaSel = document.getElementById(marcaId);
+    return $marcaSel?.value === 'Apple';
+  }
+
+  function valorInicialInputModelo($modeloSel, valorInicial, textoOpcionActual) {
+    if (!MODELO_CEL_SELECT_IDS.has($modeloSel?.id) || !esMarcaAppleEnModelo($modeloSel)) {
+      if (valorInicial !== undefined) return String(valorInicial);
+      return textoOpcionActual || '';
+    }
+    if (valorInicial !== undefined && String(valorInicial).trim()) {
+      return String(valorInicial);
+    }
+    const texto = String(textoOpcionActual || '').trim();
+    if (texto) {
+      return texto.startsWith('iPhone') ? texto : PREFIJO_MODELO_APPLE + texto;
+    }
+    return PREFIJO_MODELO_APPLE;
+  }
+
+  function enfocarInputModeloApple($modeloSel, customInput, valor) {
+    if (!customInput || !MODELO_CEL_SELECT_IDS.has($modeloSel?.id) || !esMarcaAppleEnModelo($modeloSel)) return;
+    if (!String(valor).startsWith(PREFIJO_MODELO_APPLE)) return;
+    requestAnimationFrame(() => {
+      customInput.focus();
+      const pos = customInput.value.length;
+      customInput.setSelectionRange(pos, pos);
+    });
+  }
 
   function textoPlaceholderSinPuntos(texto) {
     return String(texto || 'Seleccionar').trim().replace(/\.{3}$/u, '').replace(/…$/u, '');
+  }
+
+  function actualizarPreviewImagenProducto(src) {
+    const url = src || imagenPendienteDataUrl || imagenProductoActual || '';
+    if (!$imagenPreviewWrap || !$imagenPreview) return;
+
+    $imagenPreview.onload = null;
+    $imagenPreview.onerror = null;
+
+    if (!url) {
+      $imagenPreview.removeAttribute('src');
+      $imagenPreview.alt = '';
+      $imagenPreviewWrap.hidden = true;
+      return;
+    }
+
+    function mostrarPreviewCargada() {
+      $imagenPreview.alt = 'Vista previa del producto';
+      $imagenPreviewWrap.hidden = false;
+      $imagenPreview.onload = null;
+      $imagenPreview.onerror = null;
+    }
+
+    function ocultarPreviewRota() {
+      $imagenPreview.removeAttribute('src');
+      $imagenPreview.alt = '';
+      $imagenPreviewWrap.hidden = true;
+      $imagenPreview.onload = null;
+      $imagenPreview.onerror = null;
+    }
+
+    $imagenPreviewWrap.hidden = true;
+    $imagenPreview.alt = '';
+    $imagenPreview.onload = mostrarPreviewCargada;
+    $imagenPreview.onerror = ocultarPreviewRota;
+    $imagenPreview.src = url;
+    if ($imagenPreview.complete && $imagenPreview.naturalWidth > 0) {
+      mostrarPreviewCargada();
+    }
+  }
+
+  function leerArchivoImagenProducto(file) {
+    return new Promise((resolve) => {
+      if (!file) {
+        resolve({ data: null, error: null });
+        return;
+      }
+      const maxMb = Math.round(IMAGEN_PRODUCTO_MAX_BYTES / 1024 / 1024);
+      if (file.size > IMAGEN_PRODUCTO_MAX_BYTES) {
+        resolve({ data: null, error: `La imagen es muy pesada (máx. ${maxMb} MB).` });
+        return;
+      }
+      const img = new Image();
+      const blobUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(blobUrl);
+        const maxSide = 1200;
+        let { width, height } = img;
+        if (width > maxSide || height > maxSide) {
+          const ratio = Math.min(maxSide / width, maxSide / height);
+          width = Math.max(1, Math.round(width * ratio));
+          height = Math.max(1, Math.round(height * ratio));
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve({ data: null, error: 'No se pudo procesar la imagen seleccionada.' });
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const usarPng = file.type === 'image/png';
+        const data = canvas.toDataURL(usarPng ? 'image/png' : 'image/jpeg', usarPng ? undefined : 0.88);
+        if (data.length > IMAGEN_PRODUCTO_MAX_BASE64) {
+          resolve({ data: null, error: 'La imagen es demasiado grande. Usa otra foto.' });
+          return;
+        }
+        resolve({ data, error: null });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        resolve({ data: null, error: 'No se pudo leer la imagen seleccionada.' });
+      };
+      img.src = blobUrl;
+    });
+  }
+
+  async function resolverImagenParaGuardarProducto() {
+    if (imagenPendienteDataUrl) {
+      return { data: imagenPendienteDataUrl, error: null };
+    }
+    const file = $imagen?.files?.[0];
+    if (file) {
+      return leerArchivoImagenProducto(file);
+    }
+    if (imagenProductoActual) {
+      return { data: imagenProductoActual, error: null };
+    }
+    return { data: null, error: null };
   }
 
   function placeholderSeleccionarDelSelect($select) {
@@ -2006,12 +2973,11 @@ function initProductoModal() {
       trigger.style.display = 'none';
       customInput.style.display = 'block';
       customInput.placeholder = placeholderModoIngresar(placeholderSeleccionarDelSelect($select));
-      if (valorInicial !== undefined) {
-        customInput.value = String(valorInicial);
-      } else {
-        const opt = $select.options[$select.selectedIndex];
-        customInput.value = (opt && opt.value) ? opt.textContent : '';
-      }
+      const opt = $select.options[$select.selectedIndex];
+      const fromSelect = (opt && opt.value) ? opt.textContent : '';
+      const valor = valorInicialInputModelo($select, valorInicial, fromSelect);
+      customInput.value = valor;
+      enfocarInputModeloApple($select, customInput, valor);
       btnToggle.classList.add('activo');
     }
 
@@ -2046,6 +3012,12 @@ function initProductoModal() {
       $select.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
+    function setDisabled(disabled) {
+      $select.disabled = Boolean(disabled);
+      wrap.classList.toggle('custom-select-wrap--disabled', Boolean(disabled));
+      if (disabled) wrap.classList.remove('abierto');
+    }
+
     function syncDisplay() {
       const opt = $select.options[$select.selectedIndex];
       const text = opt ? opt.textContent : '';
@@ -2066,6 +3038,7 @@ function initProductoModal() {
         div.dataset.index = String(i);
         div.addEventListener('click', (e) => {
           e.stopPropagation();
+          if ($select.disabled) return;
           $select.selectedIndex = parseInt(div.dataset.index, 10);
           $select.dispatchEvent(new Event('change', { bubbles: true }));
           syncDisplay();
@@ -2092,6 +3065,7 @@ function initProductoModal() {
     if (hasPencil && btnToggle) {
       btnToggle.addEventListener('click', (e) => {
         e.stopPropagation();
+        if ($select.disabled) return;
         if (wrap.classList.contains('input-mode')) {
           switchToDropdown();
         } else {
@@ -2102,6 +3076,7 @@ function initProductoModal() {
 
     trigger.addEventListener('click', (e) => {
       e.stopPropagation();
+      if ($select.disabled) return;
       if (wrap.classList.contains('input-mode')) return;
       document.querySelectorAll('#modal-producto .custom-select-wrap.abierto').forEach(w => w.classList.remove('abierto'));
       const abriendo = !wrap.classList.contains('abierto');
@@ -2113,6 +3088,7 @@ function initProductoModal() {
     });
 
     trigger.addEventListener('keydown', (e) => {
+      if ($select.disabled) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         trigger.click();
@@ -2135,8 +3111,12 @@ function initProductoModal() {
     }
 
     refresh();
-    customDropdowns[$select.id] = { refresh, syncDisplay, switchToDropdown, switchToInputWithValue, wrap };
+    customDropdowns[$select.id] = { refresh, syncDisplay, switchToDropdown, switchToInputWithValue, setDisabled, wrap };
     return customDropdowns[$select.id];
+  }
+
+  function setCategoriaProductoModalBloqueada(bloquear) {
+    customDropdowns['prod-categoria']?.setDisabled?.(bloquear);
   }
 
   let modalModoConsignada = false;
@@ -2174,11 +3154,13 @@ function initProductoModal() {
       if (consignada) $form.dataset.modo = 'consignada';
       else delete $form.dataset.modo;
     }
-    if ($labelPrecio) $labelPrecio.textContent = consignada ? 'Costo de consignación' : 'Precio';
+    if ($labelPrecio) $labelPrecio.textContent = consignada ? 'Costo de consignación' : 'Precio de venta';
     if ($precioVentaWrap) $precioVentaWrap.hidden = !consignada;
+    if ($costoCompraWrap) $costoCompraWrap.hidden = consignada;
     if ($stockWrap) $stockWrap.hidden = consignada;
     if ($imagenWrap) $imagenWrap.hidden = consignada;
-    if ($precio) $precio.setAttribute('aria-label', consignada ? 'Costo de consignación' : 'Precio');
+    actualizarVisibilidadPrecioFundas();
+    if ($precio) $precio.setAttribute('aria-label', consignada ? 'Costo de consignación' : 'Precio de venta');
     if ($modalTitulo) $modalTitulo.textContent = consignada ? 'Producto consignado' : 'Agregar producto';
     if ($modalSubmit) {
       $modalSubmit.textContent = consignada ? 'Guardar producto consignado' : 'Agregar producto';
@@ -2190,6 +3172,63 @@ function initProductoModal() {
   document.querySelectorAll('#modal-producto input, #modal-producto textarea').forEach((el) => {
     el.spellcheck = false;
   });
+
+  function esCategoriaFundasActiva() {
+    return $categoria?.value === 'fundas';
+  }
+
+  function esFundaPrecioFijoActivo() {
+    return fundaModoPrecioFijo;
+  }
+
+  function aplicarModoPrecioFunda(fijo) {
+    fundaModoPrecioFijo = fijo;
+    $fundaPrecioRangoTab?.classList.toggle('activo', !fijo);
+    $fundaPrecioFijoTab?.classList.toggle('activo', fijo);
+    $fundaPrecioRangoTab?.setAttribute('aria-selected', fijo ? 'false' : 'true');
+    $fundaPrecioFijoTab?.setAttribute('aria-selected', fijo ? 'true' : 'false');
+    if ($fundaPrecioRangoPanel) $fundaPrecioRangoPanel.hidden = fijo;
+    if ($fundaPrecioFijoPanel) $fundaPrecioFijoPanel.hidden = !fijo;
+    if (fijo) {
+      initSliderRangoFundasProducto();
+    } else {
+      actualizarUiSliderRangoFundas();
+    }
+  }
+
+  function resetPrecioFundasForm() {
+    aplicarModoPrecioFunda(false);
+    resetRangoPrecioFundasForm();
+    if ($fundaPrecioFijo) $fundaPrecioFijo.value = '';
+  }
+
+  function actualizarVisibilidadPrecioFundas() {
+    const esFundas = esCategoriaFundasActiva() && !esModoConsignadaModal();
+    if ($prodPrecioWrap) $prodPrecioWrap.hidden = esFundas;
+    if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = !esFundas;
+    if (esFundas) {
+      initSliderRangoFundasProducto();
+      actualizarUiSliderRangoFundas();
+    }
+  }
+
+  function salirModoInputCustomDropdownsModal() {
+    Object.keys(customDropdowns).forEach((id) => {
+      if (id === '_closeListener') return;
+      const wrap = customDropdowns[id]?.wrap;
+      if (!wrap?.classList.contains('input-mode')) return;
+      wrap.classList.remove('input-mode');
+      const trigger = wrap.querySelector('.custom-select-trigger');
+      const customInput = wrap.querySelector('.custom-select-input');
+      const btnToggle = wrap.querySelector('.custom-select-pencil-btn');
+      if (trigger) trigger.style.display = '';
+      if (customInput) {
+        customInput.style.display = 'none';
+        customInput.value = '';
+      }
+      btnToggle?.classList.remove('activo');
+    });
+  }
 
   function resetModal() {
     if ($categoria) $categoria.value = '';
@@ -2207,15 +3246,15 @@ function initProductoModal() {
     $tipoHidrogel.value = '';
     $marcaModeloWrap.style.display = 'none';
     $marca.innerHTML = '<option value="">Seleccionar marca</option>';
+    if ($micaSerieWrap) $micaSerieWrap.style.display = 'none';
+    if ($micaSerieCel) $micaSerieCel.innerHTML = '<option value="">Seleccionar serie</option>';
     $modelo.innerHTML = '<option value="">Seleccionar modelo</option>';
-    if ($fundaMarca) $fundaMarca.value = '';
     if ($fundaMarcaCel) $fundaMarcaCel.value = '';
+    if ($fundaSerieWrap) $fundaSerieWrap.style.display = 'none';
+    if ($fundaSerieCel) $fundaSerieCel.innerHTML = '<option value="">Seleccionar serie</option>';
     if ($fundaModeloCel) $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo</option>';
-    if ($fundaTipo) $fundaTipo.value = '';
-    if ($fundaDescripcion) $fundaDescripcion.value = '';
+    customDropdowns['prod-funda-serie-cel']?.refresh();
     customDropdowns['prod-funda-modelo-cel']?.refresh();
-    $fundaRangos?.querySelectorAll('.form-chip.activo').forEach(c => c.classList.remove('activo'));
-    rangoFundaSinAuto = false;
     if ($cargadorTipo) $cargadorTipo.value = '';
     if ($cargadorMarca) $cargadorMarca.value = '';
     if ($cargadorWatts) $cargadorWatts.value = '0';
@@ -2235,6 +3274,11 @@ function initProductoModal() {
     if ($bocinaWatts) $bocinaWatts.value = '0';
     if ($bocinaColor) $bocinaColor.value = '';
     $precio.value = '';
+    if ($costoCompra) $costoCompra.value = '';
+    resetPrecioFundasForm();
+    if ($prodPrecioWrap) $prodPrecioWrap.hidden = false;
+    if ($costoCompraWrap) $costoCompraWrap.hidden = false;
+    if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = true;
     if ($stockValor) $stockValor.value = '';
     if ($imagen) $imagen.value = '';
     if ($imagenNombre) $imagenNombre.textContent = '';
@@ -2242,16 +3286,19 @@ function initProductoModal() {
     delete $form?.dataset.editSucursalId;
     delete $form?.dataset.editConsignadoId;
     delete $form?.dataset.editConsignadoSucursalId;
-    delete $form?.dataset.imagenActual;
     delete $form?.dataset.modo;
+    imagenProductoActual = '';
+    imagenPendienteDataUrl = '';
+    actualizarPreviewImagenProducto('');
     modalModoConsignada = false;
-    if ($labelPrecio) $labelPrecio.textContent = 'Precio';
+    if ($labelPrecio) $labelPrecio.textContent = 'Precio de venta';
     if ($labelStock) $labelStock.textContent = 'Stock';
     if ($precioVentaWrap) $precioVentaWrap.hidden = true;
+    if ($costoCompraWrap) $costoCompraWrap.hidden = false;
     if ($stockWrap) $stockWrap.hidden = false;
     if ($imagenWrap) $imagenWrap.hidden = false;
     if ($precioVenta) $precioVenta.value = '';
-    if ($precio) $precio.setAttribute('aria-label', 'Precio');
+    if ($precio) $precio.setAttribute('aria-label', 'Precio de venta');
     if ($stockValor) {
       $stockValor.value = '';
       $stockValor.setAttribute('aria-label', 'Cantidad en stock');
@@ -2260,7 +3307,11 @@ function initProductoModal() {
     if ($modalSubmit) $modalSubmit.textContent = 'Agregar producto';
     productoEditNombre = '';
     mostrarBtnEliminarProducto(false);
+    mostrarBtnTrasladarProducto(false);
+    setCategoriaProductoModalBloqueada(false);
+    desbloquearEnvioProductoModal();
     actualizarCamposCargadorTipo();
+    salirModoInputCustomDropdownsModal();
     document.querySelectorAll('#modal-producto .custom-select-wrap.abierto').forEach(w => w.classList.remove('abierto'));
     Object.keys(customDropdowns).forEach(id => {
       if (id === '_closeListener') return;
@@ -2302,41 +3353,108 @@ function initProductoModal() {
     asignarValorSelect($select, texto);
   }
 
-  function poblarSelectMarcasCel($marcaSel, $modeloSel) {
+  function poblarSelectMarcasCel($marcaSel, $modeloSel, $serieWrap, $serieSel) {
     if (!$marcaSel) return;
     $marcaSel.innerHTML = '<option value="">Seleccionar marca</option>' +
       Object.keys(MARCAS_MODELOS).map((m) => `<option value="${m}">${m}</option>`).join('');
     customDropdowns[$marcaSel.id]?.refresh?.();
+    if ($serieWrap) $serieWrap.style.display = 'none';
+    if ($serieSel) {
+      $serieSel.innerHTML = '<option value="">Seleccionar serie</option>';
+      customDropdowns[$serieSel.id]?.refresh?.();
+    }
     if ($modeloSel) {
       $modeloSel.innerHTML = '<option value="">Seleccionar modelo</option>';
       customDropdowns[$modeloSel.id]?.refresh?.();
     }
   }
 
-  function poblarModelosParaMarca($marcaSel, $modeloSel, marca) {
+  function poblarSelectSeriesSamsung($serieSel) {
+    if (!$serieSel) return;
+    $serieSel.innerHTML = '<option value="">Seleccionar serie</option>' +
+      Object.keys(SAMSUNG_SERIES).map((s) => `<option value="${s}">${s}</option>`).join('');
+    customDropdowns[$serieSel.id]?.refresh?.();
+  }
+
+  function inferirSerieSamsung(modelo) {
+    const m = String(modelo || '').trim();
+    if (!m) return '';
+    for (const [serie, modelos] of Object.entries(SAMSUNG_SERIES)) {
+      if (modelos.includes(m)) return serie;
+    }
+    if (m.startsWith('Galaxy S')) return 'Galaxy S';
+    if (m.startsWith('Galaxy A')) return 'Galaxy A';
+    if (m.startsWith('Galaxy Z')) return 'Galaxy Z';
+    if (m.startsWith('Galaxy Note')) return 'Galaxy Note';
+    return '';
+  }
+
+  function actualizarUiSerieSamsung($serieWrap, $serieSel, $modeloSel, marca, seriePrefijada) {
+    const esSamsung = marca === 'Samsung';
+    if ($serieWrap) $serieWrap.style.display = esSamsung ? '' : 'none';
+    if (!esSamsung) {
+      if ($serieSel) $serieSel.value = '';
+      return;
+    }
+    poblarSelectSeriesSamsung($serieSel);
+    if (seriePrefijada) asignarValorSelect($serieSel, seriePrefijada);
+  }
+
+  function poblarModelosParaMarca($marcaSel, $modeloSel, marca, serie) {
     if (!$modeloSel) return;
-    const modelos = MARCAS_MODELOS[marca] || [];
+    let modelos = MARCAS_MODELOS[marca] || [];
+    if (marca === 'Samsung') {
+      modelos = serie && SAMSUNG_SERIES[serie] ? SAMSUNG_SERIES[serie] : [];
+    }
     $modeloSel.innerHTML = '<option value="">Seleccionar modelo</option>' +
       modelos.map((m) => `<option value="${m}">${m}</option>`).join('');
     customDropdowns[$modeloSel.id]?.refresh?.();
   }
 
+  function onMarcaCelChange($marcaSel, $modeloSel, $serieWrap, $serieSel) {
+    const marca = $marcaSel?.value || '';
+    actualizarUiSerieSamsung($serieWrap, $serieSel, $modeloSel, marca);
+    if (marca === 'Samsung') {
+      poblarModelosParaMarca($marcaSel, $modeloSel, marca);
+      return;
+    }
+    if (marca) poblarModelosParaMarca($marcaSel, $modeloSel, marca);
+    else if ($modeloSel) {
+      $modeloSel.innerHTML = '<option value="">Seleccionar modelo</option>';
+      customDropdowns[$modeloSel.id]?.refresh?.();
+    }
+  }
+
+  function getSerieElementsForMarca($marcaSel) {
+    if ($marcaSel?.id === 'prod-mica-marca') {
+      return { wrap: $micaSerieWrap, sel: $micaSerieCel };
+    }
+    if ($marcaSel?.id === 'prod-funda-marca-cel') {
+      return { wrap: $fundaSerieWrap, sel: $fundaSerieCel };
+    }
+    return { wrap: null, sel: null };
+  }
+
   function asignarMarcaYModeloEnSelects($marcaSel, $modeloSel, marcaTexto, modeloTexto) {
     const marca = String(marcaTexto || '').trim();
     const modelo = String(modeloTexto || '').trim();
+    const { wrap: $serieWrap, sel: $serieSel } = getSerieElementsForMarca($marcaSel);
     if (!marca) {
       if (modelo) asignarValorSelect($modeloSel, modelo);
       return;
     }
     if (MARCAS_MODELOS[marca]) {
-      if ($marcaSel.options.length <= 1) poblarSelectMarcasCel($marcaSel, $modeloSel);
+      if ($marcaSel.options.length <= 1) poblarSelectMarcasCel($marcaSel, $modeloSel, $serieWrap, $serieSel);
       asignarValorSelect($marcaSel, marca);
-      poblarModelosParaMarca($marcaSel, $modeloSel, marca);
+      const serie = marca === 'Samsung' ? inferirSerieSamsung(modelo) : '';
+      actualizarUiSerieSamsung($serieWrap, $serieSel, $modeloSel, marca, serie);
+      poblarModelosParaMarca($marcaSel, $modeloSel, marca, serie);
       if (modelo) asignarValorSelect($modeloSel, modelo);
       return;
     }
-    if ($marcaSel.options.length <= 1) poblarSelectMarcasCel($marcaSel, $modeloSel);
+    if ($marcaSel.options.length <= 1) poblarSelectMarcasCel($marcaSel, $modeloSel, $serieWrap, $serieSel);
     asignarValorSelect($marcaSel, marca);
+    actualizarUiSerieSamsung($serieWrap, $serieSel, $modeloSel, marca);
     if (modelo) asignarValorSelect($modeloSel, modelo);
   }
 
@@ -2352,6 +3470,19 @@ function initProductoModal() {
   function extraerMarcaModeloCel(texto) {
     const s = (texto || '').trim();
     if (!s) return null;
+
+    const marcasOrden = Object.keys(MARCAS_MODELOS).sort((a, b) => b.length - a.length);
+    for (const marca of marcasOrden) {
+      const prefijo = `${marca} `;
+      if (s.toLowerCase().startsWith(prefijo.toLowerCase())) {
+        return {
+          marca,
+          modelo: s.slice(prefijo.length).trim(),
+          resto: '',
+        };
+      }
+    }
+
     let mejor = null;
     for (const marca of Object.keys(MARCAS_MODELOS)) {
       for (const modelo of MARCAS_MODELOS[marca]) {
@@ -2384,29 +3515,40 @@ function initProductoModal() {
     return null;
   }
 
+  function inferirMarcaDesdeModelo(texto) {
+    const s = (texto || '').trim();
+    if (!s) return null;
+
+    for (const marca of Object.keys(MARCAS_MODELOS).sort((a, b) => b.length - a.length)) {
+      const prefijo = `${marca} `;
+      if (s.toLowerCase().startsWith(prefijo.toLowerCase())) {
+        const modelo = s.slice(prefijo.length).trim();
+        return inferirMarcaDesdeModelo(modelo) || { marca, modelo };
+      }
+    }
+
+    let mejor = null;
+    for (const marca of Object.keys(MARCAS_MODELOS)) {
+      for (const modelo of MARCAS_MODELOS[marca]) {
+        if (s === modelo) {
+          if (!mejor || modelo.length > mejor.modelo.length) {
+            mejor = { marca, modelo };
+          }
+        }
+      }
+    }
+    if (mejor) return mejor;
+    if (/^iPhone\b/i.test(s)) return { marca: 'Apple', modelo: s };
+    if (/^Galaxy\b/i.test(s)) return { marca: 'Samsung', modelo: s };
+    return null;
+  }
+
   function opcionesTextoSelect($select) {
     if (!$select) return [];
     return Array.from($select.options)
       .filter((o) => o.value)
       .map((o) => ({ value: o.value, text: o.textContent.trim() }))
       .sort((a, b) => b.text.length - a.text.length);
-  }
-
-  function matchPrefijoTipoFunda(texto) {
-    const opts = opcionesTextoSelect($fundaTipo);
-    for (const o of opts) {
-      if (texto === o.text) return { value: o.value, resto: '' };
-      if (texto.startsWith(o.text + ' ')) return { value: o.value, resto: texto.slice(o.text.length).trim() };
-    }
-    return { value: '', resto: texto };
-  }
-
-  function aplicarRangoFunda(rango) {
-    if (!$fundaRangos || !rango) return;
-    rangoFundaSinAuto = false;
-    $fundaRangos.querySelectorAll('.form-chip').forEach((c) => c.classList.remove('activo'));
-    const chip = $fundaRangos.querySelector(`.form-chip[data-rango="${rango}"]`);
-    if (chip) chip.classList.add('activo');
   }
 
   function limpiarNombreProducto(texto) {
@@ -2668,39 +3810,15 @@ function initProductoModal() {
 
     if (cat === 'fundas') {
       let s = nombre.replace(/^Funda\s+/i, '').trim();
-      let rango = '';
-      const rangoM = s.match(/\s+—\s+Rango\s+([\d-]+)\s*$/i);
-      if (rangoM) {
-        rango = rangoM[1];
-        s = s.slice(0, -rangoM[0].length).trim();
-      }
-      let desc = '';
+      s = s.replace(/\s+—\s+Rango\s+[\d-]+\s*$/i, '').trim();
       const dashIdx = s.indexOf(' — ');
-      if (dashIdx >= 0) {
-        desc = s.slice(dashIdx + 3).trim();
-        s = s.slice(0, dashIdx).trim();
-      }
-      const tipoMatch = matchPrefijoTipoFunda(s);
-      if (tipoMatch.value) {
-        const optTipo = Array.from($fundaTipo?.options || []).find((o) => o.value === tipoMatch.value);
-        asignarValorSelect($fundaTipo, optTipo?.textContent?.trim() || tipoMatch.value);
-        s = tipoMatch.resto;
-      } else if (s.trim()) {
-        asignarValorSelect($fundaTipo, s.trim());
-        s = '';
-      }
-      const mm = extraerMarcaModeloCel(s);
+      if (dashIdx >= 0) s = s.slice(0, dashIdx).trim();
+      poblarSelectMarcasCel($fundaMarcaCel, $fundaModeloCel, $fundaSerieWrap, $fundaSerieCel);
+      const mm = extraerMarcaModeloCel(s) || inferirMarcaDesdeModelo(s);
       if (mm) {
         asignarMarcaYModeloEnSelects($fundaMarcaCel, $fundaModeloCel, mm.marca, mm.modelo);
-        s = mm.resto;
-      }
-      if (s.trim() && $fundaMarca) $fundaMarca.value = s.trim();
-      if (desc && $fundaDescripcion) $fundaDescripcion.value = desc;
-      if (rango) {
-        aplicarRangoFunda(rango);
-      } else {
-        rangoFundaSinAuto = true;
-        $fundaRangos?.querySelectorAll('.form-chip.activo').forEach((c) => c.classList.remove('activo'));
+        customDropdowns['prod-funda-marca-cel']?.syncDisplay?.();
+        customDropdowns['prod-funda-modelo-cel']?.syncDisplay?.();
       }
       return;
     }
@@ -2728,11 +3846,11 @@ function initProductoModal() {
         const mm = extraerMarcaModeloCel(mmPart);
         if (mm) {
           $marcaModeloWrap.style.display = 'block';
-          poblarSelectMarcasCel($marca, $modelo);
+          poblarSelectMarcasCel($marca, $modelo, $micaSerieWrap, $micaSerieCel);
           asignarMarcaYModeloEnSelects($marca, $modelo, mm.marca, mm.modelo);
         } else if (mmPart) {
           $marcaModeloWrap.style.display = 'block';
-          poblarSelectMarcasCel($marca, $modelo);
+          poblarSelectMarcasCel($marca, $modelo, $micaSerieWrap, $micaSerieCel);
           asignarValorSelect($marca, mmPart);
         }
         return;
@@ -2773,6 +3891,20 @@ function initProductoModal() {
     if (!prod) return;
     cargandoEdicionProducto = true;
     if ($precio) $precio.value = String(prod.precio ?? '');
+    const costoCompraProd = getCostoCompraProducto(prod);
+    if ($costoCompra) $costoCompra.value = costoCompraProd != null ? String(costoCompraProd) : '';
+    if (prod.categoria === 'fundas') {
+      if (productoFundaTieneRangoPrecio(prod)) {
+        aplicarModoPrecioFunda(false);
+        establecerRangoPrecioFundasForm(getPrecioMinProducto(prod), getPrecioMaxProducto(prod));
+      } else {
+        aplicarModoPrecioFunda(true);
+        if ($fundaPrecioFijo) {
+          const precioFijo = getPrecioMinProducto(prod);
+          $fundaPrecioFijo.value = precioFijo > 0 ? String(precioFijo) : '';
+        }
+      }
+    }
     if ($stockValor) {
       const stock = Number(prod.stock) || 0;
       $stockValor.value = stock > 0 ? String(stock) : '';
@@ -2783,14 +3915,29 @@ function initProductoModal() {
     }
     parsearNombreEnFormulario(prod);
     refrescarDropdownsModalProducto();
-    actualizarChipRango();
     requestAnimationFrame(() => {
       refrescarDropdownsModalProducto();
+      if (prod.categoria === 'fundas') {
+        if (productoFundaTieneRangoPrecio(prod)) {
+          aplicarModoPrecioFunda(false);
+          establecerRangoPrecioFundasForm(getPrecioMinProducto(prod), getPrecioMaxProducto(prod));
+        } else {
+          aplicarModoPrecioFunda(true);
+          if ($fundaPrecioFijo) {
+            const precioFijo = getPrecioMinProducto(prod);
+            $fundaPrecioFijo.value = precioFijo > 0 ? String(precioFijo) : '';
+          }
+        }
+        customDropdowns['prod-funda-marca-cel']?.syncDisplay?.();
+        customDropdowns['prod-funda-modelo-cel']?.syncDisplay?.();
+      }
+      actualizarVisibilidadPrecioFundas();
       cargandoEdicionProducto = false;
     });
   }
 
   const $modalPanel = $modal?.querySelector('.modal-content');
+  redirigirWheelScrollPanelDesdeInputNumerico($modalPanel);
 
   function scrollModalProductoAlInicio() {
     if ($modalPanel) $modalPanel.scrollTop = 0;
@@ -2823,9 +3970,13 @@ function initProductoModal() {
     }
     parsearNombreEnFormulario(prod);
     refrescarDropdownsModalProducto();
-    actualizarChipRango();
     requestAnimationFrame(() => {
       refrescarDropdownsModalProducto();
+      if (prod.categoria === 'fundas') {
+        customDropdowns['prod-funda-marca-cel']?.syncDisplay?.();
+        customDropdowns['prod-funda-modelo-cel']?.syncDisplay?.();
+      }
+      actualizarVisibilidadPrecioFundas();
       cargandoEdicionProducto = false;
     });
   }
@@ -2844,6 +3995,8 @@ function initProductoModal() {
     cargarConsignadoEnFormulario(prod);
     productoEditNombre = prod.nombre || 'este producto';
     mostrarBtnEliminarProducto(true, true);
+    mostrarBtnTrasladarProducto(false);
+    setCategoriaProductoModalBloqueada(true);
     $modal?.classList.add('visible');
     document.body.classList.add('modal-producto-abierto');
     requestAnimationFrame(() => {
@@ -2860,14 +4013,17 @@ function initProductoModal() {
       $form.dataset.editId = String(prod.id);
       const sid = prod.sucursal_id ?? prod.id_sucursal;
       if (sid != null) $form.dataset.editSucursalId = String(sid);
-      if (prod.imagen) $form.dataset.imagenActual = prod.imagen;
+      imagenProductoActual = typeof prod.imagen === 'string' ? prod.imagen : '';
     }
-    if ($imagenNombre && prod.imagen) {
+    if ($imagenNombre && imagenProductoActual) {
       $imagenNombre.textContent = 'Imagen ya cargada';
     }
+    actualizarPreviewImagenProducto(imagenProductoActual);
     cargarProductoEnFormulario(prod);
     productoEditNombre = prod.nombre || 'este producto';
     mostrarBtnEliminarProducto(true, false);
+    mostrarBtnTrasladarProducto(puedeTrasladarProductoInventario(prod));
+    setCategoriaProductoModalBloqueada(true);
     $modal?.classList.add('visible');
     document.body.classList.add('modal-producto-abierto');
     requestAnimationFrame(() => {
@@ -2896,17 +4052,18 @@ function initProductoModal() {
     $tipoHidrogel.value = '';
     $marcaModeloWrap.style.display = 'none';
     $marca.innerHTML = '<option value="">Seleccionar marca</option>';
+    if ($micaSerieWrap) $micaSerieWrap.style.display = 'none';
+    if ($micaSerieCel) $micaSerieCel.innerHTML = '<option value="">Seleccionar serie</option>';
     $modelo.innerHTML = '<option value="">Seleccionar modelo</option>';
     customDropdowns['prod-mica-marca']?.refresh();
+    customDropdowns['prod-mica-serie-cel']?.refresh();
     customDropdowns['prod-mica-modelo']?.refresh();
-    if ($fundaMarca) $fundaMarca.value = '';
     if ($fundaMarcaCel) $fundaMarcaCel.value = '';
+    if ($fundaSerieWrap) $fundaSerieWrap.style.display = 'none';
+    if ($fundaSerieCel) $fundaSerieCel.innerHTML = '<option value="">Seleccionar serie</option>';
     if ($fundaModeloCel) $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo</option>';
-    if ($fundaTipo) $fundaTipo.value = '';
-    if ($fundaDescripcion) $fundaDescripcion.value = '';
+    customDropdowns['prod-funda-serie-cel']?.refresh();
     customDropdowns['prod-funda-modelo-cel']?.refresh();
-    $fundaRangos?.querySelectorAll('.form-chip.activo').forEach(c => c.classList.remove('activo'));
-    rangoFundaSinAuto = false;
     if ($cargadorTipo) $cargadorTipo.value = '';
     if ($cargadorMarca) $cargadorMarca.value = '';
     if ($cargadorWatts) $cargadorWatts.value = '0';
@@ -2926,9 +4083,16 @@ function initProductoModal() {
     if ($bocinaWatts) $bocinaWatts.value = '0';
     if ($bocinaColor) $bocinaColor.value = '';
     $precio.value = '';
+    if ($costoCompra) $costoCompra.value = '';
+    resetPrecioFundasForm();
+    if ($prodPrecioWrap) $prodPrecioWrap.hidden = false;
+    if ($costoCompraWrap) $costoCompraWrap.hidden = false;
+    if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = true;
     if ($stockValor) $stockValor.value = '';
     if ($imagen) $imagen.value = '';
     if ($imagenNombre) $imagenNombre.textContent = '';
+    imagenPendienteDataUrl = '';
+    actualizarPreviewImagenProducto(imagenProductoActual);
     Object.keys(customDropdowns).forEach((id) => {
       if (id === '_closeListener') return;
       customDropdowns[id].refresh?.();
@@ -2949,7 +4113,7 @@ function initProductoModal() {
     if ($camposPowerbanks) $camposPowerbanks.style.display = cat === 'powerbanks' ? 'block' : 'none';
     if ($camposBocinas) $camposBocinas.style.display = cat === 'bocinas' ? 'block' : 'none';
     if (cat === 'fundas') {
-      poblarSelectMarcasCel($fundaMarcaCel, $fundaModeloCel);
+      poblarSelectMarcasCel($fundaMarcaCel, $fundaModeloCel, $fundaSerieWrap, $fundaSerieCel);
     }
     if (cat !== 'micas') {
       $chipCristal?.classList.remove('activo');
@@ -2958,6 +4122,7 @@ function initProductoModal() {
       $tipoHidrogelWrap.style.display = 'none';
       $marcaModeloWrap.style.display = 'none';
     }
+    actualizarVisibilidadPrecioFundas();
   });
 
   $chipCristal?.addEventListener('click', () => {
@@ -2991,73 +4156,74 @@ function initProductoModal() {
     const tipo = $tipoCristal.value;
     if (tipo) {
       $marcaModeloWrap.style.display = 'block';
-      poblarSelectMarcasCel($marca, $modelo);
+      poblarSelectMarcasCel($marca, $modelo, $micaSerieWrap, $micaSerieCel);
     } else {
       $marcaModeloWrap.style.display = 'none';
     }
   });
 
   $marca?.addEventListener('change', () => {
-    const marca = $marca.value;
-    if (marca) poblarModelosParaMarca($marca, $modelo, marca);
-    else if ($modelo) {
-      $modelo.innerHTML = '<option value="">Seleccionar modelo</option>';
-      customDropdowns['prod-mica-modelo']?.refresh();
-    }
+    onMarcaCelChange($marca, $modelo, $micaSerieWrap, $micaSerieCel);
+  });
+
+  $micaSerieCel?.addEventListener('change', () => {
+    poblarModelosParaMarca($marca, $modelo, $marca?.value, $micaSerieCel?.value);
   });
 
   $fundaMarcaCel?.addEventListener('change', () => {
-    const marca = $fundaMarcaCel.value;
-    if (marca) poblarModelosParaMarca($fundaMarcaCel, $fundaModeloCel, marca);
-    else if ($fundaModeloCel) {
-      $fundaModeloCel.innerHTML = '<option value="">Seleccionar modelo</option>';
-      customDropdowns['prod-funda-modelo-cel']?.refresh();
-    }
+    onMarcaCelChange($fundaMarcaCel, $fundaModeloCel, $fundaSerieWrap, $fundaSerieCel);
   });
 
-  $fundaRangos?.querySelectorAll('.form-chip[data-rango]').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const yaActivo = chip.classList.contains('activo');
-      $fundaRangos.querySelectorAll('.form-chip').forEach(c => c.classList.remove('activo'));
-      if (yaActivo) {
-        rangoFundaSinAuto = true;
-        return;
-      }
-      rangoFundaSinAuto = false;
-      chip.classList.add('activo');
-      const rango = chip.dataset.rango;
-      const [min] = rango.split('-').map(Number);
-      if ($precio) $precio.value = min;
-    });
+  $fundaSerieCel?.addEventListener('change', () => {
+    poblarModelosParaMarca($fundaMarcaCel, $fundaModeloCel, $fundaMarcaCel?.value, $fundaSerieCel?.value);
   });
 
-  function actualizarChipRango() {
-    if (!$fundaRangos || $categoria?.value !== 'fundas') return;
-    if (rangoFundaSinAuto) {
-      $fundaRangos.querySelectorAll('.form-chip').forEach(c => c.classList.remove('activo'));
-      return;
+  function activarModoRangoPrecioFunda() {
+    if (!fundaModoPrecioFijo) return;
+    const precioFijo = parseFloat($fundaPrecioFijo?.value || 0);
+    if (Number.isFinite(precioFijo) && precioFijo > 0) {
+      establecerRangoPrecioFundasForm(precioFijo, Math.min(precioFijo + 100, FUNDAS_RANGO_PRECIO_MAX));
+    } else {
+      resetRangoPrecioFundasForm();
     }
-    const precio = parseInt($precio?.value || 0, 10);
-    $fundaRangos.querySelectorAll('.form-chip').forEach(c => c.classList.remove('activo'));
-    const chips = Array.from($fundaRangos.querySelectorAll('.form-chip[data-rango]'));
-    const chipMatch = chips.find(chip => {
-      const [min, max] = chip.dataset.rango.split('-').map(Number);
-      return precio >= min && precio <= max;
-    });
-    if (chipMatch) chipMatch.classList.add('activo');
+    aplicarModoPrecioFunda(false);
   }
 
-  $precio?.addEventListener('input', actualizarChipRango);
-  $precio?.addEventListener('change', actualizarChipRango);
+  function activarModoPrecioFijoFunda() {
+    if (fundaModoPrecioFijo) return;
+    const rango = leerRangoPrecioFundasForm();
+    if (rango.ok && $fundaPrecioFijo) {
+      $fundaPrecioFijo.value = String(rango.min);
+    }
+    aplicarModoPrecioFunda(true);
+  }
 
-  $imagen?.addEventListener('change', () => {
+  initSliderRangoFundasProducto();
+
+  $fundaPrecioRangoTab?.addEventListener('click', activarModoRangoPrecioFunda);
+  $fundaPrecioFijoTab?.addEventListener('click', activarModoPrecioFijoFunda);
+
+  $imagen?.addEventListener('change', async () => {
     const file = $imagen.files?.[0];
     if (!$imagenNombre) return;
-    if (file) {
-      $imagenNombre.textContent = file.name;
+    imagenPendienteDataUrl = '';
+    if (!file) {
+      $imagenNombre.textContent = imagenProductoActual ? 'Imagen ya cargada' : '';
+      actualizarPreviewImagenProducto(imagenProductoActual);
       return;
     }
-    $imagenNombre.textContent = $form?.dataset?.imagenActual ? 'Imagen ya cargada' : '';
+    $imagenNombre.textContent = 'Procesando imagen…';
+    const resultado = await leerArchivoImagenProducto(file);
+    if (resultado.error || !resultado.data) {
+      alert(resultado.error || 'No se pudo procesar la imagen.');
+      if ($imagen) $imagen.value = '';
+      $imagenNombre.textContent = imagenProductoActual ? 'Imagen ya cargada' : '';
+      actualizarPreviewImagenProducto(imagenProductoActual);
+      return;
+    }
+    imagenPendienteDataUrl = resultado.data;
+    $imagenNombre.textContent = file.name;
+    actualizarPreviewImagenProducto(imagenPendienteDataUrl);
   });
 
   function formatearMetrosCargador(val) {
@@ -3192,8 +4358,12 @@ function initProductoModal() {
     $btn.addEventListener('pointercancel', stop);
   }
 
-  setupHoldRepeat($precioMenos, $precio, -1, { onUpdate: actualizarChipRango });
-  setupHoldRepeat($precioMas, $precio, 1, { onUpdate: actualizarChipRango });
+  setupHoldRepeat($precioMenos, $precio, -1);
+  setupHoldRepeat($precioMas, $precio, 1);
+  setupHoldRepeat($costoCompraMenos, $costoCompra, -1);
+  setupHoldRepeat($costoCompraMas, $costoCompra, 1);
+  setupHoldRepeat($fundaPrecioFijoMenos, $fundaPrecioFijo, -1);
+  setupHoldRepeat($fundaPrecioFijoMas, $fundaPrecioFijo, 1);
   setupHoldRepeat($precioVentaMenos, $precioVenta, -1);
   setupHoldRepeat($precioVentaMas, $precioVenta, 1);
   setupHoldRepeat($stockMenos, $stockValor, -1);
@@ -3209,21 +4379,6 @@ function initProductoModal() {
   setupHoldRepeat($bocinaWattsMenos, $bocinaWatts, -1);
   setupHoldRepeat($bocinaWattsMas, $bocinaWatts, 1);
 
-  function bloquearScrollContador($input) {
-    $input?.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
-  }
-
-  [
-    $precio,
-    $precioVenta,
-    $stockValor,
-    $powerbankMah,
-    $powerbankWatts,
-    $cargadorWatts,
-    $cargadorMetros,
-    $bocinaWatts,
-  ].forEach(bloquearScrollContador);
-
   function textoOpcionSeleccionada(selectEl) {
     if (!selectEl) return '';
     const dd = customDropdowns[selectEl.id];
@@ -3236,19 +4391,16 @@ function initProductoModal() {
   }
 
   function leerImagenComoDataUrl(input) {
-    return new Promise((resolve) => {
-      const f = input?.files?.[0];
-      if (!f || f.size > 700000) resolve(null);
-      else {
-        const r = new FileReader();
-        r.onload = () => resolve(typeof r.result === 'string' ? r.result : null);
-        r.onerror = () => resolve(null);
-        r.readAsDataURL(f);
-      }
-    });
+    return leerArchivoImagenProducto(input?.files?.[0]);
   }
 
   $cancelar?.addEventListener('click', cerrarModal);
+  $trasladar?.addEventListener('click', () => {
+    const editId = Number($form?.dataset?.editId);
+    if (!Number.isFinite(editId)) return;
+    const prod = productosInventario.find((item) => Number(item.id) === editId);
+    if (prod) window.ucAbrirModalTrasladarProducto?.(prod);
+  });
   $eliminar?.addEventListener('click', () => {
     const editConsignadoId = $form?.dataset?.editConsignadoId;
     const editId = $form?.dataset?.editId;
@@ -3297,6 +4449,9 @@ function initProductoModal() {
         const marca = textoOpcionSeleccionada($marca);
         const modelo = textoOpcionSeleccionada($modelo);
         if (!marca || !modelo) return { ok: false, msg: 'Selecciona marca y modelo' };
+        if (marca === 'Samsung' && !textoOpcionSeleccionada($micaSerieCel)) {
+          return { ok: false, msg: 'Selecciona la serie Samsung' };
+        }
       } else if (tipoMica === 'hidrogel') {
         const tipoHidrogelVal = $tipoHidrogel.value;
         if (!tipoHidrogelVal) return { ok: false, msg: 'Selecciona tipo de hidrogel' };
@@ -3306,6 +4461,13 @@ function initProductoModal() {
       const marcaCel = textoOpcionSeleccionada($fundaMarcaCel);
       const modeloCel = textoOpcionSeleccionada($fundaModeloCel);
       if (!marcaCel || !modeloCel) return { ok: false, msg: 'Selecciona marca y modelo del celular' };
+      if (marcaCel === 'Samsung' && !textoOpcionSeleccionada($fundaSerieCel)) {
+        return { ok: false, msg: 'Selecciona la serie Samsung' };
+      }
+      if (!esModoConsignadaModal()) {
+        const precioFunda = leerPrecioFundasParaGuardar(esFundaPrecioFijoActivo());
+        if (!precioFunda.ok) return precioFunda;
+      }
     }
     if (cat === 'cargadores') {
       const tipo = $cargadorTipo?.value;
@@ -3348,22 +4510,8 @@ function initProductoModal() {
         nombreProducto = `Mica hidrogel ${$tipoHidrogel.value}`;
       }
     } else if (cat === 'fundas') {
-      const partes = ['Funda'];
-      const tipoFunda = textoOpcionSeleccionada($fundaTipo);
-      if (tipoFunda) partes.push(tipoFunda);
-      const marcaFunda = ($fundaMarca?.value || '').trim();
-      if (marcaFunda) partes.push(marcaFunda);
-      const marcaCel = textoOpcionSeleccionada($fundaMarcaCel);
       const modeloCel = textoOpcionSeleccionada($fundaModeloCel);
-      if (marcaCel) partes.push(marcaCel);
-      if (modeloCel) partes.push(modeloCel);
-      nombreProducto = partes.join(' ');
-      const desc = ($fundaDescripcion?.value || '').trim();
-      if (desc) nombreProducto += ` — ${desc}`;
-      const rangoChip = $fundaRangos?.querySelector('.form-chip.activo[data-rango]');
-      if (rangoChip?.dataset?.rango) {
-        nombreProducto += ` — Rango ${rangoChip.dataset.rango}`;
-      }
+      nombreProducto = ['Funda', modeloCel].filter(Boolean).join(' ');
     } else if (cat === 'cargadores') {
       const tipoCargador = textoOpcionSeleccionada($cargadorTipo);
       const tipoVal = $cargadorTipo?.value;
@@ -3427,11 +4575,15 @@ function initProductoModal() {
 
   $form?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (guardandoProductoModal) return;
     const validacion = validarFormularioProducto();
     if (!validacion.ok) {
       alert(validacion.msg);
       return;
     }
+    if (!bloquearEnvioProductoModal()) return;
+
+    try {
     const { cat, tipoMica } = validacion;
 
     if (esModoConsignadaModal()) {
@@ -3509,8 +4661,20 @@ function initProductoModal() {
       return;
     }
 
-    const precio = parseFloat($precio?.value || 0);
-    if (precio <= 0) { alert('Ingresa un precio válido'); return; }
+    let precio = parseFloat($precio?.value || 0);
+    let precioMax = null;
+    if (cat === 'fundas' && !esModoConsignadaModal()) {
+      const precioFunda = leerPrecioFundasParaGuardar(esFundaPrecioFijoActivo());
+      if (!precioFunda.ok) {
+        alert(precioFunda.msg);
+        return;
+      }
+      precio = precioFunda.precio;
+      precioMax = precioFunda.precioMax;
+    } else if (precio <= 0) {
+      alert('Ingresa un precio válido');
+      return;
+    }
     const stock = parseInt($stockValor?.value || 0, 10);
     if (stock < 1) { alert('El stock debe ser al menos 1'); return; }
 
@@ -3537,9 +4701,11 @@ function initProductoModal() {
     const nombreProducto = construirNombreProductoDesdeForm(cat, tipoMica);
 
     try {
-      let imagenData = await leerImagenComoDataUrl($imagen);
-      if (!imagenData && $form?.dataset?.imagenActual) {
-        imagenData = $form.dataset.imagenActual;
+      const imagenRes = await resolverImagenParaGuardarProducto();
+      const hayImagenNueva = Boolean(imagenPendienteDataUrl || $imagen?.files?.[0]);
+      if (hayImagenNueva && imagenRes.error) {
+        alert(imagenRes.error);
+        return;
       }
       const url = esEdicion ? `${API}/productos/${editId}` : `${API}/productos`;
       const payload = {
@@ -3547,8 +4713,17 @@ function initProductoModal() {
         precio,
         stock,
         categoria: cat,
-        imagen: imagenData,
       };
+      const costoCompraRaw = leerMontoInput($costoCompra);
+      payload.costo_compra = Number.isFinite(costoCompraRaw) && costoCompraRaw > 0 ? costoCompraRaw : null;
+      if (cat === 'fundas' && !esModoConsignadaModal()) {
+        payload.precio_max = precioMax != null ? precioMax : null;
+      }
+      if (hayImagenNueva) {
+        payload.imagen = imagenRes.data;
+      } else if (!esEdicion) {
+        payload.imagen = imagenRes.data ?? null;
+      }
       if (!esEdicion) payload.sucursal_id = sidProd;
       const r = await fetch(url, {
         method: esEdicion ? 'PUT' : 'POST',
@@ -3574,11 +4749,19 @@ function initProductoModal() {
         alert(errMsg || 'No se pudo guardar');
         return;
       }
+      const guardado = await r.json().catch(() => ({}));
+      if (imagenPendienteDataUrl && !guardado?.imagen) {
+        alert('El producto se guardó, pero la imagen no se almacenó. Intenta con otra foto.');
+        return;
+      }
       await window.ucCargarInventarioProductos?.();
       cerrarModal();
     } catch (err) {
       console.error(err);
       alert('No se pudo guardar el producto');
+    }
+    } finally {
+      desbloquearEnvioProductoModal();
     }
   });
 }
@@ -3605,6 +4788,64 @@ function initPOS() {
   function formatearPrecio(n) {
     return '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 });
   }
+
+  function claveCarritoItem(item) {
+    return `${item.id}-${Number(item.precio)}`;
+  }
+
+  function agregarProductoAlCarritoDirecto(prod) {
+    const precioSel = Number(prod.precio);
+    const item = carrito.find((i) => i.id === prod.id && Number(i.precio) === precioSel);
+    if (item) item.cantidad++;
+    else carrito.push({ ...prod, precio: precioSel, cantidad: 1 });
+    actualizarCarrito();
+  }
+
+  const $modalFundaPrecio = document.getElementById('modal-funda-precio-carrito');
+  const $fundaPrecioChipsCarrito = document.getElementById('modal-funda-precio-chips');
+  const $fundaPrecioSubtitulo = document.getElementById('modal-funda-precio-subtitulo');
+  let fundaCarritoPendiente = null;
+
+  function cerrarModalPrecioFundaCarrito() {
+    $modalFundaPrecio?.classList.remove('visible');
+    $modalFundaPrecio?.setAttribute('aria-hidden', 'true');
+    fundaCarritoPendiente = null;
+  }
+
+  function abrirModalPrecioFundaCarrito(prod) {
+    if (!$modalFundaPrecio || !$fundaPrecioChipsCarrito) {
+      agregarProductoAlCarritoDirecto(prod);
+      return;
+    }
+    fundaCarritoPendiente = prod;
+    const min = getPrecioMinProducto(prod);
+    const max = getPrecioMaxProducto(prod);
+    const opts = opcionesPrecioEnRangoFundas(min, max);
+    if ($fundaPrecioSubtitulo) {
+      const nom = typeof nombreProductoInventarioDisplay === 'function'
+        ? nombreProductoInventarioDisplay(prod)
+        : (prod.nombre || 'Funda');
+      $fundaPrecioSubtitulo.textContent = `${nom} · ${formatearPrecioRangoSimple(min)} - ${formatearPrecioRangoSimple(max)}`;
+    }
+    $fundaPrecioChipsCarrito.innerHTML = opts.map((v) =>
+      `<button type="button" class="form-chip" data-precio-funda-carrito="${v}">${formatearPrecioRangoSimple(v)}</button>`
+    ).join('');
+    $fundaPrecioChipsCarrito.querySelectorAll('.form-chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const precio = Number(chip.dataset.precioFundaCarrito);
+        if (!fundaCarritoPendiente || !Number.isFinite(precio)) return;
+        agregarProductoAlCarritoDirecto({ ...fundaCarritoPendiente, precio });
+        cerrarModalPrecioFundaCarrito();
+      });
+    });
+    $modalFundaPrecio.classList.add('visible');
+    $modalFundaPrecio.setAttribute('aria-hidden', 'false');
+  }
+
+  document.getElementById('modal-funda-precio-cancelar')?.addEventListener('click', cerrarModalPrecioFundaCarrito);
+  $modalFundaPrecio?.addEventListener('click', (e) => {
+    if (e.target === $modalFundaPrecio) cerrarModalPrecioFundaCarrito();
+  });
 
   function renderProductos() {
     $productos.innerHTML = PRODUCTOS.map(p => `
@@ -3644,7 +4885,7 @@ function initPOS() {
     } else {
       $carritoVacio.style.display = 'none';
       $carritoLista.innerHTML = carrito.map(i => `
-        <div class="carrito-item" data-id="${i.id}">
+        <div class="carrito-item" data-clave="${claveCarritoItem(i)}">
           <span class="carrito-item-nombre">${i.nombre}</span>
           <div class="carrito-item-cantidad">
             <button type="button" aria-label="Menos">−</button>
@@ -3656,19 +4897,19 @@ function initPOS() {
         </div>
       `).join('');
       $carritoLista.querySelectorAll('.carrito-item').forEach(row => {
-        const id = row.getAttribute('data-id');
+        const clave = row.getAttribute('data-clave');
         row.querySelector('.carrito-item-cantidad button:first-child').onclick = () => {
-          const it = carrito.find(i => String(i.id) === id);
-          if (it) { it.cantidad--; if (it.cantidad <= 0) carrito = carrito.filter(i => String(i.id) !== id); }
+          const it = carrito.find(i => claveCarritoItem(i) === clave);
+          if (it) { it.cantidad--; if (it.cantidad <= 0) carrito = carrito.filter(i => claveCarritoItem(i) !== clave); }
           actualizarCarrito();
         };
         row.querySelector('.carrito-item-cantidad button:last-child').onclick = () => {
-          const it = carrito.find(i => String(i.id) === id);
+          const it = carrito.find(i => claveCarritoItem(i) === clave);
           if (it) it.cantidad++;
           actualizarCarrito();
         };
         row.querySelector('.carrito-item-quitar').onclick = () => {
-          carrito = carrito.filter(i => String(i.id) !== id);
+          carrito = carrito.filter(i => claveCarritoItem(i) !== clave);
           actualizarCarrito();
         };
       });
@@ -3763,10 +5004,11 @@ function initPOS() {
   actualizarCarrito();
 
   window.agregarAlCarrito = (prod) => {
-    const item = carrito.find(i => i.id === prod.id);
-    if (item) item.cantidad++;
-    else carrito.push({ ...prod, cantidad: 1 });
-    actualizarCarrito();
+    if (productoFundaTieneRangoPrecio(prod)) {
+      abrirModalPrecioFundaCarrito(prod);
+      return;
+    }
+    agregarProductoAlCarritoDirecto(prod);
   };
 
   window.ucAgregarConsignadoAlCarrito = (datos) => {

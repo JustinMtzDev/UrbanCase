@@ -76,9 +76,13 @@
       <div class="inventario-zoom-info">
         <h3 id="inventario-zoom-nombre" class="inventario-zoom-titulo"></h3>
         <p class="inventario-zoom-precio" id="inventario-zoom-precio"></p>
+        <p class="inventario-zoom-meta inventario-zoom-costo-compra" id="inventario-zoom-costo-compra" hidden></p>
         <p class="inventario-zoom-meta" id="inventario-zoom-stock"></p>
         <p class="inventario-zoom-meta inventario-zoom-cat" id="inventario-zoom-cat"></p>
         <p class="inventario-zoom-meta inventario-zoom-sucursal" id="inventario-zoom-sucursal" hidden></p>
+        <button type="button" class="inventario-zoom-trasladar" id="inventario-zoom-trasladar" title="Trasladar a otra sucursal" aria-label="Trasladar a otra sucursal" hidden>
+          <i class="fa-solid fa-arrows-turn-to-dots" aria-hidden="true"></i>
+        </button>
       </div>
     </div>
     <div class="app-glass" id="vista-pos">
@@ -142,7 +146,8 @@
                     <th>ID</th>
                     <th>Nombre</th>
                     <th>Categoría</th>
-                    <th>Precio</th>
+                    <th>Precio venta</th>
+                    <th>Costo compra</th>
                     <th>Stock</th>
                     <th class="inventario-col-sucursal">Sucursal</th>
                     <th>Acciones</th>
@@ -566,6 +571,12 @@
                   <option value="">Seleccionar marca</option>
                 </select>
               </div>
+              <div class="form-row form-row-inline" id="prod-mica-serie-wrap" style="display:none">
+                <label>Serie</label>
+                <select id="prod-mica-serie-cel">
+                  <option value="">Seleccionar serie</option>
+                </select>
+              </div>
               <div class="form-row form-row-inline">
                 <label>Modelo</label>
                 <select id="prod-mica-modelo">
@@ -576,14 +587,16 @@
           </div>
 
           <div id="prod-campos-fundas" class="prod-campos-categoria" style="display:none">
-            <div class="form-row">
-              <label>Marca de la funda</label>
-              <input type="text" id="prod-funda-marca" placeholder="Ej: Spigen, Otterbox...">
-            </div>
             <div class="form-row form-row-inline">
               <label>Marca</label>
               <select id="prod-funda-marca-cel">
                 <option value="">Seleccionar marca</option>
+              </select>
+            </div>
+            <div class="form-row form-row-inline" id="prod-funda-serie-wrap" style="display:none">
+              <label>Serie</label>
+              <select id="prod-funda-serie-cel">
+                <option value="">Seleccionar serie</option>
               </select>
             </div>
             <div class="form-row form-row-inline">
@@ -592,31 +605,50 @@
                 <option value="">Seleccionar modelo</option>
               </select>
             </div>
-            <div class="form-row form-row-inline">
-              <label>Tipo</label>
-              <select id="prod-funda-tipo">
-                <option value="">Seleccionar</option>
-                <option value="uso-rudo">Uso Rudo</option>
-                <option value="silicon">Silicon</option>
-                <option value="360">360</option>
-                <option value="bumper">Bumper</option>
-                <option value="wallet">Wallet</option>
-                <option value="clear">Clear</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label>Descripción</label>
-              <input type="text" id="prod-funda-descripcion" placeholder="Ej: Funda con soporte, diseño premium...">
-            </div>
-            <div class="form-row">
-              <label>Rango de precios</label>
-              <div class="form-chips" id="prod-funda-rangos">
-                <button type="button" class="form-chip" data-rango="50-100">50-100</button>
-                <button type="button" class="form-chip" data-rango="100-150">100-150</button>
-                <button type="button" class="form-chip" data-rango="150-200">150-200</button>
-                <button type="button" class="form-chip" data-rango="200-250">200-250</button>
-                <button type="button" class="form-chip" data-rango="250-300">250-300</button>
-                <button type="button" class="form-chip" data-rango="300-350">300-350</button>
+            <div class="form-row form-row-precio-rango" id="prod-funda-rango-precio-wrap">
+              <div class="prod-funda-precio-secciones" role="tablist" aria-label="Tipo de precio">
+                <button type="button" class="prod-funda-precio-seccion activo" id="prod-funda-precio-rango-tab" role="tab" aria-selected="true">Rango de precio</button>
+                <button type="button" class="prod-funda-precio-seccion" id="prod-funda-precio-fijo-tab" role="tab" aria-selected="false">Precio fijo</button>
+              </div>
+              <div id="prod-funda-precio-rango-panel" class="prod-funda-precio-rango-panel">
+              <div class="filtro-precio-rango prod-funda-precio-rango">
+                <div class="prod-funda-rango-slider-wrap">
+                  <div class="filtro-precio-rango-slider" id="prod-funda-precio-slider" data-limite-min="50" data-limite-max="650" data-step="50">
+                    <div class="filtro-precio-rango-track" aria-hidden="true"></div>
+                    <button type="button" class="filtro-precio-rango-thumb" id="prod-funda-precio-thumb-min" aria-label="Precio mínimo"></button>
+                    <button type="button" class="filtro-precio-rango-thumb" id="prod-funda-precio-thumb-max" aria-label="Precio máximo"></button>
+                    <input type="hidden" id="prod-funda-precio-rango-min" value="50">
+                    <input type="hidden" id="prod-funda-precio-rango-max" value="650">
+                  </div>
+                </div>
+                <div class="filtro-precio-rango-inputs">
+                  <div class="filtro-precio-rango-campo">
+                    <label for="prod-funda-precio-input-min">Mínimo</label>
+                    <div class="filtro-precio-rango-input-wrap">
+                      <span class="filtro-precio-rango-simbolo" aria-hidden="true">$</span>
+                      <input type="number" id="prod-funda-precio-input-min" min="50" max="650" step="50" value="50" inputmode="numeric">
+                    </div>
+                  </div>
+                  <div class="filtro-precio-rango-campo">
+                    <label for="prod-funda-precio-input-max">Máximo</label>
+                    <div class="filtro-precio-rango-input-wrap">
+                      <span class="filtro-precio-rango-simbolo" aria-hidden="true">$</span>
+                      <input type="number" id="prod-funda-precio-input-max" min="50" max="650" step="50" value="650" inputmode="numeric">
+                    </div>
+                  </div>
+                </div>
+              </div>
+              </div>
+              <div id="prod-funda-precio-fijo-panel" class="form-row form-row-precio prod-funda-precio-fijo-panel" hidden>
+                <label>Precio</label>
+                <div class="form-precio-stack">
+                  <div class="precio-contador">
+                    <button type="button" class="stock-btn" id="prod-funda-precio-fijo-menos" aria-label="Menos">−</button>
+                    <span class="precio-simbolo">$</span>
+                    <input type="number" id="prod-funda-precio-fijo" min="0" step="1" placeholder="0" aria-label="Precio fijo">
+                    <button type="button" class="stock-btn" id="prod-funda-precio-fijo-mas" aria-label="Más">+</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -784,13 +816,27 @@
           </div>
 
           <div class="form-seccion-fija">
-          <div class="form-row form-row-precio">
-            <label id="prod-label-precio">Precio</label>
-            <div class="precio-contador">
-              <button type="button" class="stock-btn" id="prod-precio-menos" aria-label="Menos">−</button>
-              <span class="precio-simbolo">$</span>
-              <input type="number" id="prod-precio" min="0" step="1" placeholder="0">
-              <button type="button" class="stock-btn" id="prod-precio-mas" aria-label="Más">+</button>
+          <div class="form-row form-row-precio" id="prod-costo-compra-wrap">
+            <label for="prod-costo-compra">Costo de compra</label>
+            <div class="form-precio-stack">
+              <div class="precio-contador">
+                <button type="button" class="stock-btn" id="prod-costo-compra-menos" aria-label="Menos">−</button>
+                <span class="precio-simbolo">$</span>
+                <input type="number" id="prod-costo-compra" min="0" step="1" placeholder="0" aria-label="Costo de compra">
+                <button type="button" class="stock-btn" id="prod-costo-compra-mas" aria-label="Más">+</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row form-row-precio" id="prod-precio-wrap">
+            <label id="prod-label-precio">Precio de venta</label>
+            <div class="form-precio-stack">
+              <div class="precio-contador">
+                <button type="button" class="stock-btn" id="prod-precio-menos" aria-label="Menos">−</button>
+                <span class="precio-simbolo">$</span>
+                <input type="number" id="prod-precio" min="0" step="1" placeholder="0">
+                <button type="button" class="stock-btn" id="prod-precio-mas" aria-label="Más">+</button>
+              </div>
             </div>
           </div>
 
@@ -822,6 +868,9 @@
               <label for="prod-imagen" class="imagen-upload-btn">Elegir imagen</label>
               <span class="imagen-upload-nombre" id="prod-imagen-nombre"></span>
             </div>
+            <div id="prod-imagen-preview-wrap" class="prod-imagen-preview-wrap" hidden>
+              <img id="prod-imagen-preview" alt="">
+            </div>
           </div>
           </div>
 
@@ -832,7 +881,49 @@
           <div class="modal-acciones modal-acciones-secundarias" id="modal-producto-eliminar-wrap" hidden>
             <button type="button" class="btn btn-vaciar" id="modal-producto-eliminar">Eliminar producto</button>
           </div>
+          <div class="modal-acciones modal-acciones-secundarias" id="modal-producto-trasladar-wrap" hidden>
+            <button type="button" class="btn btn-vaciar btn-trasladar-producto" id="modal-producto-trasladar">Trasladar a otra sucursal</button>
+          </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Modal traslado inventario -->
+    <div id="modal-trasladar-inventario" class="modal-overlay" aria-hidden="true">
+      <div class="modal-content modal-trasladar-inventario">
+        <h3>Trasladar inventario</h3>
+        <p id="trasladar-producto-nombre" class="trasladar-producto-resumen"></p>
+        <p id="trasladar-stock-disponible" class="trasladar-producto-resumen"></p>
+        <div class="form-row form-row-stock">
+          <label for="trasladar-cantidad">Cantidad</label>
+          <div class="stock-contador">
+            <button type="button" class="stock-btn" id="trasladar-cantidad-menos" aria-label="Menos">−</button>
+            <input type="number" id="trasladar-cantidad" min="1" step="1" value="1" aria-label="Cantidad a trasladar">
+            <button type="button" class="stock-btn" id="trasladar-cantidad-mas" aria-label="Más">+</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="trasladar-sucursal-destino">Sucursal destino</label>
+          <select id="trasladar-sucursal-destino" aria-label="Sucursal destino">
+            <option value="" disabled selected hidden>Seleccionar sucursal</option>
+          </select>
+        </div>
+        <div class="modal-acciones">
+          <button type="button" class="btn btn-vaciar" id="trasladar-cancelar">Cancelar</button>
+          <button type="button" class="btn btn-cobrar" id="trasladar-confirmar">Trasladar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal precio funda (carrito) -->
+    <div id="modal-funda-precio-carrito" class="modal-overlay" aria-hidden="true">
+      <div class="modal-content modal-funda-precio-carrito">
+        <h3 id="modal-funda-precio-titulo">Selecciona el precio</h3>
+        <p id="modal-funda-precio-subtitulo" class="modal-funda-precio-subtitulo"></p>
+        <div id="modal-funda-precio-chips" class="form-chips form-chips-precio-funda-carrito"></div>
+        <div class="modal-acciones">
+          <button type="button" class="btn btn-vaciar" id="modal-funda-precio-cancelar">Cancelar</button>
+        </div>
       </div>
     </div>
 
