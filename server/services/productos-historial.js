@@ -4,7 +4,7 @@ const CAMPOS_EDICION_HISTORIAL = [
   'nombre',
   'precio',
   'precio_max',
-  'costo_compra',
+  'stock',
   'categoria',
   'imagen',
 ];
@@ -14,7 +14,7 @@ function etiquetaCampoHistorial(campo) {
     nombre: 'Nombre',
     precio: 'Precio',
     precio_max: 'Precio máximo',
-    costo_compra: 'Costo compra',
+    stock: 'Stock',
     categoria: 'Categoría',
     imagen: 'Imagen',
   };
@@ -26,14 +26,18 @@ function formatearValorHistorial(campo, valor) {
     return valor ? 'Con imagen' : 'Sin imagen';
   }
   if (valor == null || valor === '') return '—';
-  if (campo === 'precio' || campo === 'precio_max' || campo === 'costo_compra') {
+  if (campo === 'precio' || campo === 'precio_max') {
     const n = Number(valor);
     if (Number.isFinite(n)) return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
+  }
+  if (campo === 'stock') {
+    const n = parseInt(valor, 10);
+    if (Number.isFinite(n)) return String(n);
   }
   return String(valor);
 }
 
-const CAMPOS_NUMERICOS_HISTORIAL = new Set(['precio', 'precio_max', 'costo_compra']);
+const CAMPOS_NUMERICOS_HISTORIAL = new Set(['precio', 'precio_max', 'stock']);
 
 function normalizarNumeroHistorial(valor) {
   if (valor == null || valor === '') return null;
@@ -50,8 +54,12 @@ function valoresCampoEquivalentes(campo, antes, despues) {
     return String(antes) === String(despues);
   }
   if (CAMPOS_NUMERICOS_HISTORIAL.has(campo)) {
-    const a = normalizarNumeroHistorial(antes);
-    const b = normalizarNumeroHistorial(despues);
+    const a = campo === 'stock'
+      ? (normalizarNumeroHistorial(antes) != null ? Math.trunc(normalizarNumeroHistorial(antes)) : null)
+      : normalizarNumeroHistorial(antes);
+    const b = campo === 'stock'
+      ? (normalizarNumeroHistorial(despues) != null ? Math.trunc(normalizarNumeroHistorial(despues)) : null)
+      : normalizarNumeroHistorial(despues);
     if (a == null && b == null) return true;
     if (a == null || b == null) return false;
     return Math.abs(a - b) < 0.005;
@@ -143,6 +151,7 @@ async function registrarHistorialProductoEliminacion({
 }) {
   if (!producto) return false;
   const texto = 'Producto eliminado';
+  const stockEliminado = Number(producto.stock) || 0;
   return insertarHistorialProducto({
     executor,
     productoId: producto.id,
@@ -151,10 +160,12 @@ async function registrarHistorialProductoEliminacion({
     valorAnterior: 'Producto activo en inventario',
     valorNuevo: texto,
     detalle: {
+      stock_eliminado: stockEliminado,
       cambios: [{
         etiqueta: 'Eliminación',
         valor_anterior: 'Producto activo en inventario',
         valor_nuevo: texto,
+        stock_eliminado: stockEliminado,
       }],
     },
     usuarioId,

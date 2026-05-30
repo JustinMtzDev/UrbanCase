@@ -7,7 +7,13 @@ router.get('/movimientos-inventario', async (req, res) => {
   const limitRaw = Number(req.query.limit);
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 1000) : 300;
   const q = String(req.query.q || '').trim();
-  const filtros = [];
+  const filtros = [
+    `(
+      im.movimiento = 'devolucion'
+      OR im.movimiento = 'restock_rapido'
+      OR (im.movimiento = 'entrada_mercancia' AND COALESCE(im.detalle->>'motivo', '') = 'restock_rapido')
+    )`,
+  ];
   const vals = [];
   let idx = 1;
 
@@ -15,6 +21,7 @@ router.get('/movimientos-inventario', async (req, res) => {
     filtros.push(`(
       im.producto_nombre ILIKE $${idx}
       OR im.movimiento ILIKE $${idx}
+      OR COALESCE(im.detalle::text, '') ILIKE $${idx}
       OR COALESCE(u.nombre, '') ILIKE $${idx}
       OR COALESCE(s.nombre, '') ILIKE $${idx}
     )`);
@@ -23,7 +30,7 @@ router.get('/movimientos-inventario', async (req, res) => {
   }
 
   vals.push(limit);
-  const where = filtros.length ? `WHERE ${filtros.join(' AND ')}` : '';
+  const where = `WHERE ${filtros.join(' AND ')}`;
 
   try {
     const { rows } = await pool.query(

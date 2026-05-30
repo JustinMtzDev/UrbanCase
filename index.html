@@ -49,7 +49,7 @@
       <nav class="categorias">
         <button type="button" class="categoria-btn activo" data-categoria="todos">Home</button>
         <div class="dropdown-sucursales">
-          <button type="button" class="categoria-btn dropdown-sucursales-trigger" id="dropdown-sucursales-btn"><span id="dropdown-sucursales-label">Sucursales</span> <span class="dropdown-arrow">▼</span></button>
+          <button type="button" class="categoria-btn dropdown-sucursales-trigger" id="dropdown-sucursales-btn"><span id="dropdown-sucursales-label">Todas las sucursales</span> <span class="dropdown-arrow">▼</span></button>
           <div class="dropdown-sucursales-menu" id="dropdown-sucursales-menu">
             <div class="dropdown-sucursales-loading" id="dropdown-sucursales-loading">Cargando...</div>
             <div class="dropdown-sucursales-list" id="dropdown-sucursales-list"></div>
@@ -118,6 +118,9 @@
                   <path d="M15 4v16"/>
                 </svg>
               </button>
+              <button type="button" class="inventario-vista-btn" id="btn-inventario-restock" title="Restock rápido" aria-label="Restock rápido" aria-pressed="false" disabled>
+                <i class="fa-solid fa-dolly" aria-hidden="true"></i>
+              </button>
               <button type="button" class="inventario-vista-btn" id="btn-mostrar-carrito" title="Mostrar carrito" aria-label="Mostrar carrito" hidden>
                 <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
               </button>
@@ -155,7 +158,7 @@
                     <th>Costo compra</th>
                     <th>Stock</th>
                     <th class="inventario-col-sucursal">Sucursal</th>
-                    <th>Acciones</th>
+                    <th class="inventario-col-acciones">Acciones</th>
                   </tr>
                 </thead>
                 <tbody id="tbody-inventario-productos"></tbody>
@@ -168,7 +171,7 @@
       <aside class="carrito-panel" id="carrito-panel">
         <div class="carrito-header-wrap">
           <div class="carrito-header-row">
-            <h2>Carrito <span id="carrito-count">0</span></h2>
+            <h2><span id="carrito-titulo-texto">Carrito</span> <span id="carrito-count">0</span></h2>
             <div class="carrito-header-acciones">
               <button type="button" class="btn-carrito-expand" id="btn-carrito-expand" title="Maximizar carrito" aria-label="Maximizar carrito">
                 <span class="btn-expand-icon" aria-hidden="true">⛶</span>
@@ -182,7 +185,7 @@
         <div class="carrito-lista" id="carrito-lista">
           <div class="carrito-vacio carrito-vacio-link" id="carrito-vacio">Agrega productos tocando aquí</div>
         </div>
-        <div class="carrito-totales">
+        <div class="carrito-totales" id="carrito-totales-venta">
           <div class="carrito-fila">
             <span>Subtotal</span>
             <span id="subtotal">$0.00</span>
@@ -192,9 +195,20 @@
             <span id="total">$0.00</span>
           </div>
         </div>
+        <div class="carrito-totales carrito-totales-restock" id="carrito-totales-restock" hidden>
+          <div class="carrito-fila">
+            <span>Unidades</span>
+            <span id="restock-unidades">0</span>
+          </div>
+          <div class="carrito-fila total">
+            <span>Productos</span>
+            <span id="restock-productos">0</span>
+          </div>
+        </div>
         <div class="carrito-acciones">
           <button type="button" class="btn btn-vaciar" id="btn-vaciar">Vaciar</button>
           <button type="button" class="btn btn-cobrar" id="btn-cobrar" disabled>Cobrar</button>
+          <button type="button" class="btn btn-cobrar" id="btn-restock-confirmar" hidden disabled>Confirmar restock</button>
         </div>
       </aside>
     </div>
@@ -227,11 +241,11 @@
               <thead>
                 <tr>
                   <th>Fecha</th>
-                  <th>Producto</th>
                   <th>Movimiento</th>
+                  <th>Producto</th>
                   <th>Cantidad</th>
-                  <th>Usuario</th>
                   <th>Sucursal</th>
+                  <th>Usuario</th>
                 </tr>
               </thead>
               <tbody id="tbody-reporte-movimientos">
@@ -1022,6 +1036,18 @@
         <ul id="modal-reporte-historial-lista" class="reporte-historial-modal-lista"></ul>
         <div class="modal-acciones">
           <button type="button" class="btn btn-vaciar" id="modal-reporte-historial-cerrar">Cerrar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal productos restock (reportes movimientos) -->
+    <div id="modal-reporte-mov-productos" class="modal-overlay" aria-hidden="true">
+      <div class="modal-content modal-reporte-historial-cambios">
+        <h3>Productos del restock</h3>
+        <p id="modal-reporte-mov-productos-subtitulo" class="reporte-historial-modal-sub"></p>
+        <ul id="modal-reporte-mov-productos-lista" class="reporte-historial-modal-lista"></ul>
+        <div class="modal-acciones">
+          <button type="button" class="btn btn-vaciar" id="modal-reporte-mov-productos-cerrar">Cerrar</button>
         </div>
       </div>
     </div>
