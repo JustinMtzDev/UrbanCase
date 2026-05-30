@@ -50,7 +50,7 @@ let token = '';
     if (localStorage.getItem(SUCURSAL_KEY)) {
       await restaurarSucursalGuardada();
     } else {
-      aplicarSeleccionSucursal(null);
+      aplicarSeleccionSucursal('all', 'Todas las sucursales');
     }
   } catch (err) { console.error('restaurarSucursalGuardada:', err); }
   initNav();
@@ -193,8 +193,8 @@ function actualizarEstadoBtnAgregarProducto() {
   const ok = sel && !esTodasLasSucursales && Number.isFinite(sidNum);
 
   if ($btn) {
-    $btn.hidden = esCons;
-    if (!esCons) {
+    $btn.hidden = esCons || esTodasLasSucursales;
+    if (!esCons && !esTodasLasSucursales) {
       $btn.disabled = !ok;
       if (ok) {
         $btn.title = '';
@@ -207,8 +207,10 @@ function actualizarEstadoBtnAgregarProducto() {
   }
 
   if ($btnCons) {
-    $btnCons.hidden = !esCons;
-    $btnCons.disabled = !ok;
+    $btnCons.hidden = !esCons || esTodasLasSucursales;
+    if (!esTodasLasSucursales) {
+      $btnCons.disabled = !ok;
+    }
     if (ok) {
       $btnCons.title = '';
     } else if (esTodasLasSucursales) {
@@ -219,6 +221,31 @@ function actualizarEstadoBtnAgregarProducto() {
   }
 
   actualizarVistaInventarioConsignados();
+  actualizarEstadoBtnRestockRapido();
+}
+
+function actualizarEstadoBtnRestockRapido() {
+  const $btnRestock = document.getElementById('btn-inventario-restock');
+  if (!$btnRestock) return;
+  const esCons = inventarioEsVistaConsignados();
+  const { raw, esTodasLasSucursales } = leerDatasetSucursalInventario();
+  const sel = document.getElementById('dropdown-sucursales-label')?.dataset?.sucursalSeleccionada === '1';
+  const sidNum = raw && !esTodasLasSucursales ? Number(raw) : NaN;
+  const ok = sel && !esTodasLasSucursales && Number.isFinite(sidNum) && !esCons;
+  $btnRestock.hidden = esCons || esTodasLasSucursales;
+  $btnRestock.disabled = !ok;
+  if (ok) {
+    $btnRestock.title = window.ucModoRestockRapido?.() ? 'Salir de restock rápido' : 'Restock rápido';
+  } else if (esCons) {
+    $btnRestock.title = 'Restock no aplica a productos consignados';
+    window.ucDesactivarModoRestockRapido?.();
+  } else if (esTodasLasSucursales) {
+    $btnRestock.title = 'Elige una sucursal concreta para restock rápido';
+    window.ucDesactivarModoRestockRapido?.();
+  } else {
+    $btnRestock.title = 'Selecciona una sucursal en la barra superior';
+    window.ucDesactivarModoRestockRapido?.();
+  }
 }
 
 function actualizarVistaInventarioConsignados() {
@@ -290,12 +317,14 @@ function initNav() {
       $vistaModuloVentas.style.display = 'flex';
       window.ucVentasIrASubvista?.(localStorage.getItem(VENTAS_SUBMODULO_KEY) || 'ventas');
       window.actualizarBtnMostrarCarrito?.();
+      window.ucDesactivarModoRestockRapido?.();
     } else {
       $vistaPos.style.display = 'grid';
       if ($productos) $productos.style.display = 'grid';
       if ($contenidoInv) $contenidoInv.style.display = 'none';
       if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
       window.actualizarBtnMostrarCarrito?.();
+      window.ucDesactivarModoRestockRapido?.();
     }
   }
 
@@ -1080,6 +1109,26 @@ function formatearCostoCompraInventario(p) {
   if (costo == null) return '—';
   const fmt = window.formatearPrecioPOS || ((n) => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 }));
   return fmt(costo);
+}
+
+function calcularPromedioCostoCompraRestock(stockActual, costoActual, cantidadEntrada, costoEntrada) {
+  const stock = Math.max(0, Number(stockActual) || 0);
+  const qty = Math.max(0, Math.trunc(Number(cantidadEntrada) || 0));
+  const costoN = Number(String(costoEntrada ?? '').replace(',', '.'));
+  if (!Number.isFinite(costoN) || costoN <= 0 || qty <= 0) return null;
+  if (stock <= 0) return Math.round(costoN * 100) / 100;
+  const costoPrev = Number(costoActual);
+  if (!Number.isFinite(costoPrev) || costoPrev <= 0) return Math.round(costoN * 100) / 100;
+  const promedio = (stock * costoPrev + qty * costoN) / (stock + qty);
+  return Math.round(promedio * 100) / 100;
+}
+
+function etiquetaBotonAgregarInventarioCarrito() {
+  return window.ucModoRestockRapido?.() ? 'Agregar a restock' : 'Agregar al carrito';
+}
+
+function iconoBotonAgregarInventarioCarrito() {
+  return window.ucModoRestockRapido?.() ? 'fa-dolly' : 'fa-cart-shopping';
 }
 
 function claveAgrupacionProductoInventario(p) {
@@ -2241,6 +2290,10 @@ function initInventarioVista() {
     renderInventarioProductos();
   });
 
+  document.getElementById('btn-inventario-restock')?.addEventListener('click', () => {
+    window.ucToggleModoRestockRapido?.();
+  });
+
   const $pag = document.getElementById('inventario-paginacion');
   $pag?.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-pag]');
@@ -2320,6 +2373,7 @@ function renderInventarioVistaTabla() {
 
   const verTodasSucursales = esTodasLasSucursales;
   document.querySelectorAll('.inventario-col-sucursal').forEach((el) => { el.hidden = !verTodasSucursales; });
+  document.querySelectorAll('.inventario-col-acciones').forEach((el) => { el.hidden = verTodasSucursales; });
 
   const lista = aplicarListaInventarioParaVista(filtrarProductosInventario(), verTodasSucursales);
   const formatearPrecio = window.formatearPrecioPOS || (n => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 }));
@@ -2372,14 +2426,12 @@ function renderInventarioVistaTabla() {
       ? formatearPrecio(Number(p.costo_consignacion) || 0)
       : formatearCostoCompraInventario(p);
     const puedeTrasladar = !agrupado && puedeTrasladarProductoInventario(p);
-    const accionesHtml = verTodasSucursales
-      ? '<span class="inventario-tabla-solo-sucursal">Elige una sucursal</span>'
-      : `<div class="inventario-tabla-acciones-fila">
+    const accionesHtml = `<div class="inventario-tabla-acciones-fila">
           <button type="button" class="btn-tabla inventario-tabla-editar" data-id="${p.id}">Editar</button>
           <button type="button" class="btn-tabla btn-tabla-danger inventario-tabla-eliminar" data-id="${p.id}">Eliminar</button>
         </div>
         <div class="inventario-tabla-acciones-fila inventario-tabla-acciones-fila--iconos">
-          <button type="button" class="btn-tabla btn-tabla-icono inventario-tabla-carrito" data-id="${p.id}" title="Agregar al carrito" aria-label="Agregar al carrito"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i></button>
+          <button type="button" class="btn-tabla btn-tabla-icono inventario-tabla-carrito" data-id="${p.id}" title="${escHtmlInventario(etiquetaBotonAgregarInventarioCarrito())}" aria-label="${escHtmlInventario(etiquetaBotonAgregarInventarioCarrito())}"><i class="fa-solid ${iconoBotonAgregarInventarioCarrito()}" aria-hidden="true"></i></button>
           ${puedeTrasladar ? `<button type="button" class="btn-tabla btn-tabla-icono inventario-tabla-trasladar" data-id="${p.id}" title="Trasladar a otra sucursal" aria-label="Trasladar a otra sucursal"><i class="fa-solid fa-arrows-turn-to-dots" aria-hidden="true"></i></button>` : ''}
         </div>`;
     return `
@@ -2391,9 +2443,9 @@ function renderInventarioVistaTabla() {
       <td>${colCostoCompra}</td>
       <td>${colStock}</td>
       ${verTodasSucursales ? `<td class="inventario-col-sucursal inventario-tabla-multisucursal">${celSucursalInner}</td>` : ''}
-      <td class="inventario-tabla-acciones">
+      ${verTodasSucursales ? '' : `<td class="inventario-tabla-acciones inventario-col-acciones">
         ${accionesHtml}
-      </td>
+      </td>`}
     </tr>`;
   }).join('');
 
@@ -2549,7 +2601,7 @@ function renderInventarioVistaCards() {
         ${lineaSucursal}
       </div>
       <div class="inventario-producto-acciones">
-        <button type="button" class="inventario-producto-btn" data-id="${p.id}">Agregar al carrito</button>
+        <button type="button" class="inventario-producto-btn" data-id="${p.id}">${escHtmlInventario(etiquetaBotonAgregarInventarioCarrito())}</button>
       </div>
     </article>
   `;
@@ -2574,7 +2626,7 @@ function renderInventarioVistaCards() {
         ${lineaSucursal}
       </div>
       <div class="inventario-producto-acciones">
-        <button type="button" class="inventario-producto-btn" data-id="${p.id}">Agregar al carrito</button>
+        <button type="button" class="inventario-producto-btn" data-id="${p.id}">${escHtmlInventario(etiquetaBotonAgregarInventarioCarrito())}</button>
       </div>
     </article>
   `;
@@ -5113,15 +5165,25 @@ function initProductoModal() {
 function initPOS() {
   const PRODUCTOS = [];
   let carrito = [];
+  let carritoRestock = [];
+  let modoRestockRapido = false;
 
   const $productos = document.getElementById('productos');
   const $carritoLista = document.getElementById('carrito-lista');
+  redirigirWheelScrollPanelDesdeInputNumerico($carritoLista);
   const $carritoVacio = document.getElementById('carrito-vacio');
   const $carritoCount = document.getElementById('carrito-count');
+  const $carritoTitulo = document.getElementById('carrito-titulo-texto');
   const $subtotal = document.getElementById('subtotal');
   const $total = document.getElementById('total');
+  const $totalesVenta = document.getElementById('carrito-totales-venta');
+  const $totalesRestock = document.getElementById('carrito-totales-restock');
+  const $restockUnidades = document.getElementById('restock-unidades');
+  const $restockProductos = document.getElementById('restock-productos');
   const $btnVaciar = document.getElementById('btn-vaciar');
   const $btnCobrar = document.getElementById('btn-cobrar');
+  const $btnRestockConfirmar = document.getElementById('btn-restock-confirmar');
+  const $btnRestockToggle = document.getElementById('btn-inventario-restock');
   const $modal = document.getElementById('modal-venta');
   const $modalTotal = document.getElementById('modal-total');
   const $modalCerrar = document.getElementById('modal-cerrar');
@@ -5209,7 +5271,235 @@ function initPOS() {
     });
   }
 
-  function actualizarCarrito() {
+  function agregarProductoAlRestock(prod) {
+    if (!prod || prod.es_consignado) {
+      alert('El restock rápido solo aplica a productos de inventario propio');
+      return;
+    }
+    const id = Number(prod.id);
+    if (!Number.isFinite(id)) return;
+    const item = carritoRestock.find((i) => Number(i.id) === id);
+    if (item) {
+      item.cantidad++;
+    } else {
+      carritoRestock.push({
+        id,
+        nombre: nombreProductoInventarioDisplay(prod),
+        stockActual: Number(prod.stock) || 0,
+        costoCompraActual: getCostoCompraProducto(prod),
+        cantidad: 1,
+        costoNuevo: '',
+      });
+    }
+    actualizarCarrito();
+    mostrarCarritoPanel();
+  }
+
+  function restockItemValido(item) {
+    const costo = Number(String(item?.costoNuevo ?? '').replace(',', '.'));
+    return Number.isFinite(costo) && costo > 0;
+  }
+
+  function textoPromedioRestockItem(item) {
+    const promedio = calcularPromedioCostoCompraRestock(
+      item.stockActual,
+      item.costoCompraActual,
+      item.cantidad,
+      item.costoNuevo
+    );
+    return promedio != null ? formatearPrecio(promedio) : '—';
+  }
+
+  function aplicarModoRestockPanel(activo) {
+    document.body.classList.toggle('modo-restock-rapido', activo);
+    if ($carritoTitulo) $carritoTitulo.textContent = activo ? 'Restock' : 'Carrito';
+    if ($totalesVenta) $totalesVenta.hidden = activo;
+    if ($totalesRestock) $totalesRestock.hidden = !activo;
+    if ($btnCobrar) $btnCobrar.hidden = activo;
+    if ($btnRestockConfirmar) $btnRestockConfirmar.hidden = !activo;
+    if ($btnRestockToggle) {
+      $btnRestockToggle.classList.toggle('activo', activo);
+      $btnRestockToggle.setAttribute('aria-pressed', activo ? 'true' : 'false');
+      if (!$btnRestockToggle.disabled) {
+        $btnRestockToggle.title = activo ? 'Salir de restock rápido' : 'Restock rápido';
+      }
+    }
+  }
+
+  function setModoRestockRapido(activo) {
+    if (activo) {
+      const { esTodasLasSucursales } = leerDatasetSucursalInventario();
+      if (esTodasLasSucursales) {
+        alert('Elige una sucursal concreta para usar restock rápido');
+        return;
+      }
+      if (inventarioEsVistaConsignados()) {
+        alert('El restock rápido no aplica a productos consignados');
+        return;
+      }
+    }
+    modoRestockRapido = activo;
+    aplicarModoRestockPanel(activo);
+    actualizarCarrito();
+    actualizarEstadoBtnRestockRapido();
+    renderInventarioProductos();
+    if (activo) mostrarCarritoPanel();
+  }
+
+  function refrescarTotalesRestock() {
+    const totalItems = carritoRestock.reduce((s, i) => s + i.cantidad, 0);
+    $carritoCount.textContent = totalItems;
+    if ($restockUnidades) $restockUnidades.textContent = String(totalItems);
+    if ($restockProductos) $restockProductos.textContent = String(carritoRestock.length);
+    if ($btnRestockConfirmar) {
+      $btnRestockConfirmar.disabled = !(carritoRestock.length > 0 && carritoRestock.every(restockItemValido));
+    }
+  }
+
+  function setupRestockCantidadHoldRepeat($btn, aplicarDelta) {
+    if (!$btn) return;
+    let repeatTimer = null;
+    let startTime = 0;
+    const initialDelay = 380;
+    const maxInterval = 160;
+    const minInterval = 32;
+
+    function intervalMs() {
+      const elapsed = Date.now() - startTime;
+      if (elapsed < initialDelay) return maxInterval;
+      const held = elapsed - initialDelay;
+      return Math.max(minInterval, maxInterval * Math.pow(0.88, held / 65));
+    }
+
+    function stop() {
+      clearTimeout(repeatTimer);
+      repeatTimer = null;
+    }
+
+    function tick() {
+      if (aplicarDelta() === false) {
+        stop();
+        return;
+      }
+      repeatTimer = setTimeout(tick, intervalMs());
+    }
+
+    function start(e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      e.preventDefault();
+      stop();
+      if (aplicarDelta() === false) return;
+      startTime = Date.now();
+      repeatTimer = setTimeout(tick, initialDelay);
+    }
+
+    $btn.addEventListener('pointerdown', start);
+    $btn.addEventListener('pointerup', stop);
+    $btn.addEventListener('pointerleave', stop);
+    $btn.addEventListener('pointercancel', stop);
+  }
+
+  function actualizarCarritoRestock() {
+    refrescarTotalesRestock();
+
+    if (carritoRestock.length === 0) {
+      $carritoLista.innerHTML = '';
+      $carritoLista.appendChild($carritoVacio);
+      $carritoVacio.style.display = 'block';
+      $carritoVacio.textContent = 'Agrega productos al restock desde inventario';
+      $carritoVacio.classList.remove('carrito-vacio-link');
+      return;
+    }
+
+    $carritoVacio.style.display = 'none';
+    $carritoLista.innerHTML = carritoRestock.map((i) => `
+      <div class="carrito-item carrito-item-restock" data-id="${i.id}">
+        <div class="carrito-item-restock-top">
+          <span class="carrito-item-nombre">${escHtmlInventario(i.nombre)}</span>
+          <div class="carrito-item-cantidad">
+            <button type="button" class="carrito-restock-cantidad-menos" aria-label="Menos">−</button>
+            <input type="number" min="1" step="1" inputmode="numeric" class="carrito-restock-cantidad-input" value="${i.cantidad}" aria-label="Cantidad de ${escHtmlInventario(i.nombre)}">
+            <button type="button" class="carrito-restock-cantidad-mas" aria-label="Más">+</button>
+          </div>
+          <button type="button" class="carrito-item-quitar" aria-label="Quitar">×</button>
+        </div>
+        <div class="carrito-item-restock-costos">
+          <label class="carrito-restock-costo">
+            <span class="carrito-restock-label">Costo compra</span>
+            <div class="carrito-restock-costo-input">
+              <span class="carrito-restock-signo">$</span>
+              <input type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" value="${escHtmlInventario(i.costoNuevo)}" aria-label="Costo de compra de ${escHtmlInventario(i.nombre)}">
+            </div>
+          </label>
+          <div class="carrito-restock-promedio">
+            <span class="carrito-restock-label">Promedio</span>
+            <strong class="carrito-restock-promedio-valor">${textoPromedioRestockItem(i)}</strong>
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    $carritoLista.querySelectorAll('.carrito-item-restock').forEach((row) => {
+      const id = Number(row.dataset.id);
+      const item = carritoRestock.find((i) => Number(i.id) === id);
+      if (!item) return;
+      const $promedio = row.querySelector('.carrito-restock-promedio-valor');
+      const $inputCosto = row.querySelector('.carrito-restock-costo-input input');
+      const $inputCantidad = row.querySelector('.carrito-restock-cantidad-input');
+      const $btnMenos = row.querySelector('.carrito-restock-cantidad-menos');
+      const $btnMas = row.querySelector('.carrito-restock-cantidad-mas');
+      const refrescarPromedio = () => {
+        if ($promedio) $promedio.textContent = textoPromedioRestockItem(item);
+        refrescarTotalesRestock();
+      };
+      $inputCosto?.addEventListener('input', () => {
+        item.costoNuevo = $inputCosto.value;
+        refrescarPromedio();
+      });
+      $inputCantidad?.addEventListener('blur', () => {
+        const n = parseInt($inputCantidad.value, 10);
+        if (!Number.isFinite(n) || n < 1) {
+          item.cantidad = 1;
+          $inputCantidad.value = '1';
+        } else {
+          item.cantidad = n;
+          $inputCantidad.value = String(n);
+        }
+        refrescarPromedio();
+      });
+      $inputCantidad?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          $inputCantidad.blur();
+        }
+      });
+      setupRestockCantidadHoldRepeat($btnMenos, () => {
+        if (!carritoRestock.some((i) => Number(i.id) === id)) return false;
+        if (item.cantidad <= 1) {
+          carritoRestock = carritoRestock.filter((i) => Number(i.id) !== id);
+          actualizarCarrito();
+          return false;
+        }
+        item.cantidad--;
+        if ($inputCantidad) $inputCantidad.value = String(item.cantidad);
+        refrescarPromedio();
+        return true;
+      });
+      setupRestockCantidadHoldRepeat($btnMas, () => {
+        if (!carritoRestock.some((i) => Number(i.id) === id)) return false;
+        item.cantidad++;
+        if ($inputCantidad) $inputCantidad.value = String(item.cantidad);
+        refrescarPromedio();
+        return true;
+      });
+      row.querySelector('.carrito-item-quitar')?.addEventListener('click', () => {
+        carritoRestock = carritoRestock.filter((i) => Number(i.id) !== id);
+        actualizarCarrito();
+      });
+    });
+  }
+
+  function actualizarCarritoVenta() {
     const totalItems = carrito.reduce((s, i) => s + i.cantidad, 0);
     const subtotalNum = carrito.reduce((s, i) => s + i.precio * i.cantidad, 0);
     $carritoCount.textContent = totalItems;
@@ -5258,7 +5548,54 @@ function initPOS() {
     }
   }
 
-  $btnVaciar.addEventListener('click', () => { carrito = []; actualizarCarrito(); });
+  function actualizarCarrito() {
+    if (modoRestockRapido) actualizarCarritoRestock();
+    else actualizarCarritoVenta();
+  }
+
+  async function confirmarRestockRapido() {
+    if (!modoRestockRapido || carritoRestock.length === 0) return;
+    for (const item of carritoRestock) {
+      if (!restockItemValido(item)) {
+        alert(`Ingresa el costo de compra para «${item.nombre}»`);
+        return;
+      }
+    }
+    if ($btnRestockConfirmar) $btnRestockConfirmar.disabled = true;
+    try {
+      const items = carritoRestock.map((i) => ({
+        producto_id: i.id,
+        cantidad: i.cantidad,
+        costo_compra: Number(String(i.costoNuevo).replace(',', '.')),
+      }));
+      const r = await fetch(`${API}/productos/restock-rapido`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ items }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        alert(data.error || 'No se pudo aplicar el restock');
+        return;
+      }
+      carritoRestock = [];
+      setModoRestockRapido(false);
+      await window.ucCargarInventarioProductos?.();
+    } catch (err) {
+      alert(err?.message || 'Error de red al aplicar restock');
+    } finally {
+      if ($btnRestockConfirmar) {
+        $btnRestockConfirmar.disabled = !(carritoRestock.length > 0 && carritoRestock.every(restockItemValido));
+      }
+    }
+  }
+
+  $btnVaciar.addEventListener('click', () => {
+    if (modoRestockRapido) carritoRestock = [];
+    else carrito = [];
+    actualizarCarrito();
+  });
+  $btnRestockConfirmar?.addEventListener('click', confirmarRestockRapido);
 
   const $carritoPanel = document.getElementById('carrito-panel');
   const $carritoOverlay = document.getElementById('carrito-overlay');
@@ -5329,6 +5666,11 @@ function initPOS() {
 
   window.actualizarCarritoVacioParaVista = () => {
     if ($carritoVacio.style.display !== 'block') return;
+    if (modoRestockRapido) {
+      $carritoVacio.textContent = 'Agrega productos al restock desde inventario';
+      $carritoVacio.classList.remove('carrito-vacio-link');
+      return;
+    }
     const enInventario = document.getElementById('contenido-inventario')?.style.display === 'flex';
     $carritoVacio.textContent = enInventario ? 'Agrega productos' : 'Agrega productos tocando aquí';
     $carritoVacio.classList.toggle('carrito-vacio-link', !enInventario);
@@ -5343,14 +5685,26 @@ function initPOS() {
   $modal.addEventListener('click', e => { if (e.target === $modal) $modal.classList.remove('visible'); });
 
   renderProductos();
+  aplicarModoRestockPanel(false);
   actualizarCarrito();
 
   window.agregarAlCarrito = (prod) => {
+    if (modoRestockRapido) {
+      agregarProductoAlRestock(prod);
+      return;
+    }
     if (productoFundaTieneRangoPrecio(prod)) {
       abrirModalPrecioFundaCarrito(prod);
       return;
     }
     agregarProductoAlCarritoDirecto(prod);
+  };
+
+  window.ucModoRestockRapido = () => modoRestockRapido;
+  window.ucToggleModoRestockRapido = () => setModoRestockRapido(!modoRestockRapido);
+  window.ucDesactivarModoRestockRapido = () => {
+    if (!modoRestockRapido) return;
+    setModoRestockRapido(false);
   };
 
   window.ucAgregarConsignadoAlCarrito = (datos) => {
@@ -5411,17 +5765,136 @@ function escReporteTexto(s) {
     .replace(/"/g, '&quot;');
 }
 
-function etiquetaMovimientoInventarioReporte(tipo) {
+function textoProductoMovimientoInventarioReporte(m) {
+  const productos = productosDetalleMovimientoInventarioDesdeFila(m);
+  if (productos.length > 0) {
+    return productos.map((p) => p.nombre).filter(Boolean).join(', ') || m.producto_nombre || '—';
+  }
+  return m?.producto_nombre || '—';
+}
+
+function productosDetalleMovimientoInventarioDesdeFila(m) {
+  const productos = m?.detalle?.productos;
+  if (Array.isArray(productos) && productos.length > 0) return productos;
+  if (m?.detalle?.costo_entrada != null || m?.detalle?.motivo === 'restock_rapido') {
+    return [{
+      nombre: m?.producto_nombre,
+      cantidad: m?.cantidad,
+      costo_anterior: m?.detalle?.costo_anterior,
+      costo_entrada: m?.detalle?.costo_entrada,
+      costo_promedio: m?.detalle?.costo_promedio,
+    }];
+  }
+  if (m?.producto_nombre) {
+    return [{
+      nombre: m.producto_nombre,
+      cantidad: m?.cantidad,
+      costo_anterior: m?.detalle?.costo_anterior,
+      costo_entrada: m?.detalle?.costo_entrada,
+      costo_promedio: m?.detalle?.costo_promedio,
+    }];
+  }
+  return [];
+}
+
+function formatCostoReporte(valor) {
+  if (valor == null || valor === '') return '—';
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return '—';
+  return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function lineaProductoRestockMovimientoReporte(producto, index) {
+  const n = index + 1;
+  const nombre = producto?.nombre || 'Producto';
+  const cantidad = Number(producto?.cantidad) || 0;
+  const cantidadTxt = cantidad > 0 ? `+${cantidad}` : String(cantidad);
+  const anterior = formatCostoReporte(producto?.costo_anterior);
+  const ingresado = formatCostoReporte(producto?.costo_entrada);
+  return `${n}.- ${nombre}: ${cantidadTxt} uds · Costo anterior: ${anterior} · Costo ingresado: ${ingresado}`;
+}
+
+const movimientosInventarioProductosCache = new Map();
+
+function htmlCeldaProductoMovimientoInventarioReporte(m) {
+  const texto = textoProductoMovimientoInventarioReporte(m);
+  if (!texto || texto === '—') return '<span class="reporte-historial-sin-cambio">—</span>';
+  const id = Number(m.id);
+  const navHtml = `
+    <button type="button" class="btn-tabla btn-tabla-icono reporte-mov-producto-ver" data-movimiento-id="${id}" title="Ver productos del restock" aria-label="Ver productos del restock">
+      <i class="fa-solid fa-eye" aria-hidden="true"></i>
+    </button>
+  `;
+  return `
+    <div class="reporte-mov-productos" data-movimiento-id="${id}">
+      <span class="reporte-mov-producto-texto" title="${escReporteTexto(texto)}">${escReporteTexto(texto)}</span>
+      ${navHtml}
+    </div>
+  `;
+}
+
+function abrirModalMovimientosInventarioProductos(movimientoId) {
+  const productos = movimientosInventarioProductosCache.get(Number(movimientoId)) || [];
+  const $modal = document.getElementById('modal-reporte-mov-productos');
+  const $sub = document.getElementById('modal-reporte-mov-productos-subtitulo');
+  const $lista = document.getElementById('modal-reporte-mov-productos-lista');
+  if (!$modal || !$lista) return;
+  const fila = document.querySelector(`[data-movimiento-id="${movimientoId}"]`)?.closest('tr');
+  const movimiento = fila?.querySelector('td:nth-child(2)')?.textContent?.trim() || 'Restock rápido';
+  if ($sub) $sub.textContent = movimiento;
+  $lista.innerHTML = productos.map((p, i) =>
+    `<li>${escReporteTexto(lineaProductoRestockMovimientoReporte(p, i))}</li>`
+  ).join('');
+  $modal.classList.add('visible');
+  $modal.setAttribute('aria-hidden', 'false');
+}
+
+function cerrarModalMovimientosInventarioProductos() {
+  const $modal = document.getElementById('modal-reporte-mov-productos');
+  if (!$modal) return;
+  $modal.classList.remove('visible');
+  $modal.setAttribute('aria-hidden', 'true');
+}
+
+function initMovimientosInventarioReporteUI() {
+  if (initMovimientosInventarioReporteUI._done) return;
+  initMovimientosInventarioReporteUI._done = true;
+
+  const $tbody = document.getElementById('tbody-reporte-movimientos');
+  const $modal = document.getElementById('modal-reporte-mov-productos');
+
+  $tbody?.addEventListener('click', (e) => {
+    const $ver = e.target.closest('.reporte-mov-producto-ver');
+    if (!$ver) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const id = Number($ver.dataset.movimientoId);
+    if (!movimientosInventarioProductosCache.has(id)) return;
+    abrirModalMovimientosInventarioProductos(id);
+  });
+
+  document.getElementById('modal-reporte-mov-productos-cerrar')?.addEventListener('click', cerrarModalMovimientosInventarioProductos);
+  $modal?.addEventListener('click', (e) => {
+    if (e.target === $modal) cerrarModalMovimientosInventarioProductos();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && $modal?.classList.contains('visible')) cerrarModalMovimientosInventarioProductos();
+  });
+}
+
+function etiquetaMovimientoInventarioReporte(tipo, detalle) {
+  const t = String(tipo || '').toLowerCase();
+  if (t === 'devolucion') return 'Devolución';
+  if (t === 'restock_rapido' || detalle?.motivo === 'restock_rapido') return 'Restock rápido';
   const map = {
     venta: 'Venta',
-    entrada_mercancia: 'Entrada de mercancia',
+    entrada_mercancia: 'Entrada de mercancía',
     ajuste_manual: 'Ajuste manual',
     transferencia_salida: 'Transferencia salida',
     transferencia_entrada: 'Transferencia entrada',
-    devolucion: 'Devolucion',
     otro: 'Otro',
   };
-  return map[String(tipo || '').toLowerCase()] || String(tipo || '—');
+  return map[t] || String(tipo || '—');
 }
 
 function claseCantidadMovimientoInventario(cantidad) {
@@ -5434,10 +5907,17 @@ function claseCantidadMovimientoInventario(cantidad) {
 function renderTablaMovimientosInventarioReporte(lista) {
   const $tbody = document.getElementById('tbody-reporte-movimientos');
   if (!$tbody) return;
+  movimientosInventarioProductosCache.clear();
   if (!Array.isArray(lista) || lista.length === 0) {
     $tbody.innerHTML = '<tr><td colspan="6" class="tabla-vacio">No hay movimientos registrados</td></tr>';
     return;
   }
+  lista.forEach((m) => {
+    const productos = productosDetalleMovimientoInventarioDesdeFila(m);
+    if (m?.id != null && productos.length > 0) {
+      movimientosInventarioProductosCache.set(Number(m.id), productos);
+    }
+  });
   $tbody.innerHTML = lista.map((m) => {
     const fecha = formatFecha(m.created_at);
     const cantidadNum = Number(m.cantidad) || 0;
@@ -5445,11 +5925,11 @@ function renderTablaMovimientosInventarioReporte(lista) {
     return `
       <tr>
         <td>${escReporteTexto(fecha)}</td>
-        <td>${escReporteTexto(m.producto_nombre || '—')}</td>
-        <td>${escReporteTexto(etiquetaMovimientoInventarioReporte(m.movimiento))}</td>
+        <td>${escReporteTexto(etiquetaMovimientoInventarioReporte(m.movimiento, m.detalle))}</td>
+        <td class="reporte-mov-productos-cell">${htmlCeldaProductoMovimientoInventarioReporte(m)}</td>
         <td><span class="reporte-mov-cantidad${claseCantidadMovimientoInventario(cantidadNum)}">${escReporteTexto(cantidadTxt)}</span></td>
-        <td>${escReporteTexto(m.usuario_nombre || 'Sistema')}</td>
         <td>${escReporteTexto(m.sucursal_nombre || 'Sin sucursal')}</td>
+        <td>${escReporteTexto(m.usuario_nombre || 'Sistema')}</td>
       </tr>
     `;
   }).join('');
@@ -5492,30 +5972,46 @@ function etiquetaCampoHistorialProductoReporte(campo) {
     nombre: 'Nombre',
     precio: 'Precio',
     precio_max: 'Precio máximo',
-    costo_compra: 'Costo compra',
+    stock: 'Stock',
     categoria: 'Categoría',
     imagen: 'Imagen',
   };
   return map[String(campo || '').toLowerCase()] || String(campo || '');
 }
 
+function cambioEsCostoCompraHistorial(cambio) {
+  const campo = String(cambio?.campo || '').toLowerCase();
+  const etiqueta = String(cambio?.etiqueta || '').toLowerCase();
+  return campo === 'costo_compra' || etiqueta === 'costo compra';
+}
+
+function filtrarCambiosHistorialProducto(cambios) {
+  return (Array.isArray(cambios) ? cambios : []).filter((c) => !cambioEsCostoCompraHistorial(c));
+}
+
 function cambiosHistorialProductoDesdeFila(row) {
   const detalle = row?.detalle;
   if (detalle && Array.isArray(detalle.cambios) && detalle.cambios.length) {
-    return detalle.cambios;
+    const cambios = filtrarCambiosHistorialProducto(detalle.cambios);
+    if (cambios.length) return cambios;
   }
   const accion = String(row?.accion || '').toLowerCase();
   if (accion === 'alta') {
     return [{ etiqueta: 'Alta', valor_anterior: '—', valor_nuevo: row.valor_nuevo || 'Producto registrado' }];
   }
   if (accion === 'eliminacion') {
+    const stockEliminado = Number(
+      detalle?.stock_eliminado
+      ?? detalle?.cambios?.[0]?.stock_eliminado
+    );
     return [{
       etiqueta: 'Eliminación',
       valor_anterior: row.valor_anterior || 'Producto activo',
       valor_nuevo: row.valor_nuevo || 'Producto eliminado',
+      stock_eliminado: Number.isFinite(stockEliminado) ? stockEliminado : null,
     }];
   }
-  if (row?.campo) {
+  if (row?.campo && String(row.campo).toLowerCase() !== 'costo_compra') {
     return [{
       campo: row.campo,
       etiqueta: etiquetaCampoHistorialProductoReporte(row.campo),
@@ -5523,10 +6019,15 @@ function cambiosHistorialProductoDesdeFila(row) {
       valor_nuevo: row.valor_nuevo || '—',
     }];
   }
-  return [{ etiqueta: 'Cambio', valor_anterior: '—', valor_nuevo: '—' }];
+  return [];
 }
 
-function lineaCambioHistorialProductoReporte(cambio, indice) {
+function stockEliminadoHistorialProducto(cambio, row) {
+  const n = Number(cambio?.stock_eliminado ?? row?.detalle?.stock_eliminado);
+  return Number.isFinite(n) ? n : null;
+}
+
+function lineaCambioHistorialProductoReporte(cambio, indice, row) {
   const n = Number(indice) + 1;
   if (cambio?.campo === 'imagen' || cambio?.etiqueta === 'Imagen cambiada') {
     return `${n}.- Imagen cambiada`;
@@ -5534,13 +6035,35 @@ function lineaCambioHistorialProductoReporte(cambio, indice) {
   const etiqueta = cambio?.etiqueta || etiquetaCampoHistorialProductoReporte(cambio?.campo) || 'Cambio';
   const antes = cambio?.valor_anterior || '—';
   const despues = cambio?.valor_nuevo || '—';
+  const stock = stockEliminadoHistorialProducto(cambio, row);
+  if (cambio?.etiqueta === 'Eliminación' && stock != null) {
+    return `${n}.- ${etiqueta}: ${antes} → ${despues} · Stock: ${stock}`;
+  }
+  return `${n}.- ${etiqueta}: ${antes} → ${despues}`;
+}
+
+function htmlLineaCambioHistorialProductoReporte(cambio, indice, row) {
+  const n = Number(indice) + 1;
+  if (cambio?.campo === 'imagen' || cambio?.etiqueta === 'Imagen cambiada') {
+    return `${n}.- Imagen cambiada`;
+  }
+  const etiqueta = escReporteTexto(cambio?.etiqueta || etiquetaCampoHistorialProductoReporte(cambio?.campo) || 'Cambio');
+  const antes = escReporteTexto(cambio?.valor_anterior || '—');
+  const despues = escReporteTexto(cambio?.valor_nuevo || '—');
+  const stock = stockEliminadoHistorialProducto(cambio, row);
+  if (cambio?.etiqueta === 'Eliminación' && stock != null) {
+    return `${n}.- ${etiqueta}: ${antes} → ${despues} · Stock: <span class="reporte-historial-stock-eliminado">${escReporteTexto(String(stock))}</span>`;
+  }
   return `${n}.- ${etiqueta}: ${antes} → ${despues}`;
 }
 
 function htmlCeldaCambiosHistorialProductoReporte(h) {
   const cambios = cambiosHistorialProductoDesdeFila(h);
+  if (!cambios.length) {
+    return '<span class="reporte-historial-sin-cambio">—</span>';
+  }
   const id = Number(h.id);
-  const texto = lineaCambioHistorialProductoReporte(cambios[0], 0);
+  const textoHtmlBase = htmlLineaCambioHistorialProductoReporte(cambios[0], 0, h);
   const multiples = cambios.length > 1;
   const navHtml = multiples ? `
     <button type="button" class="btn-tabla btn-tabla-icono reporte-historial-cambio-ver" data-historial-id="${id}" title="Ver todos los cambios" aria-label="Ver todos los cambios">
@@ -5548,8 +6071,8 @@ function htmlCeldaCambiosHistorialProductoReporte(h) {
     </button>
   ` : '';
   const textoHtml = multiples
-    ? `${escReporteTexto(texto)} <span class="reporte-historial-cambio-ellipsis">...</span>`
-    : escReporteTexto(texto);
+    ? `${textoHtmlBase} <span class="reporte-historial-cambio-ellipsis">...</span>`
+    : textoHtmlBase;
   return `
     <div class="reporte-historial-cambios" data-historial-id="${id}">
       <span class="reporte-historial-cambio-texto">${textoHtml}</span>
@@ -5564,14 +6087,19 @@ function renderTablaHistorialProductosReporte(lista) {
   const $tbody = document.getElementById('tbody-reporte-historial-productos');
   if (!$tbody) return;
   historialProductosCambiosCache.clear();
-  if (!Array.isArray(lista) || lista.length === 0) {
+  const visible = (Array.isArray(lista) ? lista : []).filter((h) => {
+    const accion = String(h?.accion || '').toLowerCase();
+    if (accion !== 'edicion') return true;
+    return cambiosHistorialProductoDesdeFila(h).length > 0;
+  });
+  if (visible.length === 0) {
     $tbody.innerHTML = '<tr><td colspan="6" class="tabla-vacio">No hay cambios registrados</td></tr>';
     return;
   }
-  lista.forEach((h) => {
+  visible.forEach((h) => {
     if (h?.id != null) historialProductosCambiosCache.set(Number(h.id), cambiosHistorialProductoDesdeFila(h));
   });
-  $tbody.innerHTML = lista.map((h) => {
+  $tbody.innerHTML = visible.map((h) => {
     const fecha = formatFecha(h.created_at);
     return `
       <tr>
@@ -5635,7 +6163,7 @@ function initHistorialProductosReporteUI() {
   });
 }
 
-const REPORTE_TIPO_KEY = 'urbancase_reporte_tipo';
+const REPORTE_TIPO_DEFAULT = 'movimientos-inventario';
 
 const REPORTES_CONFIG = {
   'movimientos-inventario': {
@@ -5684,22 +6212,15 @@ function initModuloVentas() {
 
   const reporteTipoCustomSelect = initCustomSelectBasico($tipoReporte);
   initHistorialProductosReporteUI();
+  initMovimientosInventarioReporteUI();
 
   let reporteReqId = 0;
   let debounceBuscar = null;
-  let reporteActivo = 'movimientos-inventario';
+  let reporteActivo = REPORTE_TIPO_DEFAULT;
 
   function reporteTipoDisponible(tipo) {
     const opt = $tipoReporte?.querySelector(`option[value="${tipo}"]`);
     return Boolean(opt && !opt.disabled);
-  }
-
-  function leerReporteActivoGuardado() {
-    try {
-      const saved = localStorage.getItem(REPORTE_TIPO_KEY);
-      if (saved && reporteTipoDisponible(saved)) return saved;
-    } catch (_) {}
-    return 'movimientos-inventario';
   }
 
   function configReporteActivo() {
@@ -5729,7 +6250,6 @@ function initModuloVentas() {
     if ($tipoReporte && $tipoReporte.value !== tipo) $tipoReporte.value = tipo;
     reporteTipoCustomSelect?.syncDisplay?.();
     actualizarControlesReporteToolbar();
-    try { localStorage.setItem(REPORTE_TIPO_KEY, tipo); } catch (_) {}
     if (REPORTES_CONFIG[tipo]) void cargarReporteActivo();
   }
 
@@ -5787,7 +6307,10 @@ function initModuloVentas() {
     $svReportes.style.display = modo === 'reportes' ? '' : 'none';
     if ($toolbarReportes) $toolbarReportes.hidden = modo !== 'reportes';
     try { localStorage.setItem(VENTAS_SUBMODULO_KEY, modo); } catch (_) {}
-    if (modo === 'reportes') mostrarPanelReporte(leerReporteActivoGuardado());
+    if (modo === 'reportes') {
+      if ($buscar) $buscar.value = '';
+      mostrarPanelReporte(REPORTE_TIPO_DEFAULT);
+    }
   }
 
   $tabVentas.addEventListener('click', () => irASubvista('ventas'));
@@ -5809,8 +6332,7 @@ function initModuloVentas() {
   });
 
   window.ucVentasIrASubvista = irASubvista;
-  reporteActivo = leerReporteActivoGuardado();
-  if ($tipoReporte) $tipoReporte.value = reporteActivo;
+  if ($tipoReporte) $tipoReporte.value = REPORTE_TIPO_DEFAULT;
   actualizarControlesReporteToolbar();
   irASubvista(localStorage.getItem(VENTAS_SUBMODULO_KEY) || 'ventas');
 }

@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS public.inventario_movimientos (
     movimiento IN (
       'venta',
       'entrada_mercancia',
+      'restock_rapido',
       'ajuste_manual',
       'transferencia_salida',
       'transferencia_entrada',

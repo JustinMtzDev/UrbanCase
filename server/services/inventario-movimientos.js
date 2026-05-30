@@ -1,6 +1,7 @@
 const TIPOS_MOVIMIENTO_INVENTARIO = new Set([
   'venta',
   'entrada_mercancia',
+  'restock_rapido',
   'ajuste_manual',
   'transferencia_salida',
   'transferencia_entrada',

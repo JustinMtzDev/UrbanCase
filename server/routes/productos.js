@@ -82,6 +82,18 @@ function normalizarCostoCompraProducto(costoCompraRaw) {
   return costoNum;
 }
 
+function calcularPromedioCostoCompra(stockActual, costoActual, cantidadEntrada, costoEntrada) {
+  const stock = Math.max(0, Number(stockActual) || 0);
+  const qty = Math.max(0, Math.trunc(Number(cantidadEntrada) || 0));
+  const costoN = Number(costoEntrada);
+  if (!Number.isFinite(costoN) || costoN <= 0 || qty <= 0) return null;
+  if (stock <= 0) return Math.round(costoN * 100) / 100;
+  const costoPrev = Number(costoActual);
+  if (!Number.isFinite(costoPrev) || costoPrev <= 0) return Math.round(costoN * 100) / 100;
+  const promedio = (stock * costoPrev + qty * costoN) / (stock + qty);
+  return Math.round(promedio * 100) / 100;
+}
+
 router.post('/', async (req, res) => {
   let { nombre, precio, precio_max, costo_compra, stock, categoria, imagen, sucursal_id, id_sucursal } = req.body || {};
   const sid = sucursal_id != null ? sucursal_id : id_sucursal;
@@ -194,6 +206,7 @@ router.put('/:id', async (req, res) => {
       if (!Number.isFinite(stockNum) || stockNum < 0) return res.status(400).json({ error: 'stock inválido' });
       set.push(`stock = $${idx++}`);
       vals.push(stockNum);
+      camposActualizados.push('stock');
     }
     if (categoria !== undefined) {
       set.push(`categoria = $${idx++}`);
@@ -254,6 +267,105 @@ function normalizarImagenProducto(imagen) {
   if (imagen.length > IMAGEN_MAX_BASE64) return false;
   return imagen;
 }
+
+router.post('/restock-rapido', async (req, res) => {
+  const items = req.body?.items;
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Se requiere al menos un producto para restock' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const productos = [];
+    const detalleProductos = [];
+    let cantidadTotal = 0;
+    let sucursalRestockId = null;
+
+    for (const raw of items) {
+      const productoId = Number(raw?.producto_id);
+      const cantidad = parseInt(raw?.cantidad, 10);
+      const costoEntrada = normalizarCostoCompraProducto(raw?.costo_compra);
+
+      if (!Number.isFinite(productoId)) {
+        throw new Error('producto_id inválido');
+      }
+      if (!Number.isFinite(cantidad) || cantidad < 1) {
+        throw new Error(`Cantidad inválida para producto ${productoId}`);
+      }
+      if (costoEntrada == null) {
+        throw new Error('Cada producto debe incluir un costo de compra válido');
+      }
+
+      const prevRes = await client.query(
+        `SELECT id, nombre, stock, costo_compra::float8 AS costo_compra, sucursal_id
+         FROM productos
+         WHERE id = $1
+         FOR UPDATE`,
+        [productoId]
+      );
+      if (prevRes.rows.length === 0) {
+        throw new Error(`Producto ${productoId} no encontrado`);
+      }
+      const previo = prevRes.rows[0];
+      const stockAntes = Number(previo.stock) || 0;
+      const costoPromedio = calcularPromedioCostoCompra(stockAntes, previo.costo_compra, cantidad, costoEntrada);
+      const stockDespues = stockAntes + cantidad;
+
+      const { rows } = await client.query(
+        `UPDATE productos
+         SET stock = $1, costo_compra = $2
+         WHERE id = $3
+         RETURNING id, nombre, stock, costo_compra::float8 AS costo_compra, sucursal_id`,
+        [stockDespues, costoPromedio, productoId]
+      );
+      const actual = rows[0];
+      const sucursalId = actual.sucursal_id ?? previo.sucursal_id;
+      if (sucursalRestockId == null) sucursalRestockId = sucursalId;
+
+      cantidadTotal += cantidad;
+      detalleProductos.push({
+        producto_id: actual.id,
+        nombre: actual.nombre || previo.nombre,
+        cantidad,
+        stock_antes: stockAntes,
+        stock_despues: stockDespues,
+        costo_anterior: previo.costo_compra,
+        costo_entrada: costoEntrada,
+        costo_promedio: costoPromedio,
+        sucursal_id: sucursalId,
+      });
+
+      productos.push({ ...actual, id_sucursal: actual.sucursal_id });
+    }
+
+    if (detalleProductos.length > 0) {
+      const nombresProductos = detalleProductos.map((p) => p.nombre).filter(Boolean).join(', ');
+      await registrarMovimientoInventario({
+        executor: client,
+        productoId: null,
+        productoNombre: nombresProductos || 'Restock rápido',
+        movimiento: 'restock_rapido',
+        cantidad: cantidadTotal,
+        usuarioId: req.usuario?.id,
+        sucursalId: sucursalRestockId,
+        detalle: {
+          motivo: 'restock_rapido',
+          total_productos: detalleProductos.length,
+          productos: detalleProductos,
+        },
+      });
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, productos });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
 
 router.post('/trasladar', async (req, res) => {
   const productoId = Number(req.body?.producto_id);
