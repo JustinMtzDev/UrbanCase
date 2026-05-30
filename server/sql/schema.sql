@@ -122,3 +122,49 @@ CREATE TABLE IF NOT EXISTS public.inventario_traslados (
 CREATE INDEX IF NOT EXISTS idx_inventario_traslados_origen ON public.inventario_traslados(sucursal_origen_id);
 CREATE INDEX IF NOT EXISTS idx_inventario_traslados_destino ON public.inventario_traslados(sucursal_destino_id);
 CREATE INDEX IF NOT EXISTS idx_inventario_traslados_created ON public.inventario_traslados(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.inventario_movimientos (
+  id SERIAL PRIMARY KEY,
+  producto_id INTEGER,
+  producto_nombre VARCHAR(500) NOT NULL,
+  movimiento VARCHAR(40) NOT NULL CHECK (
+    movimiento IN (
+      'venta',
+      'entrada_mercancia',
+      'ajuste_manual',
+      'transferencia_salida',
+      'transferencia_entrada',
+      'devolucion',
+      'otro'
+    )
+  ),
+  cantidad INTEGER NOT NULL CHECK (cantidad <> 0),
+  usuario_id INTEGER REFERENCES public.usuarios(id) ON DELETE SET NULL,
+  sucursal_id INTEGER REFERENCES public.sucursales(id) ON DELETE SET NULL,
+  detalle JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventario_movimientos_created ON public.inventario_movimientos(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inventario_movimientos_producto ON public.inventario_movimientos(producto_id);
+CREATE INDEX IF NOT EXISTS idx_inventario_movimientos_sucursal ON public.inventario_movimientos(sucursal_id);
+CREATE INDEX IF NOT EXISTS idx_inventario_movimientos_movimiento ON public.inventario_movimientos(movimiento);
+
+CREATE TABLE IF NOT EXISTS public.productos_historial (
+  id SERIAL PRIMARY KEY,
+  producto_id INTEGER,
+  producto_nombre VARCHAR(500) NOT NULL,
+  accion VARCHAR(20) NOT NULL CHECK (accion IN ('alta', 'edicion', 'eliminacion')),
+  campo VARCHAR(80),
+  valor_anterior TEXT,
+  valor_nuevo TEXT,
+  usuario_id INTEGER REFERENCES public.usuarios(id) ON DELETE SET NULL,
+  sucursal_id INTEGER REFERENCES public.sucursales(id) ON DELETE SET NULL,
+  detalle JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_productos_historial_created ON public.productos_historial(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_productos_historial_producto ON public.productos_historial(producto_id);
+CREATE INDEX IF NOT EXISTS idx_productos_historial_sucursal ON public.productos_historial(sucursal_id);
+CREATE INDEX IF NOT EXISTS idx_productos_historial_accion ON public.productos_historial(accion);

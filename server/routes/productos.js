@@ -1,5 +1,11 @@
 const { Router } = require('express');
 const pool = require('../config/db');
+const { registrarMovimientoInventario } = require('../services/inventario-movimientos');
+const {
+  registrarHistorialProductoAlta,
+  registrarHistorialProductoEdicion,
+  registrarHistorialProductoEliminacion,
+} = require('../services/productos-historial');
 
 const router = Router();
 const IMAGEN_MAX_BASE64 = 3_500_000;
@@ -110,6 +116,23 @@ router.post('/', async (req, res) => {
       [Number(sid), nombre.trim(), precioNum, precioMaxNum, costoCompraNum, stockNum, catNorm, img]
     );
     const row = rows[0];
+    if (stockNum > 0) {
+      await registrarMovimientoInventario({
+        executor: pool,
+        productoId: row.id,
+        productoNombre: row.nombre,
+        movimiento: 'entrada_mercancia',
+        cantidad: stockNum,
+        usuarioId: req.usuario?.id,
+        sucursalId: row.sucursal_id,
+        detalle: { motivo: 'alta_producto' },
+      });
+    }
+    await registrarHistorialProductoAlta({
+      executor: pool,
+      producto: row,
+      usuarioId: req.usuario?.id,
+    });
     res.status(201).json({ ...row, id_sucursal: row.sucursal_id });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -121,20 +144,32 @@ router.put('/:id', async (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'ID inválido' });
   const { nombre, precio, precio_max, costo_compra, stock, categoria, imagen } = req.body || {};
   try {
+    const previoRes = await pool.query(
+      `SELECT id, nombre, precio::float8 AS precio, precio_max::float8 AS precio_max,
+              costo_compra::float8 AS costo_compra, stock, categoria, imagen, sucursal_id
+       FROM productos WHERE id = $1`,
+      [id]
+    );
+    if (previoRes.rows.length === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+    const previo = previoRes.rows[0];
+
     const set = [];
     const vals = [];
+    const camposActualizados = [];
     let idx = 1;
     if (nombre != null) {
       const n = String(nombre).trim();
       if (!n) return res.status(400).json({ error: 'nombre inválido' });
       set.push(`nombre = $${idx++}`);
       vals.push(n);
+      camposActualizados.push('nombre');
     }
     if (precio != null) {
       const precioNum = Number(precio);
       if (!Number.isFinite(precioNum) || precioNum <= 0) return res.status(400).json({ error: 'precio inválido' });
       set.push(`precio = $${idx++}`);
       vals.push(precioNum);
+      camposActualizados.push('precio');
     }
     if (precio_max !== undefined) {
       let precioRef = precio != null ? Number(precio) : NaN;
@@ -146,11 +181,13 @@ router.put('/:id', async (req, res) => {
       const precioMaxNum = normalizarPrecioMaxProducto(precioRef, precio_max);
       set.push(`precio_max = $${idx++}`);
       vals.push(precioMaxNum);
+      camposActualizados.push('precio_max');
     }
     if (costo_compra !== undefined) {
       const costoCompraNum = normalizarCostoCompraProducto(costo_compra);
       set.push(`costo_compra = $${idx++}`);
       vals.push(costoCompraNum);
+      camposActualizados.push('costo_compra');
     }
     if (stock != null) {
       const stockNum = parseInt(stock, 10);
@@ -161,12 +198,14 @@ router.put('/:id', async (req, res) => {
     if (categoria !== undefined) {
       set.push(`categoria = $${idx++}`);
       vals.push(categoria ? String(categoria).slice(0, 80) : null);
+      camposActualizados.push('categoria');
     }
     if (imagen !== undefined) {
       const img = normalizarImagenProducto(imagen);
       if (img === false) return res.status(400).json({ error: 'La imagen es demasiado grande' });
       set.push(`imagen = $${idx++}`);
       vals.push(img);
+      camposActualizados.push('imagen');
     }
     if (set.length === 0) return res.status(400).json({ error: 'Sin campos para actualizar' });
     vals.push(id);
@@ -179,6 +218,30 @@ router.put('/:id', async (req, res) => {
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Producto no encontrado' });
     const row = rows[0];
+    if (stock != null) {
+      const stockAntes = Number(previo.stock) || 0;
+      const stockDespues = Number(row.stock) || 0;
+      const delta = stockDespues - stockAntes;
+      if (delta !== 0) {
+        await registrarMovimientoInventario({
+          executor: pool,
+          productoId: row.id,
+          productoNombre: row.nombre || previo.nombre,
+          movimiento: 'ajuste_manual',
+          cantidad: delta,
+          usuarioId: req.usuario?.id,
+          sucursalId: row.sucursal_id ?? previo.sucursal_id,
+          detalle: { stock_antes: stockAntes, stock_despues: stockDespues },
+        });
+      }
+    }
+    await registrarHistorialProductoEdicion({
+      executor: pool,
+      previo,
+      actual: row,
+      usuarioId: req.usuario?.id,
+      camposActualizados,
+    });
     res.json({ ...row, id_sucursal: row.sucursal_id });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -289,12 +352,35 @@ router.post('/trasladar', async (req, res) => {
     }
 
     const usuarioId = req.usuario?.id != null ? Number(req.usuario.id) : null;
-    await client.query(
+    const trasladoRes = await client.query(
       `INSERT INTO inventario_traslados
          (producto_origen_id, producto_destino_id, sucursal_origen_id, sucursal_destino_id, cantidad, usuario_id)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
       [productoId, productoDestinoId, origen.sucursal_id, sucursalDestinoId, cantidad, usuarioId]
     );
+    const trasladoId = trasladoRes.rows[0]?.id;
+
+    await registrarMovimientoInventario({
+      executor: client,
+      productoId,
+      productoNombre: origen.nombre,
+      movimiento: 'transferencia_salida',
+      cantidad: -cantidad,
+      usuarioId,
+      sucursalId: origen.sucursal_id,
+      detalle: { traslado_id: trasladoId, sucursal_destino_id: sucursalDestinoId, producto_destino_id: productoDestinoId },
+    });
+    await registrarMovimientoInventario({
+      executor: client,
+      productoId: productoDestinoId,
+      productoNombre: origen.nombre,
+      movimiento: 'transferencia_entrada',
+      cantidad,
+      usuarioId,
+      sucursalId: sucursalDestinoId,
+      detalle: { traslado_id: trasladoId, sucursal_origen_id: origen.sucursal_id, producto_origen_id: productoId },
+    });
 
     await client.query('COMMIT');
     res.json({
@@ -318,8 +404,30 @@ router.delete('/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'ID inválido' });
   try {
-    const { rows } = await pool.query('DELETE FROM productos WHERE id = $1 RETURNING id', [id]);
+    const { rows } = await pool.query(
+      'DELETE FROM productos WHERE id = $1 RETURNING id, nombre, stock, sucursal_id',
+      [id]
+    );
     if (rows.length === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+    const row = rows[0];
+    const stockPrevio = Number(row.stock) || 0;
+    if (stockPrevio > 0) {
+      await registrarMovimientoInventario({
+        executor: pool,
+        productoId: row.id,
+        productoNombre: row.nombre,
+        movimiento: 'ajuste_manual',
+        cantidad: -stockPrevio,
+        usuarioId: req.usuario?.id,
+        sucursalId: row.sucursal_id,
+        detalle: { motivo: 'eliminacion_producto', stock_antes: stockPrevio, stock_despues: 0 },
+      });
+    }
+    await registrarHistorialProductoEliminacion({
+      executor: pool,
+      producto: row,
+      usuarioId: req.usuario?.id,
+    });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
