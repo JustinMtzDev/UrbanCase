@@ -74,12 +74,14 @@
         <img id="inventario-zoom-img" src="" alt="">
       </div>
       <div class="inventario-zoom-info">
-        <h3 id="inventario-zoom-nombre" class="inventario-zoom-titulo"></h3>
-        <p class="inventario-zoom-precio" id="inventario-zoom-precio"></p>
-        <p class="inventario-zoom-meta inventario-zoom-costo-compra" id="inventario-zoom-costo-compra" hidden></p>
-        <p class="inventario-zoom-meta" id="inventario-zoom-stock"></p>
-        <p class="inventario-zoom-meta inventario-zoom-cat" id="inventario-zoom-cat"></p>
-        <p class="inventario-zoom-meta inventario-zoom-sucursal" id="inventario-zoom-sucursal" hidden></p>
+        <div class="inventario-zoom-detalles">
+          <h3 id="inventario-zoom-nombre" class="inventario-zoom-titulo"></h3>
+          <p class="inventario-zoom-precio" id="inventario-zoom-precio"></p>
+          <p class="inventario-zoom-meta inventario-zoom-costo-compra" id="inventario-zoom-costo-compra" hidden></p>
+          <p class="inventario-zoom-meta" id="inventario-zoom-stock"></p>
+          <p class="inventario-zoom-meta inventario-zoom-cat" id="inventario-zoom-cat"></p>
+          <p class="inventario-zoom-meta inventario-zoom-sucursal" id="inventario-zoom-sucursal" hidden></p>
+        </div>
         <button type="button" class="inventario-zoom-trasladar" id="inventario-zoom-trasladar" title="Trasladar a otra sucursal" aria-label="Trasladar a otra sucursal" hidden>
           <i class="fa-solid fa-arrows-turn-to-dots" aria-hidden="true"></i>
         </button>
@@ -121,17 +123,20 @@
               </button>
             </div>
             <div class="inventario-header-tools">
-            <div class="inventario-chips-wrap">
-              <button type="button" class="inventario-chip" data-cat="consignados">Productos Consignados</button>
-              <button type="button" class="inventario-chip activo" data-cat="todos">Todos</button>
-              <button type="button" class="inventario-chip" data-cat="micas">Micas</button>
-              <button type="button" class="inventario-chip" data-cat="fundas">Fundas</button>
-              <button type="button" class="inventario-chip" data-cat="cargadores">Cargadores</button>
-              <button type="button" class="inventario-chip" data-cat="powerbanks">Power banks</button>
-              <button type="button" class="inventario-chip" data-cat="audifonos">Audífonos</button>
-              <button type="button" class="inventario-chip" data-cat="bocinas">Bocinas</button>
-              <button type="button" class="inventario-chip" data-cat="accesorios">Accesorios</button>
-              <button type="button" class="inventario-chip" data-cat="otros">Otros</button>
+            <div class="inventario-chips-linea" id="inventario-chips-linea">
+              <div class="inventario-chips-wrap" id="inventario-chips-principal">
+                <button type="button" class="inventario-chip" data-cat="consignados">Productos Consignados</button>
+                <button type="button" class="inventario-chip activo" data-cat="todos">Todos</button>
+                <button type="button" class="inventario-chip" data-cat="micas">Micas</button>
+                <button type="button" class="inventario-chip" data-cat="fundas">Fundas</button>
+                <button type="button" class="inventario-chip" data-cat="cargadores">Cargadores</button>
+                <button type="button" class="inventario-chip" data-cat="powerbanks">Power banks</button>
+                <button type="button" class="inventario-chip" data-cat="audifonos">Audífonos</button>
+                <button type="button" class="inventario-chip" data-cat="bocinas">Bocinas</button>
+                <button type="button" class="inventario-chip" data-cat="accesorios">Accesorios</button>
+                <button type="button" class="inventario-chip" data-cat="otros">Otros</button>
+              </div>
+              <div class="inventario-chips-sub" id="inventario-chips-sub" hidden></div>
             </div>
             <button type="button" class="btn btn-cobrar" id="btn-agregar-producto" disabled title="Selecciona una sucursal concreta (no «Todas las sucursales») para agregar productos">+ Agregar producto</button>
             <button type="button" class="btn btn-cobrar" id="btn-agregar-consignado" hidden disabled title="Selecciona una sucursal concreta para agregar productos consignados">+ Producto consignado</button>
@@ -192,6 +197,88 @@
           <button type="button" class="btn btn-cobrar" id="btn-cobrar" disabled>Cobrar</button>
         </div>
       </aside>
+    </div>
+
+    <div class="app-glass modulo-panel" id="vista-modulo-ventas" style="display:none">
+      <div class="modulo-toolbar">
+        <div class="modulo-tabs">
+          <button type="button" class="modulo-tab activo" id="tab-ventas-modulo">Ventas</button>
+          <button type="button" class="modulo-tab" id="tab-reportes-modulo">Reportes</button>
+        </div>
+        <div class="modulo-toolbar-reportes" id="modulo-toolbar-reportes" hidden>
+          <select id="reporte-tipo-select" aria-label="Tipo de reporte">
+            <option value="movimientos-inventario">Movimientos de inventario</option>
+            <option value="transferencias-sucursales">Transferencias entre sucursales</option>
+            <option value="historial-productos">Historial de productos</option>
+          </select>
+          <div class="modulo-acciones">
+            <input type="text" class="modulo-buscar" id="buscar-reporte" placeholder="Buscar...">
+            <button type="button" class="btn btn-cobrar" id="btn-recargar-reporte">Recargar</button>
+          </div>
+        </div>
+      </div>
+      <div id="subvista-ventas-modulo">
+        <div class="modulo-vacio-placeholder">Sin contenido por ahora</div>
+      </div>
+      <div id="subvista-reportes-modulo" style="display:none">
+        <div id="reporte-panel-movimientos-inventario" class="reporte-panel" data-reporte="movimientos-inventario">
+          <div class="tabla-wrap">
+            <table class="tabla" id="tabla-reporte-movimientos">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Producto</th>
+                  <th>Movimiento</th>
+                  <th>Cantidad</th>
+                  <th>Usuario</th>
+                  <th>Sucursal</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reporte-movimientos">
+                <tr><td colspan="6" class="tabla-vacio">Sin datos</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="reporte-panel-transferencias-sucursales" class="reporte-panel" data-reporte="transferencias-sucursales" hidden>
+          <div class="tabla-wrap">
+            <table class="tabla" id="tabla-reporte-transferencias">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Producto</th>
+                  <th>Cantidad</th>
+                  <th>Origen</th>
+                  <th>Destino</th>
+                  <th>Usuario</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reporte-transferencias">
+                <tr><td colspan="6" class="tabla-vacio">Sin datos</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="reporte-panel-historial-productos" class="reporte-panel" data-reporte="historial-productos" hidden>
+          <div class="tabla-wrap">
+            <table class="tabla" id="tabla-reporte-historial-productos">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Producto</th>
+                  <th>Acción</th>
+                  <th>Cambio</th>
+                  <th>Usuario</th>
+                  <th>Sucursal</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reporte-historial-productos">
+                <tr><td colspan="6" class="tabla-vacio">Sin datos</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="app-glass modulo-panel" id="vista-modulo" style="display:none">
@@ -923,6 +1010,18 @@
         <div id="modal-funda-precio-chips" class="form-chips form-chips-precio-funda-carrito"></div>
         <div class="modal-acciones">
           <button type="button" class="btn btn-vaciar" id="modal-funda-precio-cancelar">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal historial cambios (reportes) -->
+    <div id="modal-reporte-historial-cambios" class="modal-overlay" aria-hidden="true">
+      <div class="modal-content modal-reporte-historial-cambios">
+        <h3>Cambios del producto</h3>
+        <p id="modal-reporte-historial-subtitulo" class="reporte-historial-modal-sub"></p>
+        <ul id="modal-reporte-historial-lista" class="reporte-historial-modal-lista"></ul>
+        <div class="modal-acciones">
+          <button type="button" class="btn btn-vaciar" id="modal-reporte-historial-cerrar">Cerrar</button>
         </div>
       </div>
     </div>

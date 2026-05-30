@@ -43,6 +43,7 @@ let token = '';
 
   initPOS();
   initModulo();
+  initModuloVentas();
   initModuloClientes();
   initDropdownSucursales();
   try {
@@ -87,6 +88,7 @@ function formatFecha(iso) {
 
 const MODULO_KEY = 'uc_modulo';
 const SUCURSAL_KEY = 'uc_sucursal';
+const VENTAS_SUBMODULO_KEY = 'uc_ventas_submodulo';
 
 function guardarSucursalSeleccionada(sidRaw, nombre) {
   try {
@@ -246,7 +248,10 @@ function moduloPermiteCarritoUI() {
 function initNav() {
   const $vistaPos = document.getElementById('vista-pos');
   const $vistaModulo = document.getElementById('vista-modulo');
+  const $vistaModuloVentas = document.getElementById('vista-modulo-ventas');
   const $vistaModuloClientes = document.getElementById('vista-modulo-clientes');
+  const $productos = document.getElementById('productos');
+  const $contenidoInv = document.getElementById('contenido-inventario');
 
   function irAModulo(btn) {
     const cat = btn.dataset.categoria;
@@ -257,6 +262,7 @@ function initNav() {
     document.body.classList.toggle('sin-carrito-ui', MODULOS_SIN_CARRITO.has(cat));
     if (MODULOS_SIN_CARRITO.has(cat)) window.ucMinimizarCarritoSiAbierto?.();
     $vistaModulo.style.display = 'none';
+    $vistaModuloVentas.style.display = 'none';
     $vistaModuloClientes.style.display = 'none';
     $vistaPos.style.display = 'none';
     if (cat === 'usuarios') {
@@ -269,27 +275,25 @@ function initNav() {
       cargarProveedores();
     } else if (cat === 'inventario') {
       $vistaPos.style.display = 'grid';
-      const $productos = document.getElementById('productos');
-      const $contenidoInv = document.getElementById('contenido-inventario');
       if ($productos) $productos.style.display = 'none';
       if ($contenidoInv) $contenidoInv.style.display = 'flex';
-      document.querySelectorAll('.inventario-chip').forEach(c => c.classList.remove('activo'));
+      document.querySelectorAll('.inventario-chip[data-cat]').forEach(c => c.classList.remove('activo'));
       const $chipTodos = document.querySelector('.inventario-chip[data-cat="todos"]');
       if ($chipTodos) $chipTodos.classList.add('activo');
+      resetInventarioNavegacionMica();
       categoriaInventarioActiva = 'todos';
+      renderInventarioChipsNavegacion();
       try { initInventarioVista(); } catch (err) { console.error('initInventarioVista:', err); }
       if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
       window.actualizarBtnMostrarCarrito?.();
     } else if (cat === 'ventas') {
-      $vistaPos.style.display = 'grid';
-      document.getElementById('productos').style.display = 'grid';
-      document.getElementById('contenido-inventario').style.display = 'none';
-      if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
+      $vistaModuloVentas.style.display = 'flex';
+      window.ucVentasIrASubvista?.(localStorage.getItem(VENTAS_SUBMODULO_KEY) || 'ventas');
       window.actualizarBtnMostrarCarrito?.();
     } else {
       $vistaPos.style.display = 'grid';
-      document.getElementById('productos').style.display = 'grid';
-      document.getElementById('contenido-inventario').style.display = 'none';
+      if ($productos) $productos.style.display = 'grid';
+      if ($contenidoInv) $contenidoInv.style.display = 'none';
       if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
       window.actualizarBtnMostrarCarrito?.();
     }
@@ -376,12 +380,128 @@ function initDropdownSucursales() {
 // ===================== INVENTARIO =====================
 
 const CATEGORIAS_INVENTARIO = ['todos', 'micas', 'fundas', 'cargadores', 'powerbanks', 'audifonos', 'bocinas', 'accesorios', 'otros'];
+const INVENTARIO_MICA_TIPOS = [
+  { id: 'cristal', label: 'Cristal' },
+  { id: 'hidrogel', label: 'Hidrogel' },
+];
+const INVENTARIO_MICA_SUBTIPOS = {
+  cristal: ['9H', '9D', 'privacidad', 'curva'],
+  hidrogel: ['HD', 'mate', 'privacidad'],
+};
+const INVENTARIO_CATEGORIAS_DRILL = new Set(['micas', 'fundas']);
+const MARCAS_CEL_DISPLAY = ['Apple', 'Samsung', 'Xiaomi', 'Motorola', 'Huawei', 'Google', 'OnePlus', 'OPPO', 'Realme', 'Honor'];
+const SAMSUNG_SERIES = {
+  'Galaxy S': [
+    'Galaxy S21', 'Galaxy S21+', 'Galaxy S21 Ultra', 'Galaxy S21 FE',
+    'Galaxy S22', 'Galaxy S22+', 'Galaxy S22 Ultra',
+    'Galaxy S23', 'Galaxy S23+', 'Galaxy S23 Ultra', 'Galaxy S23 FE',
+    'Galaxy S24', 'Galaxy S24+', 'Galaxy S24 Ultra', 'Galaxy S24 FE',
+    'Galaxy S25', 'Galaxy S25+', 'Galaxy S25 Ultra',
+    'Galaxy S26', 'Galaxy S26+', 'Galaxy S26 Ultra',
+  ],
+  'Galaxy A': [
+    'Galaxy A12', 'Galaxy A13', 'Galaxy A14', 'Galaxy A15', 'Galaxy A16',
+    'Galaxy A20', 'Galaxy A21', 'Galaxy A22', 'Galaxy A23', 'Galaxy A24', 'Galaxy A25', 'Galaxy A26',
+    'Galaxy A30', 'Galaxy A31', 'Galaxy A32', 'Galaxy A33', 'Galaxy A34', 'Galaxy A35', 'Galaxy A36',
+    'Galaxy A50', 'Galaxy A51', 'Galaxy A52', 'Galaxy A53', 'Galaxy A54', 'Galaxy A55', 'Galaxy A56',
+  ],
+  'Galaxy Z': [
+    'Galaxy Z Flip 3', 'Galaxy Z Flip 4', 'Galaxy Z Flip 5', 'Galaxy Z Flip 6',
+    'Galaxy Z Fold 3', 'Galaxy Z Fold 4', 'Galaxy Z Fold 5', 'Galaxy Z Fold 6',
+  ],
+  'Galaxy Note': [
+    'Galaxy Note 10', 'Galaxy Note 10+', 'Galaxy Note 20', 'Galaxy Note 20 Ultra',
+  ],
+};
+const MARCAS_MODELOS = {
+  Apple: [
+    'iPhone 12 mini', 'iPhone 12', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
+    'iPhone 13 mini', 'iPhone 13', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
+    'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
+    'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
+    'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+    'iPhone 17', 'iPhone 17 Air', 'iPhone 17 Pro', 'iPhone 17 Pro Max',
+    'iPhone SE',
+  ],
+  Samsung: Object.values(SAMSUNG_SERIES).flat(),
+  Xiaomi: ['Redmi Note 13', 'Redmi 12', 'POCO X6', 'Mi 14'],
+  Motorola: ['Edge 40', 'Edge 30', 'Moto G84', 'Razr'],
+  Huawei: ['P60', 'P50', 'Mate 60', 'Nova 12'],
+  Google: ['Pixel 8', 'Pixel 7', 'Pixel 6a'],
+  OnePlus: ['OnePlus 12', 'OnePlus 11', 'Nord 3'],
+  OPPO: ['Find X6', 'Reno 10', 'A78'],
+  Realme: ['Realme 11', 'Realme 10', 'Realme C55'],
+  Honor: ['Honor 90', 'Honor Magic 5', 'Honor X9b'],
+};
+
+function extraerMarcaModeloCel(texto) {
+  const s = (texto || '').trim();
+  if (!s) return null;
+
+  const marcasOrden = Object.keys(MARCAS_MODELOS).sort((a, b) => b.length - a.length);
+  for (const marca of marcasOrden) {
+    const prefijo = `${marca} `;
+    if (s.toLowerCase().startsWith(prefijo.toLowerCase())) {
+      return { marca, modelo: s.slice(prefijo.length).trim(), resto: '' };
+    }
+  }
+
+  let mejor = null;
+  for (const marca of Object.keys(MARCAS_MODELOS)) {
+    for (const modelo of MARCAS_MODELOS[marca]) {
+      const suf = `${marca} ${modelo}`;
+      if (s === suf || s.endsWith(` ${suf}`)) {
+        if (!mejor || suf.length > `${mejor.marca} ${mejor.modelo}`.length) {
+          mejor = { marca, modelo, resto: s.slice(0, s.length - suf.length).trim() };
+        }
+      }
+    }
+  }
+  if (mejor) return mejor;
+
+  for (const marca of marcasOrden) {
+    const marcaEsc = marca.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\s+${marcaEsc}\\s+(.+)$`, 'i');
+    const m = s.match(re);
+    if (m) return { marca, modelo: m[1].trim(), resto: s.slice(0, m.index).trim() };
+    if (s.toLowerCase() === marca.toLowerCase()) return { marca, modelo: '', resto: '' };
+  }
+  return null;
+}
+
+function inferirMarcaDesdeModelo(texto) {
+  const s = (texto || '').trim();
+  if (!s) return null;
+
+  for (const marca of Object.keys(MARCAS_MODELOS).sort((a, b) => b.length - a.length)) {
+    const prefijo = `${marca} `;
+    if (s.toLowerCase().startsWith(prefijo.toLowerCase())) {
+      const modelo = s.slice(prefijo.length).trim();
+      return inferirMarcaDesdeModelo(modelo) || { marca, modelo };
+    }
+  }
+
+  let mejor = null;
+  for (const marca of Object.keys(MARCAS_MODELOS)) {
+    for (const modelo of MARCAS_MODELOS[marca]) {
+      if (s === modelo && (!mejor || modelo.length > mejor.modelo.length)) {
+        mejor = { marca, modelo };
+      }
+    }
+  }
+  if (mejor) return mejor;
+  if (/^iPhone\b/i.test(s)) return { marca: 'Apple', modelo: s };
+  if (/^Galaxy\b/i.test(s)) return { marca: 'Samsung', modelo: s };
+  return null;
+}
+
 const UC_ICONO_EDITAR = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
 let productosInventario = [];
 let productosConsignadosInventario = [];
 /** Último error al cargar inventario (solo para mensaje en pantalla). */
 let ultimoErrorCargaInventario = '';
 let categoriaInventarioActiva = 'todos';
+let inventarioNavegacionDrill = { drill: false, categoria: null, paso1: null, paso2: null };
 let paginaInventarioActual = 1;
 let inventarioFiltrosBusqueda = {
   stock: 'todos',
@@ -506,7 +626,293 @@ function claveFiltroInventario() {
   const { raw } = leerDatasetSucursalInventario();
   const q = document.getElementById('inventario-buscador')?.value || '';
   const f = inventarioFiltrosBusqueda;
-  return `${raw}|${categoriaInventarioActiva}|${q}|${f.stock}|${f.precioMin}|${f.precioMax}|${f.imagen}|${f.orden}`;
+  const d = inventarioNavegacionDrill;
+  return `${raw}|${categoriaInventarioActiva}|${d.drill}|${d.categoria}|${d.paso1}|${d.paso2}|${q}|${f.stock}|${f.precioMin}|${f.precioMax}|${f.imagen}|${f.orden}`;
+}
+
+function resetInventarioNavegacionDrill() {
+  inventarioNavegacionDrill.drill = false;
+  inventarioNavegacionDrill.categoria = null;
+  inventarioNavegacionDrill.paso1 = null;
+  inventarioNavegacionDrill.paso2 = null;
+}
+
+function resetInventarioNavegacionMica() {
+  resetInventarioNavegacionDrill();
+}
+
+function inventarioEnNavegacionDrill() {
+  return inventarioNavegacionDrill.drill
+    && INVENTARIO_CATEGORIAS_DRILL.has(inventarioNavegacionDrill.categoria)
+    && inventarioNavegacionDrill.categoria === categoriaInventarioActiva;
+}
+
+function asegurarEstadoDrillInventario() {
+  if (INVENTARIO_CATEGORIAS_DRILL.has(categoriaInventarioActiva)) {
+    inventarioNavegacionDrill.drill = true;
+    inventarioNavegacionDrill.categoria = categoriaInventarioActiva;
+  } else if (inventarioNavegacionDrill.drill) {
+    resetInventarioNavegacionDrill();
+  }
+}
+
+function setVisibilidadChipInventario(chip, visible) {
+  chip.classList.toggle('inventario-chip--oculto', !visible);
+  if (visible) chip.removeAttribute('hidden');
+  else chip.setAttribute('hidden', '');
+}
+
+function normalizarValorDrillInventario(valor) {
+  return String(valor || '').trim().toLowerCase();
+}
+
+function normalizarSubtipoMicaInventario(valor) {
+  return normalizarValorDrillInventario(valor);
+}
+
+function etiquetaSubtipoMicaInventario(valor) {
+  const key = normalizarSubtipoMicaInventario(valor);
+  if (key === '9h') return '9H';
+  if (key === '9d') return '9D';
+  if (key === 'hd') return 'HD';
+  if (key === 'mate') return 'Mate';
+  if (key === 'privacidad') return 'Privacidad';
+  if (key === 'curva') return 'Curva';
+  return valor;
+}
+
+function extraerInfoMicaInventario(nombre) {
+  const n = String(nombre || '');
+  if (/^Mica\s+cristal\s+/i.test(n)) {
+    let rest = n.replace(/^Mica\s+cristal\s+/i, '').trim();
+    const dash = rest.indexOf(' — ');
+    const tipoPart = dash >= 0 ? rest.slice(0, dash).trim() : rest.split(/\s+/)[0];
+    return { tipo: 'cristal', subtipo: normalizarSubtipoMicaInventario(tipoPart) };
+  }
+  if (/^Mica\s+hidrogel\s+/i.test(n)) {
+    const tipoPart = n.replace(/^Mica\s+hidrogel\s+/i, '').trim();
+    return { tipo: 'hidrogel', subtipo: normalizarSubtipoMicaInventario(tipoPart) };
+  }
+  return null;
+}
+
+function extraerInfoFundaInventario(nombre) {
+  let s = String(nombre || '').replace(/^Funda\s+/i, '').trim();
+  s = s.replace(/\s+—\s+Rango\s+[\d-]+\s*$/i, '').trim();
+  const dashIdx = s.indexOf(' — ');
+  if (dashIdx >= 0) s = s.slice(0, dashIdx).trim();
+  if (!s) return null;
+  const mm = extraerMarcaModeloCel(s) || inferirMarcaDesdeModelo(s);
+  if (!mm?.marca) return null;
+  return { marca: mm.marca, modelo: mm.modelo || '' };
+}
+
+function opcionesPaso1DrillInventario(categoria) {
+  if (categoria === 'micas') {
+    return INVENTARIO_MICA_TIPOS.map((item) => ({ id: item.id, label: item.label }));
+  }
+  if (categoria === 'fundas') {
+    return MARCAS_CEL_DISPLAY.map((marca) => ({ id: marca, label: marca }));
+  }
+  return [];
+}
+
+function opcionesPaso2DrillInventario(categoria, paso1) {
+  if (categoria === 'micas') {
+    return (INVENTARIO_MICA_SUBTIPOS[paso1] || []).map((opt) => ({
+      id: opt,
+      label: etiquetaSubtipoMicaInventario(opt),
+    }));
+  }
+  if (categoria === 'fundas') {
+    return (MARCAS_MODELOS[paso1] || []).map((modelo) => ({ id: modelo, label: modelo }));
+  }
+  return [];
+}
+
+function etiquetaPaso1DrillInventario(categoria, paso1) {
+  if (categoria === 'micas') {
+    return INVENTARIO_MICA_TIPOS.find((item) => item.id === paso1)?.label || paso1;
+  }
+  return paso1;
+}
+
+function etiquetaPaso2DrillInventario(categoria, paso1, paso2) {
+  if (categoria === 'micas') return etiquetaSubtipoMicaInventario(paso2);
+  return paso2;
+}
+
+function productoCoincideFiltroDrillInventario(p) {
+  if (!inventarioEnNavegacionDrill()) return true;
+  const { categoria, paso1, paso2 } = inventarioNavegacionDrill;
+  if (categoriaInventarioActiva !== categoria) return true;
+  if (!paso1 && !paso2) return true;
+
+  if (categoria === 'micas') {
+    const info = extraerInfoMicaInventario(p.nombre);
+    if (!info) return false;
+    if (paso1 && info.tipo !== paso1) return false;
+    if (paso2 && info.subtipo !== normalizarSubtipoMicaInventario(paso2)) return false;
+    return true;
+  }
+  if (categoria === 'fundas') {
+    const info = extraerInfoFundaInventario(p.nombre);
+    if (!info) return false;
+    if (paso1 && info.marca !== paso1) return false;
+    return true;
+  }
+  return true;
+}
+
+function productoCoincideFiltroMicaInventario(p) {
+  return productoCoincideFiltroDrillInventario(p);
+}
+
+function limpiarChipsRutaDrillInventario() {
+  document.querySelectorAll('#inventario-chips-principal .inventario-chip[data-drill-ruta]').forEach((el) => el.remove());
+}
+
+function htmlChipRutaDrillInventario(categoria, paso1, paso2, esActivo = true) {
+  const activoClass = esActivo ? ' activo' : '';
+  if (paso2) {
+    const label = etiquetaPaso2DrillInventario(categoria, paso1, paso2);
+    return `<button type="button" class="inventario-chip inventario-chip--ruta${activoClass}" data-drill-ruta="1" data-drill-paso2="${escHtmlInventario(paso2)}" aria-label="${escHtmlInventario(label)}">${escHtmlInventario(label)}</button>`;
+  }
+  const label = etiquetaPaso1DrillInventario(categoria, paso1);
+  return `<button type="button" class="inventario-chip inventario-chip--ruta${activoClass}" data-drill-ruta="1" data-drill-paso1="${escHtmlInventario(paso1)}" aria-label="${escHtmlInventario(label)}">${escHtmlInventario(label)}</button>`;
+}
+
+function renderInventarioChipsSub() {
+  const $sub = document.getElementById('inventario-chips-sub');
+  if (!$sub) return;
+  if (!inventarioEnNavegacionDrill()) {
+    $sub.hidden = true;
+    $sub.innerHTML = '';
+    return;
+  }
+  const { categoria, paso1, paso2 } = inventarioNavegacionDrill;
+  let html = '';
+  if (!paso1) {
+    html = opcionesPaso1DrillInventario(categoria).map((item) =>
+      `<button type="button" class="inventario-chip inventario-chip-sub" data-drill-paso1="${escHtmlInventario(item.id)}">${escHtmlInventario(item.label)}</button>`
+    ).join('');
+  } else if (!paso2 && categoria === 'micas') {
+    html = opcionesPaso2DrillInventario(categoria, paso1).map((item) =>
+      `<button type="button" class="inventario-chip inventario-chip-sub" data-drill-paso2="${escHtmlInventario(item.id)}">${escHtmlInventario(item.label)}</button>`
+    ).join('');
+  }
+  $sub.innerHTML = html;
+  $sub.hidden = !html;
+}
+
+function renderInventarioChipsNavegacion() {
+  const $principal = document.getElementById('inventario-chips-principal');
+  const $linea = document.getElementById('inventario-chips-linea');
+  if (!$principal) return;
+  asegurarEstadoDrillInventario();
+  limpiarChipsRutaDrillInventario();
+  const estaticos = $principal.querySelectorAll('.inventario-chip[data-cat]');
+
+  if (!inventarioEnNavegacionDrill()) {
+    $linea?.classList.remove('inventario-chips-linea--drill');
+    estaticos.forEach((chip) => {
+      setVisibilidadChipInventario(chip, true);
+      chip.classList.remove('inventario-chip--ruta');
+      chip.classList.toggle('activo', chip.dataset.cat === categoriaInventarioActiva);
+    });
+    renderInventarioChipsSub();
+    return;
+  }
+
+  $linea?.classList.add('inventario-chips-linea--drill');
+
+  const { categoria, paso1, paso2 } = inventarioNavegacionDrill;
+  estaticos.forEach((chip) => {
+    const esChipTodos = chip.dataset.cat === 'todos';
+    const visible = esChipTodos || chip.dataset.cat === categoria;
+    setVisibilidadChipInventario(chip, visible);
+    if (chip.dataset.cat === categoria) {
+      chip.classList.add('inventario-chip--ruta');
+      chip.classList.toggle('activo', !paso1 && !paso2);
+    } else if (esChipTodos) {
+      chip.classList.remove('inventario-chip--ruta');
+      chip.classList.remove('activo');
+    } else {
+      chip.classList.remove('activo', 'inventario-chip--ruta');
+    }
+  });
+
+  const $catChip = $principal.querySelector(`.inventario-chip[data-cat="${categoria}"]`);
+  if (paso1 && $catChip) {
+    const marcaActiva = categoria === 'fundas' ? true : !paso2;
+    $catChip.insertAdjacentHTML('afterend', htmlChipRutaDrillInventario(categoria, paso1, null, marcaActiva));
+  }
+  if (paso2 && categoria === 'micas' && $catChip) {
+    const $paso1Chip = $principal.querySelector('.inventario-chip[data-drill-ruta][data-drill-paso1]');
+    ($paso1Chip || $catChip).insertAdjacentHTML('afterend', htmlChipRutaDrillInventario(categoria, paso1, paso2, true));
+  }
+
+  renderInventarioChipsSub();
+}
+
+function manejarClickChipInventario(chip) {
+  const cat = chip.dataset.cat;
+  const drillPaso1 = chip.dataset.drillPaso1;
+  const drillPaso2 = chip.dataset.drillPaso2;
+
+  if (cat) {
+    if (INVENTARIO_CATEGORIAS_DRILL.has(cat)) {
+      if (inventarioEnNavegacionDrill() && inventarioNavegacionDrill.categoria === cat) {
+        if (inventarioNavegacionDrill.paso2) {
+          inventarioNavegacionDrill.paso2 = null;
+        } else if (inventarioNavegacionDrill.paso1) {
+          inventarioNavegacionDrill.paso1 = null;
+        } else {
+          resetInventarioNavegacionDrill();
+          categoriaInventarioActiva = 'todos';
+        }
+      } else {
+        categoriaInventarioActiva = cat;
+        inventarioNavegacionDrill.drill = true;
+        inventarioNavegacionDrill.categoria = cat;
+        inventarioNavegacionDrill.paso1 = null;
+        inventarioNavegacionDrill.paso2 = null;
+      }
+    } else {
+      resetInventarioNavegacionDrill();
+      categoriaInventarioActiva = cat;
+    }
+  } else if (drillPaso1) {
+    if (INVENTARIO_CATEGORIAS_DRILL.has(categoriaInventarioActiva)) {
+      inventarioNavegacionDrill.drill = true;
+      inventarioNavegacionDrill.categoria = categoriaInventarioActiva;
+    }
+    if (inventarioNavegacionDrill.paso2) {
+      inventarioNavegacionDrill.paso2 = null;
+    } else if (inventarioNavegacionDrill.paso1 === drillPaso1) {
+      inventarioNavegacionDrill.paso1 = null;
+    } else {
+      inventarioNavegacionDrill.paso1 = drillPaso1;
+      inventarioNavegacionDrill.paso2 = null;
+    }
+  } else if (drillPaso2) {
+    if (INVENTARIO_CATEGORIAS_DRILL.has(categoriaInventarioActiva)) {
+      inventarioNavegacionDrill.drill = true;
+      inventarioNavegacionDrill.categoria = categoriaInventarioActiva;
+    }
+    if (inventarioNavegacionDrill.paso2 === drillPaso2) {
+      inventarioNavegacionDrill.paso2 = null;
+    } else {
+      inventarioNavegacionDrill.paso2 = drillPaso2;
+    }
+  }
+
+  paginaInventarioActual = 1;
+  renderInventarioChipsNavegacion();
+  actualizarEstadoBtnAgregarProducto();
+  actualizarOpcionOrdenCategoriaFiltro();
+  actualizarBtnFiltrosInventario();
+  renderInventarioProductos();
 }
 
 function inventarioFiltrosSonDefault(f = inventarioFiltrosBusqueda) {
@@ -589,7 +995,7 @@ function filtrarProductosInventario() {
     } else {
       const matchCat = cat === 'todos' || (String(p.categoria || '').toLowerCase() === cat);
       const matchQ = !q || (p.nombre || '').toLowerCase().includes(q);
-      if (!matchCat || !matchQ) return false;
+      if (!matchCat || !matchQ || !productoCoincideFiltroMicaInventario(p)) return false;
     }
 
     const pMin = getPrecioMinProducto(p);
@@ -1082,7 +1488,7 @@ function listarProductosParaLimitesPrecioFiltro() {
     if (cat === 'consignados') return !q || (p.nombre || '').toLowerCase().includes(q);
     const matchCat = cat === 'todos' || (String(p.categoria || '').toLowerCase() === cat);
     const matchQ = !q || (p.nombre || '').toLowerCase().includes(q);
-    return matchCat && matchQ;
+    return matchCat && matchQ && productoCoincideFiltroMicaInventario(p);
   });
 }
 
@@ -1321,9 +1727,9 @@ function leerFormularioFiltrosInventario() {
   };
 }
 
-function initCustomSelectFiltroOrden($select) {
-  if (!$select || $select.dataset.customSelectFiltro) return null;
-  $select.dataset.customSelectFiltro = '1';
+function initCustomSelectBasico($select) {
+  if (!$select || $select.dataset.customSelectBasico) return null;
+  $select.dataset.customSelectBasico = '1';
 
   const wrap = document.createElement('div');
   wrap.className = 'custom-select-wrap';
@@ -1366,6 +1772,7 @@ function initCustomSelectFiltroOrden($select) {
       if (opt.hidden || opt.disabled) continue;
       const div = document.createElement('div');
       div.className = 'custom-select-option';
+      if (i === $select.selectedIndex) div.classList.add('activo');
       div.textContent = opt.textContent;
       div.dataset.index = String(i);
       div.setAttribute('role', 'option');
@@ -1386,7 +1793,8 @@ function initCustomSelectFiltroOrden($select) {
 
   trigger.addEventListener('click', (e) => {
     e.stopPropagation();
-    document.querySelectorAll('#modal-inventario-filtros .custom-select-wrap.abierto').forEach((w) => {
+    if ($select.disabled) return;
+    document.querySelectorAll('.custom-select-wrap.abierto').forEach((w) => {
       if (w !== wrap) w.classList.remove('abierto');
     });
     const abriendo = !wrap.classList.contains('abierto');
@@ -1398,6 +1806,7 @@ function initCustomSelectFiltroOrden($select) {
   });
 
   trigger.addEventListener('keydown', (e) => {
+    if ($select.disabled) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       trigger.click();
@@ -1405,20 +1814,33 @@ function initCustomSelectFiltroOrden($select) {
     if (e.key === 'Escape') cerrarOpciones();
   });
 
-  if (!initCustomSelectFiltroOrden._closeListener) {
-    initCustomSelectFiltroOrden._closeListener = true;
+  if (!initCustomSelectBasico._closeListener) {
+    initCustomSelectBasico._closeListener = true;
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('#modal-inventario-filtros .custom-select-wrap')) {
-        document.querySelectorAll('#modal-inventario-filtros .custom-select-wrap.abierto').forEach((w) => {
-          w.classList.remove('abierto');
-        });
-      }
+      if (e.target.closest('.custom-select-wrap')) return;
+      document.querySelectorAll('.custom-select-wrap.abierto').forEach((w) => {
+        w.classList.remove('abierto');
+      });
     });
   }
 
   buildOptions();
   syncDisplay();
-  return { syncDisplay, cerrarOpciones, refresh: () => { buildOptions(); syncDisplay(); }, wrap };
+  return {
+    syncDisplay,
+    cerrarOpciones,
+    refresh: () => { buildOptions(); syncDisplay(); },
+    setDisabled: (disabled) => {
+      $select.disabled = Boolean(disabled);
+      wrap.classList.toggle('custom-select-wrap--disabled', Boolean(disabled));
+      if (disabled) wrap.classList.remove('abierto');
+    },
+    wrap,
+  };
+}
+
+function initCustomSelectFiltroOrden($select) {
+  return initCustomSelectBasico($select);
 }
 
 function initInventarioFiltrosModal() {
@@ -1566,8 +1988,6 @@ function ocultarImagenInventarioSiRota(img) {
   }
 }
 
-const MARCAS_CEL_DISPLAY = ['Apple', 'Samsung', 'Xiaomi', 'Motorola', 'Huawei', 'Google', 'OnePlus', 'OPPO', 'Realme', 'Honor'];
-
 function nombreProductoInventarioDisplay(prod) {
   const nombre = String(prod?.nombre || '');
   if (prod?.categoria !== 'fundas') return nombre;
@@ -1615,6 +2035,29 @@ function actualizarContenedoresInventarioVista() {
   const esTabla = inventarioVistaModo === 'tabla';
   if ($grid) $grid.hidden = esTabla;
   if ($tablaWrap) $tablaWrap.hidden = !esTabla;
+}
+
+function scrollInventarioAlInicio() {
+  const $ancla = document.querySelector('#contenido-inventario .inventario-header')
+    || document.getElementById('contenido-inventario');
+  [
+    document.getElementById('inventario-tabla-wrap'),
+    document.getElementById('inventario-productos'),
+    document.querySelector('.inventario-productos-wrap'),
+    document.getElementById('contenido-inventario'),
+    document.getElementById('vista-pos'),
+    document.querySelector('#vista-pos .vista-main-col'),
+    document.getElementById('vista-pos')?.closest('.app-glass'),
+    document.querySelector('.app'),
+  ].forEach((el) => {
+    if (el) el.scrollTop = 0;
+  });
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+  window.scrollTo(0, 0);
+  if ($ancla) {
+    $ancla.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'auto' });
+  }
 }
 
 function actualizarBtnLimpiarBuscadorInventario() {
@@ -1686,7 +2129,6 @@ function renderInventarioPaginacion($pag, paginaActual, totalPaginas, mostrar = 
 function initInventarioVista() {
   const $buscador = document.getElementById('inventario-buscador');
   const $grid = document.getElementById('inventario-productos');
-  const $chips = document.querySelectorAll('.inventario-chip');
   const $btnAgregar = document.getElementById('btn-agregar-producto');
 
   async function cargarProductosInventario() {
@@ -1743,6 +2185,7 @@ function initInventarioVista() {
 
   if (typeof initInventarioVista._inited !== 'undefined' && initInventarioVista._inited) {
     actualizarEstadoBtnAgregarProducto();
+    renderInventarioChipsNavegacion();
     void (async () => {
       await cargarInventarioFavoritosDesdeApi();
       await cargarProductosInventario();
@@ -1759,17 +2202,16 @@ function initInventarioVista() {
     await cargarProductosInventario();
   })();
 
-  $chips.forEach(chip => {
-    chip.addEventListener('click', () => {
-      $chips.forEach(c => c.classList.remove('activo'));
-      chip.classList.add('activo');
-      categoriaInventarioActiva = chip.dataset.cat;
-      actualizarEstadoBtnAgregarProducto();
-      actualizarOpcionOrdenCategoriaFiltro();
-      actualizarBtnFiltrosInventario();
-      renderInventarioProductos();
+  const $chipsLinea = document.getElementById('inventario-chips-linea');
+  if ($chipsLinea && !initInventarioVista._chipsBound) {
+    initInventarioVista._chipsBound = true;
+    $chipsLinea.addEventListener('click', (e) => {
+      const chip = e.target.closest('.inventario-chip');
+      if (!chip) return;
+      manejarClickChipInventario(chip);
     });
-  });
+  }
+  renderInventarioChipsNavegacion();
 
   $buscador?.addEventListener('input', () => {
     actualizarBtnLimpiarBuscadorInventario();
@@ -1803,12 +2245,20 @@ function initInventarioVista() {
   $pag?.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-pag]');
     if (!btn || btn.disabled) return;
+    e.preventDefault();
+    const paginaAnterior = paginaInventarioActual;
     const val = btn.dataset.pag;
     const totalPaginas = getInventarioTotalPaginas(filtrarProductosInventario().length);
     if (val === 'prev') paginaInventarioActual = Math.max(1, paginaInventarioActual - 1);
     else if (val === 'next') paginaInventarioActual = Math.min(totalPaginas, paginaInventarioActual + 1);
     else paginaInventarioActual = Number(val);
+    btn.blur();
     renderInventarioProductos();
+    if (paginaInventarioActual !== paginaAnterior) {
+      scrollInventarioAlInicio();
+      requestAnimationFrame(scrollInventarioAlInicio);
+      setTimeout(scrollInventarioAlInicio, 0);
+    }
   });
 
   if ($grid && typeof initInventarioVista._resizeObs === 'undefined') {
@@ -1921,13 +2371,17 @@ function renderInventarioVistaTabla() {
     const colCostoCompra = esConsignado
       ? formatearPrecio(Number(p.costo_consignacion) || 0)
       : formatearCostoCompraInventario(p);
+    const puedeTrasladar = !agrupado && puedeTrasladarProductoInventario(p);
     const accionesHtml = verTodasSucursales
       ? '<span class="inventario-tabla-solo-sucursal">Elige una sucursal</span>'
       : `<div class="inventario-tabla-acciones-fila">
           <button type="button" class="btn-tabla inventario-tabla-editar" data-id="${p.id}">Editar</button>
           <button type="button" class="btn-tabla btn-tabla-danger inventario-tabla-eliminar" data-id="${p.id}">Eliminar</button>
         </div>
-        <button type="button" class="btn-tabla inventario-tabla-carrito" data-id="${p.id}">Agregar al carrito</button>`;
+        <div class="inventario-tabla-acciones-fila inventario-tabla-acciones-fila--iconos">
+          <button type="button" class="btn-tabla btn-tabla-icono inventario-tabla-carrito" data-id="${p.id}" title="Agregar al carrito" aria-label="Agregar al carrito"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i></button>
+          ${puedeTrasladar ? `<button type="button" class="btn-tabla btn-tabla-icono inventario-tabla-trasladar" data-id="${p.id}" title="Trasladar a otra sucursal" aria-label="Trasladar a otra sucursal"><i class="fa-solid fa-arrows-turn-to-dots" aria-hidden="true"></i></button>` : ''}
+        </div>`;
     return `
     <tr data-id="${p.id}"${esConsignado ? ' data-consignado="1"' : ''}${agrupado ? ' data-agrupado="1"' : ''}>
       <td>${agrupado ? '—' : p.id}</td>
@@ -1990,6 +2444,14 @@ function renderInventarioVistaTabla() {
       } else if (window.agregarAlCarrito) {
         window.agregarAlCarrito(prod);
       }
+    });
+  });
+
+  $tbody.querySelectorAll('.inventario-tabla-trasladar').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.dataset.id);
+      const prod = productosInventario.find((item) => Number(item.id) === id);
+      if (prod) window.ucAbrirModalTrasladarProducto?.(prod);
     });
   });
 
@@ -2540,51 +3002,6 @@ function initModalTrasladarInventario() {
 }
 
 // ===================== MODAL AGREGAR PRODUCTO =====================
-
-const SAMSUNG_SERIES = {
-  'Galaxy S': [
-    'Galaxy S21', 'Galaxy S21+', 'Galaxy S21 Ultra', 'Galaxy S21 FE',
-    'Galaxy S22', 'Galaxy S22+', 'Galaxy S22 Ultra',
-    'Galaxy S23', 'Galaxy S23+', 'Galaxy S23 Ultra', 'Galaxy S23 FE',
-    'Galaxy S24', 'Galaxy S24+', 'Galaxy S24 Ultra', 'Galaxy S24 FE',
-    'Galaxy S25', 'Galaxy S25+', 'Galaxy S25 Ultra',
-    'Galaxy S26', 'Galaxy S26+', 'Galaxy S26 Ultra',
-  ],
-  'Galaxy A': [
-    'Galaxy A12', 'Galaxy A13', 'Galaxy A14', 'Galaxy A15', 'Galaxy A16',
-    'Galaxy A20', 'Galaxy A21', 'Galaxy A22', 'Galaxy A23', 'Galaxy A24', 'Galaxy A25', 'Galaxy A26',
-    'Galaxy A30', 'Galaxy A31', 'Galaxy A32', 'Galaxy A33', 'Galaxy A34', 'Galaxy A35', 'Galaxy A36',
-    'Galaxy A50', 'Galaxy A51', 'Galaxy A52', 'Galaxy A53', 'Galaxy A54', 'Galaxy A55', 'Galaxy A56',
-  ],
-  'Galaxy Z': [
-    'Galaxy Z Flip 3', 'Galaxy Z Flip 4', 'Galaxy Z Flip 5', 'Galaxy Z Flip 6',
-    'Galaxy Z Fold 3', 'Galaxy Z Fold 4', 'Galaxy Z Fold 5', 'Galaxy Z Fold 6',
-  ],
-  'Galaxy Note': [
-    'Galaxy Note 10', 'Galaxy Note 10+', 'Galaxy Note 20', 'Galaxy Note 20 Ultra',
-  ],
-};
-
-const MARCAS_MODELOS = {
-  Apple: [
-    'iPhone 12 mini', 'iPhone 12', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
-    'iPhone 13 mini', 'iPhone 13', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
-    'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
-    'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
-    'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
-    'iPhone 17', 'iPhone 17 Air', 'iPhone 17 Pro', 'iPhone 17 Pro Max',
-    'iPhone SE',
-  ],
-  Samsung: Object.values(SAMSUNG_SERIES).flat(),
-  Xiaomi: ['Redmi Note 13', 'Redmi 12', 'POCO X6', 'Mi 14'],
-  Motorola: ['Edge 40', 'Edge 30', 'Moto G84', 'Razr'],
-  Huawei: ['P60', 'P50', 'Mate 60', 'Nova 12'],
-  Google: ['Pixel 8', 'Pixel 7', 'Pixel 6a'],
-  OnePlus: ['OnePlus 12', 'OnePlus 11', 'Nord 3'],
-  OPPO: ['Find X6', 'Reno 10', 'A78'],
-  Realme: ['Realme 11', 'Realme 10', 'Realme C55'],
-  Honor: ['Honor 90', 'Honor Magic 5', 'Honor X9b'],
-};
 
 const IMAGEN_PRODUCTO_MAX_BYTES = 3 * 1024 * 1024;
 const IMAGEN_PRODUCTO_MAX_BASE64 = 3_500_000;
@@ -3467,82 +3884,6 @@ function initProductoModal() {
     });
   }
 
-  function extraerMarcaModeloCel(texto) {
-    const s = (texto || '').trim();
-    if (!s) return null;
-
-    const marcasOrden = Object.keys(MARCAS_MODELOS).sort((a, b) => b.length - a.length);
-    for (const marca of marcasOrden) {
-      const prefijo = `${marca} `;
-      if (s.toLowerCase().startsWith(prefijo.toLowerCase())) {
-        return {
-          marca,
-          modelo: s.slice(prefijo.length).trim(),
-          resto: '',
-        };
-      }
-    }
-
-    let mejor = null;
-    for (const marca of Object.keys(MARCAS_MODELOS)) {
-      for (const modelo of MARCAS_MODELOS[marca]) {
-        const suf = `${marca} ${modelo}`;
-        if (s === suf || s.endsWith(` ${suf}`)) {
-          if (!mejor || suf.length > `${mejor.marca} ${mejor.modelo}`.length) {
-            mejor = { marca, modelo, resto: s.slice(0, s.length - suf.length).trim() };
-          }
-        }
-      }
-    }
-    if (mejor) return mejor;
-
-    const marcas = Object.keys(MARCAS_MODELOS).sort((a, b) => b.length - a.length);
-    for (const marca of marcas) {
-      const marcaEsc = marca.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const re = new RegExp(`\\s+${marcaEsc}\\s+(.+)$`, 'i');
-      const m = s.match(re);
-      if (m) {
-        return {
-          marca,
-          modelo: m[1].trim(),
-          resto: s.slice(0, m.index).trim(),
-        };
-      }
-      if (s.toLowerCase() === marca.toLowerCase()) {
-        return { marca, modelo: '', resto: '' };
-      }
-    }
-    return null;
-  }
-
-  function inferirMarcaDesdeModelo(texto) {
-    const s = (texto || '').trim();
-    if (!s) return null;
-
-    for (const marca of Object.keys(MARCAS_MODELOS).sort((a, b) => b.length - a.length)) {
-      const prefijo = `${marca} `;
-      if (s.toLowerCase().startsWith(prefijo.toLowerCase())) {
-        const modelo = s.slice(prefijo.length).trim();
-        return inferirMarcaDesdeModelo(modelo) || { marca, modelo };
-      }
-    }
-
-    let mejor = null;
-    for (const marca of Object.keys(MARCAS_MODELOS)) {
-      for (const modelo of MARCAS_MODELOS[marca]) {
-        if (s === modelo) {
-          if (!mejor || modelo.length > mejor.modelo.length) {
-            mejor = { marca, modelo };
-          }
-        }
-      }
-    }
-    if (mejor) return mejor;
-    if (/^iPhone\b/i.test(s)) return { marca: 'Apple', modelo: s };
-    if (/^Galaxy\b/i.test(s)) return { marca: 'Samsung', modelo: s };
-    return null;
-  }
-
   function opcionesTextoSelect($select) {
     if (!$select) return [];
     return Array.from($select.options)
@@ -3891,8 +4232,6 @@ function initProductoModal() {
     if (!prod) return;
     cargandoEdicionProducto = true;
     if ($precio) $precio.value = String(prod.precio ?? '');
-    const costoCompraProd = getCostoCompraProducto(prod);
-    if ($costoCompra) $costoCompra.value = costoCompraProd != null ? String(costoCompraProd) : '';
     if (prod.categoria === 'fundas') {
       if (productoFundaTieneRangoPrecio(prod)) {
         aplicarModoPrecioFunda(false);
@@ -4009,6 +4348,7 @@ function initProductoModal() {
     resetModal();
     if ($modalTitulo) $modalTitulo.textContent = 'Actualizar producto';
     if ($modalSubmit) $modalSubmit.textContent = 'Actualizar producto';
+    if ($costoCompraWrap) $costoCompraWrap.hidden = true;
     if ($form) {
       $form.dataset.editId = String(prod.id);
       const sid = prod.sucursal_id ?? prod.id_sucursal;
@@ -4414,9 +4754,9 @@ function initProductoModal() {
           return;
         }
         cerrarModal();
+        resetInventarioNavegacionMica();
         categoriaInventarioActiva = 'consignados';
-        document.querySelectorAll('.inventario-chip').forEach((c) => c.classList.remove('activo'));
-        document.querySelector('.inventario-chip[data-cat="consignados"]')?.classList.add('activo');
+        renderInventarioChipsNavegacion();
         await window.ucCargarInventarioProductos?.();
       });
       return;
@@ -4649,9 +4989,9 @@ function initProductoModal() {
         $modal?.classList.remove('visible');
         document.body.classList.remove('modal-producto-abierto');
         resetModal();
+        resetInventarioNavegacionMica();
         categoriaInventarioActiva = 'consignados';
-        document.querySelectorAll('.inventario-chip').forEach((c) => c.classList.remove('activo'));
-        document.querySelector('.inventario-chip[data-cat="consignados"]')?.classList.add('activo');
+        renderInventarioChipsNavegacion();
         actualizarEstadoBtnAgregarProducto();
         await window.ucCargarInventarioProductos?.();
       } catch (err) {
@@ -4714,8 +5054,10 @@ function initProductoModal() {
         stock,
         categoria: cat,
       };
-      const costoCompraRaw = leerMontoInput($costoCompra);
-      payload.costo_compra = Number.isFinite(costoCompraRaw) && costoCompraRaw > 0 ? costoCompraRaw : null;
+      if (!esEdicion) {
+        const costoCompraRaw = leerMontoInput($costoCompra);
+        payload.costo_compra = Number.isFinite(costoCompraRaw) && costoCompraRaw > 0 ? costoCompraRaw : null;
+      }
       if (cat === 'fundas' && !esModoConsignadaModal()) {
         payload.precio_max = precioMax != null ? precioMax : null;
       }
@@ -5060,6 +5402,418 @@ function initPOS() {
 }
 
 // ===================== MÓDULO: TABS =====================
+
+function escReporteTexto(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function etiquetaMovimientoInventarioReporte(tipo) {
+  const map = {
+    venta: 'Venta',
+    entrada_mercancia: 'Entrada de mercancia',
+    ajuste_manual: 'Ajuste manual',
+    transferencia_salida: 'Transferencia salida',
+    transferencia_entrada: 'Transferencia entrada',
+    devolucion: 'Devolucion',
+    otro: 'Otro',
+  };
+  return map[String(tipo || '').toLowerCase()] || String(tipo || '—');
+}
+
+function claseCantidadMovimientoInventario(cantidad) {
+  const n = Number(cantidad) || 0;
+  if (n > 0) return ' reporte-mov-cantidad--pos';
+  if (n < 0) return ' reporte-mov-cantidad--neg';
+  return '';
+}
+
+function renderTablaMovimientosInventarioReporte(lista) {
+  const $tbody = document.getElementById('tbody-reporte-movimientos');
+  if (!$tbody) return;
+  if (!Array.isArray(lista) || lista.length === 0) {
+    $tbody.innerHTML = '<tr><td colspan="6" class="tabla-vacio">No hay movimientos registrados</td></tr>';
+    return;
+  }
+  $tbody.innerHTML = lista.map((m) => {
+    const fecha = formatFecha(m.created_at);
+    const cantidadNum = Number(m.cantidad) || 0;
+    const cantidadTxt = `${cantidadNum > 0 ? '+' : ''}${cantidadNum}`;
+    return `
+      <tr>
+        <td>${escReporteTexto(fecha)}</td>
+        <td>${escReporteTexto(m.producto_nombre || '—')}</td>
+        <td>${escReporteTexto(etiquetaMovimientoInventarioReporte(m.movimiento))}</td>
+        <td><span class="reporte-mov-cantidad${claseCantidadMovimientoInventario(cantidadNum)}">${escReporteTexto(cantidadTxt)}</span></td>
+        <td>${escReporteTexto(m.usuario_nombre || 'Sistema')}</td>
+        <td>${escReporteTexto(m.sucursal_nombre || 'Sin sucursal')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderTablaTransferenciasSucursalesReporte(lista) {
+  const $tbody = document.getElementById('tbody-reporte-transferencias');
+  if (!$tbody) return;
+  if (!Array.isArray(lista) || lista.length === 0) {
+    $tbody.innerHTML = '<tr><td colspan="6" class="tabla-vacio">No hay transferencias registradas</td></tr>';
+    return;
+  }
+  $tbody.innerHTML = lista.map((t) => {
+    const fecha = formatFecha(t.created_at);
+    const cantidadNum = Number(t.cantidad) || 0;
+    return `
+      <tr>
+        <td>${escReporteTexto(fecha)}</td>
+        <td>${escReporteTexto(t.producto_nombre || '—')}</td>
+        <td><span class="reporte-mov-cantidad">${escReporteTexto(String(cantidadNum))}</span></td>
+        <td>${escReporteTexto(t.sucursal_origen_nombre || 'Sin sucursal')}</td>
+        <td>${escReporteTexto(t.sucursal_destino_nombre || 'Sin sucursal')}</td>
+        <td>${escReporteTexto(t.usuario_nombre || 'Sistema')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function etiquetaAccionHistorialProductoReporte(accion) {
+  const map = {
+    alta: 'Alta',
+    edicion: 'Edición',
+    eliminacion: 'Eliminación',
+  };
+  return map[String(accion || '').toLowerCase()] || String(accion || '—');
+}
+
+function etiquetaCampoHistorialProductoReporte(campo) {
+  const map = {
+    nombre: 'Nombre',
+    precio: 'Precio',
+    precio_max: 'Precio máximo',
+    costo_compra: 'Costo compra',
+    categoria: 'Categoría',
+    imagen: 'Imagen',
+  };
+  return map[String(campo || '').toLowerCase()] || String(campo || '');
+}
+
+function cambiosHistorialProductoDesdeFila(row) {
+  const detalle = row?.detalle;
+  if (detalle && Array.isArray(detalle.cambios) && detalle.cambios.length) {
+    return detalle.cambios;
+  }
+  const accion = String(row?.accion || '').toLowerCase();
+  if (accion === 'alta') {
+    return [{ etiqueta: 'Alta', valor_anterior: '—', valor_nuevo: row.valor_nuevo || 'Producto registrado' }];
+  }
+  if (accion === 'eliminacion') {
+    return [{
+      etiqueta: 'Eliminación',
+      valor_anterior: row.valor_anterior || 'Producto activo',
+      valor_nuevo: row.valor_nuevo || 'Producto eliminado',
+    }];
+  }
+  if (row?.campo) {
+    return [{
+      campo: row.campo,
+      etiqueta: etiquetaCampoHistorialProductoReporte(row.campo),
+      valor_anterior: row.valor_anterior || '—',
+      valor_nuevo: row.valor_nuevo || '—',
+    }];
+  }
+  return [{ etiqueta: 'Cambio', valor_anterior: '—', valor_nuevo: '—' }];
+}
+
+function lineaCambioHistorialProductoReporte(cambio, indice) {
+  const n = Number(indice) + 1;
+  if (cambio?.campo === 'imagen' || cambio?.etiqueta === 'Imagen cambiada') {
+    return `${n}.- Imagen cambiada`;
+  }
+  const etiqueta = cambio?.etiqueta || etiquetaCampoHistorialProductoReporte(cambio?.campo) || 'Cambio';
+  const antes = cambio?.valor_anterior || '—';
+  const despues = cambio?.valor_nuevo || '—';
+  return `${n}.- ${etiqueta}: ${antes} → ${despues}`;
+}
+
+function htmlCeldaCambiosHistorialProductoReporte(h) {
+  const cambios = cambiosHistorialProductoDesdeFila(h);
+  const id = Number(h.id);
+  const texto = lineaCambioHistorialProductoReporte(cambios[0], 0);
+  const multiples = cambios.length > 1;
+  const navHtml = multiples ? `
+    <button type="button" class="btn-tabla btn-tabla-icono reporte-historial-cambio-ver" data-historial-id="${id}" title="Ver todos los cambios" aria-label="Ver todos los cambios">
+      <i class="fa-solid fa-eye" aria-hidden="true"></i>
+    </button>
+  ` : '';
+  const textoHtml = multiples
+    ? `${escReporteTexto(texto)} <span class="reporte-historial-cambio-ellipsis">...</span>`
+    : escReporteTexto(texto);
+  return `
+    <div class="reporte-historial-cambios" data-historial-id="${id}">
+      <span class="reporte-historial-cambio-texto">${textoHtml}</span>
+      ${navHtml}
+    </div>
+  `;
+}
+
+const historialProductosCambiosCache = new Map();
+
+function renderTablaHistorialProductosReporte(lista) {
+  const $tbody = document.getElementById('tbody-reporte-historial-productos');
+  if (!$tbody) return;
+  historialProductosCambiosCache.clear();
+  if (!Array.isArray(lista) || lista.length === 0) {
+    $tbody.innerHTML = '<tr><td colspan="6" class="tabla-vacio">No hay cambios registrados</td></tr>';
+    return;
+  }
+  lista.forEach((h) => {
+    if (h?.id != null) historialProductosCambiosCache.set(Number(h.id), cambiosHistorialProductoDesdeFila(h));
+  });
+  $tbody.innerHTML = lista.map((h) => {
+    const fecha = formatFecha(h.created_at);
+    return `
+      <tr>
+        <td>${escReporteTexto(fecha)}</td>
+        <td>${escReporteTexto(h.producto_nombre || '—')}</td>
+        <td>${escReporteTexto(etiquetaAccionHistorialProductoReporte(h.accion))}</td>
+        <td class="reporte-historial-cambios-cell">${htmlCeldaCambiosHistorialProductoReporte(h)}</td>
+        <td>${escReporteTexto(h.usuario_nombre || 'Sistema')}</td>
+        <td>${escReporteTexto(h.sucursal_nombre || 'Sin sucursal')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function abrirModalHistorialProductosCambios(historialId) {
+  const cambios = historialProductosCambiosCache.get(Number(historialId)) || [];
+  const $modal = document.getElementById('modal-reporte-historial-cambios');
+  const $sub = document.getElementById('modal-reporte-historial-subtitulo');
+  const $lista = document.getElementById('modal-reporte-historial-lista');
+  if (!$modal || !$lista) return;
+  const fila = document.querySelector(`[data-historial-id="${historialId}"]`)?.closest('tr');
+  const producto = fila?.querySelector('td:nth-child(2)')?.textContent?.trim() || 'Producto';
+  if ($sub) $sub.textContent = producto;
+  $lista.innerHTML = cambios.map((c, i) =>
+    `<li>${escReporteTexto(lineaCambioHistorialProductoReporte(c, i))}</li>`
+  ).join('');
+  $modal.classList.add('visible');
+  $modal.setAttribute('aria-hidden', 'false');
+}
+
+function cerrarModalHistorialProductosCambios() {
+  const $modal = document.getElementById('modal-reporte-historial-cambios');
+  if (!$modal) return;
+  $modal.classList.remove('visible');
+  $modal.setAttribute('aria-hidden', 'true');
+}
+
+function initHistorialProductosReporteUI() {
+  if (initHistorialProductosReporteUI._done) return;
+  initHistorialProductosReporteUI._done = true;
+
+  const $tbody = document.getElementById('tbody-reporte-historial-productos');
+  const $modal = document.getElementById('modal-reporte-historial-cambios');
+
+  $tbody?.addEventListener('click', (e) => {
+    const $ver = e.target.closest('.reporte-historial-cambio-ver');
+    if (!$ver) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const id = Number($ver.dataset.historialId);
+    if (!historialProductosCambiosCache.has(id)) return;
+    abrirModalHistorialProductosCambios(id);
+  });
+
+  document.getElementById('modal-reporte-historial-cerrar')?.addEventListener('click', cerrarModalHistorialProductosCambios);
+  $modal?.addEventListener('click', (e) => {
+    if (e.target === $modal) cerrarModalHistorialProductosCambios();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && $modal?.classList.contains('visible')) cerrarModalHistorialProductosCambios();
+  });
+}
+
+const REPORTE_TIPO_KEY = 'urbancase_reporte_tipo';
+
+const REPORTES_CONFIG = {
+  'movimientos-inventario': {
+    placeholder: 'Buscar movimiento...',
+    endpoint: '/reportes/movimientos-inventario',
+    tbodyId: 'tbody-reporte-movimientos',
+    cols: 6,
+    vacio: 'No hay movimientos registrados',
+    cargando: 'Cargando movimientos...',
+    error: 'Error al cargar movimientos',
+    render: renderTablaMovimientosInventarioReporte,
+  },
+  'transferencias-sucursales': {
+    placeholder: 'Buscar transferencia...',
+    endpoint: '/reportes/transferencias-sucursales',
+    tbodyId: 'tbody-reporte-transferencias',
+    cols: 6,
+    vacio: 'No hay transferencias registradas',
+    cargando: 'Cargando transferencias...',
+    error: 'Error al cargar transferencias',
+    render: renderTablaTransferenciasSucursalesReporte,
+  },
+  'historial-productos': {
+    placeholder: 'Buscar historial...',
+    endpoint: '/reportes/historial-productos',
+    tbodyId: 'tbody-reporte-historial-productos',
+    cols: 6,
+    vacio: 'No hay cambios registrados',
+    cargando: 'Cargando historial...',
+    error: 'Error al cargar historial',
+    render: renderTablaHistorialProductosReporte,
+  },
+};
+
+function initModuloVentas() {
+  const $tabVentas = document.getElementById('tab-ventas-modulo');
+  const $tabReportes = document.getElementById('tab-reportes-modulo');
+  const $svVentas = document.getElementById('subvista-ventas-modulo');
+  const $svReportes = document.getElementById('subvista-reportes-modulo');
+  const $toolbarReportes = document.getElementById('modulo-toolbar-reportes');
+  const $tipoReporte = document.getElementById('reporte-tipo-select');
+  const $buscar = document.getElementById('buscar-reporte');
+  const $btnRecargar = document.getElementById('btn-recargar-reporte');
+  const $panelesReporte = document.querySelectorAll('#subvista-reportes-modulo .reporte-panel');
+  if (!$tabVentas || !$tabReportes || !$svVentas || !$svReportes) return;
+
+  const reporteTipoCustomSelect = initCustomSelectBasico($tipoReporte);
+  initHistorialProductosReporteUI();
+
+  let reporteReqId = 0;
+  let debounceBuscar = null;
+  let reporteActivo = 'movimientos-inventario';
+
+  function reporteTipoDisponible(tipo) {
+    const opt = $tipoReporte?.querySelector(`option[value="${tipo}"]`);
+    return Boolean(opt && !opt.disabled);
+  }
+
+  function leerReporteActivoGuardado() {
+    try {
+      const saved = localStorage.getItem(REPORTE_TIPO_KEY);
+      if (saved && reporteTipoDisponible(saved)) return saved;
+    } catch (_) {}
+    return 'movimientos-inventario';
+  }
+
+  function configReporteActivo() {
+    return REPORTES_CONFIG[reporteActivo] || null;
+  }
+
+  function actualizarControlesReporteToolbar() {
+    const cfg = configReporteActivo();
+    const tieneBusqueda = Boolean(cfg);
+    if ($buscar) {
+      $buscar.hidden = !tieneBusqueda;
+      $buscar.disabled = !tieneBusqueda;
+      $buscar.placeholder = cfg?.placeholder || 'Buscar...';
+    }
+    if ($btnRecargar) {
+      $btnRecargar.hidden = !tieneBusqueda;
+      $btnRecargar.disabled = !tieneBusqueda;
+    }
+  }
+
+  function mostrarPanelReporte(tipo) {
+    reporteActivo = tipo;
+    $panelesReporte.forEach(($panel) => {
+      const activo = $panel.dataset.reporte === tipo;
+      $panel.hidden = !activo;
+    });
+    if ($tipoReporte && $tipoReporte.value !== tipo) $tipoReporte.value = tipo;
+    reporteTipoCustomSelect?.syncDisplay?.();
+    actualizarControlesReporteToolbar();
+    try { localStorage.setItem(REPORTE_TIPO_KEY, tipo); } catch (_) {}
+    if (REPORTES_CONFIG[tipo]) void cargarReporteActivo();
+  }
+
+  async function cargarReporteActivo() {
+    const cfg = configReporteActivo();
+    if (!cfg) return;
+    const $tbody = document.getElementById(cfg.tbodyId);
+    const reqId = ++reporteReqId;
+    if ($tbody) {
+      $tbody.innerHTML = `<tr><td colspan="${cfg.cols}" class="tabla-vacio">${escReporteTexto(cfg.cargando)}</td></tr>`;
+    }
+    const params = new URLSearchParams({ limit: '300' });
+    const q = ($buscar?.value || '').trim();
+    if (q) params.set('q', q);
+    try {
+      const r = await fetch(`${API}${cfg.endpoint}?${params.toString()}`, {
+        headers: authHeaders(false),
+      });
+      if (reqId !== reporteReqId) return;
+      if (r.status === 401) {
+        window.location.href = '/login.html';
+        return;
+      }
+      if (!r.ok) {
+        let msg = cfg.error;
+        if (r.status === 404) {
+          msg = 'Ruta de reportes no encontrada. Reinicia el servidor (npm start en server/).';
+        } else {
+          try {
+            const err = await r.json();
+            if (err?.error) msg = `Error: ${err.error}`;
+          } catch (_) {}
+        }
+        if ($tbody) {
+          $tbody.innerHTML = `<tr><td colspan="${cfg.cols}" class="tabla-vacio">${escReporteTexto(msg)}</td></tr>`;
+        }
+        return;
+      }
+      const data = await r.json();
+      cfg.render(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+      if (reqId !== reporteReqId) return;
+      if ($tbody) {
+        $tbody.innerHTML = `<tr><td colspan="${cfg.cols}" class="tabla-vacio">${escReporteTexto(cfg.error)}</td></tr>`;
+      }
+    }
+  }
+
+  function irASubvista(sub = 'ventas') {
+    const modo = sub === 'reportes' ? 'reportes' : 'ventas';
+    $tabVentas.classList.toggle('activo', modo === 'ventas');
+    $tabReportes.classList.toggle('activo', modo === 'reportes');
+    $svVentas.style.display = modo === 'ventas' ? '' : 'none';
+    $svReportes.style.display = modo === 'reportes' ? '' : 'none';
+    if ($toolbarReportes) $toolbarReportes.hidden = modo !== 'reportes';
+    try { localStorage.setItem(VENTAS_SUBMODULO_KEY, modo); } catch (_) {}
+    if (modo === 'reportes') mostrarPanelReporte(leerReporteActivoGuardado());
+  }
+
+  $tabVentas.addEventListener('click', () => irASubvista('ventas'));
+  $tabReportes.addEventListener('click', () => irASubvista('reportes'));
+  $tipoReporte?.addEventListener('change', () => {
+    const tipo = $tipoReporte.value;
+    if (!reporteTipoDisponible(tipo)) {
+      $tipoReporte.value = reporteActivo;
+      return;
+    }
+    if ($buscar) $buscar.value = '';
+    mostrarPanelReporte(tipo);
+  });
+  $btnRecargar?.addEventListener('click', () => { void cargarReporteActivo(); });
+  $buscar?.addEventListener('input', () => {
+    if (!REPORTES_CONFIG[reporteActivo]) return;
+    clearTimeout(debounceBuscar);
+    debounceBuscar = setTimeout(() => { void cargarReporteActivo(); }, 250);
+  });
+
+  window.ucVentasIrASubvista = irASubvista;
+  reporteActivo = leerReporteActivoGuardado();
+  if ($tipoReporte) $tipoReporte.value = reporteActivo;
+  actualizarControlesReporteToolbar();
+  irASubvista(localStorage.getItem(VENTAS_SUBMODULO_KEY) || 'ventas');
+}
 
 function initModulo() {
   const $tabUsuarios = document.getElementById('tab-usuarios');

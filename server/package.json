@@ -8,7 +8,9 @@
     "init-supabase": "node init-supabase.js",
     "migrate-productos": "node migrate-productos.js",
     "migrate-productos-consignados": "node migrate-productos-consignados.js",
-    "migrate-inventario-favoritos": "node migrate-inventario-favoritos.js"
+    "migrate-inventario-favoritos": "node migrate-inventario-favoritos.js",
+    "migrate-inventario-movimientos": "node migrate-inventario-movimientos.js",
+    "migrate-productos-historial": "node migrate-productos-historial.js"
   },
   "keywords": [],
   "author": "",
