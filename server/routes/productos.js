@@ -13,8 +13,9 @@ const IMAGEN_MAX_BASE64 = 3_500_000;
 const SQL_LISTAR_TODAS_SUCURSALES = `
   SELECT p.id, p.nombre, p.precio::float8 AS precio, p.precio_max::float8 AS precio_max,
          p.costo_compra::float8 AS costo_compra,
-         p.stock, p.categoria, p.imagen, p.sucursal_id,
-         p.created_at, COALESCE(s.nombre, 'Sin sucursal') AS sucursal_nombre
+         p.stock, p.categoria, p.sucursal_id,
+         p.created_at, COALESCE(s.nombre, 'Sin sucursal') AS sucursal_nombre,
+         (p.imagen IS NOT NULL AND btrim(p.imagen) <> '') AS tiene_imagen
   FROM productos p
   LEFT JOIN sucursales s ON s.id = p.sucursal_id
   ORDER BY COALESCE(s.nombre, '') ASC, p.id ASC
@@ -56,7 +57,8 @@ router.get('/', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT id, nombre, precio::float8 AS precio, precio_max::float8 AS precio_max,
               costo_compra::float8 AS costo_compra,
-              stock, categoria, imagen, sucursal_id, created_at
+              stock, categoria, sucursal_id, created_at,
+              (imagen IS NOT NULL AND btrim(imagen) <> '') AS tiene_imagen
        FROM productos
        WHERE sucursal_id = $1
        ORDER BY id`,
@@ -146,6 +148,25 @@ router.post('/', async (req, res) => {
       usuarioId: req.usuario?.id,
     });
     res.status(201).json({ ...row, id_sucursal: row.sucursal_id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id/imagen', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'ID inválido' });
+  try {
+    const { rows } = await pool.query(
+      'SELECT imagen FROM productos WHERE id = $1',
+      [id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+    const imagen = rows[0].imagen;
+    if (!imagen || !String(imagen).trim()) {
+      return res.json({ imagen: null, tiene_imagen: false });
+    }
+    res.json({ imagen: String(imagen), tiene_imagen: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

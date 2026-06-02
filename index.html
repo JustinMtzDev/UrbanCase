@@ -151,12 +151,12 @@
               <table class="tabla" id="inventario-tabla">
                 <thead>
                   <tr>
-                    <th>ID</th>
+                    <th class="tabla-num inventario-col-id">ID</th>
                     <th>Nombre</th>
                     <th>Categoría</th>
-                    <th>Precio venta</th>
-                    <th>Costo compra</th>
-                    <th>Stock</th>
+                    <th class="tabla-num">Precio venta</th>
+                    <th class="tabla-num">Costo compra</th>
+                    <th class="tabla-num inventario-col-stock">Stock</th>
                     <th class="inventario-col-sucursal">Sucursal</th>
                     <th class="inventario-col-acciones">Acciones</th>
                   </tr>
@@ -200,9 +200,13 @@
             <span>Unidades</span>
             <span id="restock-unidades">0</span>
           </div>
-          <div class="carrito-fila total">
+          <div class="carrito-fila">
             <span>Productos</span>
             <span id="restock-productos">0</span>
+          </div>
+          <div class="carrito-fila total">
+            <span>Costo compra total</span>
+            <span id="restock-costo-total">$0.00</span>
           </div>
         </div>
         <div class="carrito-acciones">
@@ -222,12 +226,21 @@
         <div class="modulo-toolbar-reportes" id="modulo-toolbar-reportes" hidden>
           <select id="reporte-tipo-select" aria-label="Tipo de reporte">
             <option value="movimientos-inventario">Movimientos de inventario</option>
-            <option value="transferencias-sucursales">Transferencias entre sucursales</option>
-            <option value="historial-productos">Historial de productos</option>
+            <option value="corte-caja">Corte de caja</option>
           </select>
           <div class="modulo-acciones">
             <input type="text" class="modulo-buscar" id="buscar-reporte" placeholder="Buscar...">
             <button type="button" class="btn btn-cobrar" id="btn-recargar-reporte">Recargar</button>
+          </div>
+          <div class="reporte-historial-filtros reporte-movimientos-filtros" id="reporte-movimientos-filtros">
+            <span class="reporte-historial-filtros-label">Movimientos:</span>
+            <div class="reporte-accion-chips" id="reporte-movimientos-chips" role="group" aria-label="Filtrar movimientos">
+              <button type="button" class="reporte-accion-chip activo" data-reporte-chip="restock">Restock</button>
+              <button type="button" class="reporte-accion-chip" data-reporte-chip="transferencia">Transferencia</button>
+              <button type="button" class="reporte-accion-chip" data-reporte-chip="alta">Alta</button>
+              <button type="button" class="reporte-accion-chip" data-reporte-chip="eliminacion">Eliminación</button>
+              <button type="button" class="reporte-accion-chip" data-reporte-chip="edicion">Edición</button>
+            </div>
           </div>
         </div>
       </div>
@@ -241,15 +254,32 @@
               <thead>
                 <tr>
                   <th>Fecha</th>
-                  <th>Movimiento</th>
                   <th>Producto</th>
-                  <th>Cantidad</th>
+                  <th class="tabla-num">Unidades</th>
+                  <th class="tabla-num">Productos</th>
+                  <th class="tabla-num">Total de la compra</th>
                   <th>Sucursal</th>
                   <th>Usuario</th>
                 </tr>
               </thead>
               <tbody id="tbody-reporte-movimientos">
-                <tr><td colspan="6" class="tabla-vacio">Sin datos</td></tr>
+                <tr><td colspan="7" class="tabla-vacio">Sin datos</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="tabla-wrap reporte-mov-detalle-wrap" id="reporte-mov-detalle-wrap" hidden>
+            <table class="tabla" id="tabla-reporte-mov-detalle">
+              <thead>
+                <tr>
+                  <th class="tabla-num">#</th>
+                  <th>Producto</th>
+                  <th class="tabla-num">Cantidad</th>
+                  <th class="tabla-num">Costo anterior</th>
+                  <th class="tabla-num">Costo entrada</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reporte-mov-detalle">
+                <tr><td colspan="5" class="tabla-vacio">Selecciona un registro para ver el detalle</td></tr>
               </tbody>
             </table>
           </div>
@@ -261,7 +291,7 @@
                 <tr>
                   <th>Fecha</th>
                   <th>Producto</th>
-                  <th>Cantidad</th>
+                  <th class="tabla-num">Cantidad</th>
                   <th>Origen</th>
                   <th>Destino</th>
                   <th>Usuario</th>
@@ -292,6 +322,47 @@
             </table>
           </div>
         </div>
+        <div id="reporte-panel-corte-caja" class="reporte-panel" data-reporte="corte-caja" hidden>
+          <div class="reporte-corte-resumen" id="reporte-corte-resumen">
+            <div class="reporte-corte-card">
+              <span class="reporte-corte-card-label">Ventas</span>
+              <strong class="reporte-corte-card-valor" id="reporte-corte-ventas">0</strong>
+            </div>
+            <div class="reporte-corte-card">
+              <span class="reporte-corte-card-label">Total</span>
+              <strong class="reporte-corte-card-valor" id="reporte-corte-total">$0.00</strong>
+            </div>
+            <div class="reporte-corte-card">
+              <span class="reporte-corte-card-label">Efectivo</span>
+              <strong class="reporte-corte-card-valor" id="reporte-corte-efectivo">$0.00</strong>
+            </div>
+            <div class="reporte-corte-card">
+              <span class="reporte-corte-card-label">Tarjeta</span>
+              <strong class="reporte-corte-card-valor" id="reporte-corte-tarjeta">$0.00</strong>
+            </div>
+            <div class="reporte-corte-card">
+              <span class="reporte-corte-card-label">Transferencia</span>
+              <strong class="reporte-corte-card-valor" id="reporte-corte-transferencia">$0.00</strong>
+            </div>
+          </div>
+          <div class="tabla-wrap">
+            <table class="tabla" id="tabla-reporte-corte-caja">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Folio</th>
+                  <th>Método</th>
+                  <th class="tabla-num">Total</th>
+                  <th>Usuario</th>
+                  <th>Sucursal</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reporte-corte-caja">
+                <tr><td colspan="6" class="tabla-vacio">Sin datos</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -314,7 +385,7 @@
           <table class="tabla">
             <thead>
               <tr>
-                <th>ID</th>
+                <th class="tabla-num">ID</th>
                 <th>Usuario</th>
                 <th>Nombre</th>
                 <th>Rol</th>
@@ -342,9 +413,9 @@
           <table class="tabla">
             <thead>
               <tr>
-                <th>ID</th>
+                <th class="tabla-num">ID</th>
                 <th>Nombre</th>
-                <th>Empleados asignados</th>
+                <th class="tabla-num">Empleados asignados</th>
                 <th>Estado</th>
                 <th>Acciones</th>
               </tr>
@@ -373,9 +444,9 @@
           <table class="tabla">
             <thead>
               <tr>
-                <th>ID</th>
+                <th class="tabla-num">ID</th>
                 <th>Nombre</th>
-                <th>Teléfono</th>
+                <th class="tabla-num">Teléfono</th>
                 <th>Correo</th>
                 <th>Dirección</th>
                 <th>Acciones</th>
@@ -398,10 +469,10 @@
           <table class="tabla">
             <thead>
               <tr>
-                <th>ID</th>
+                <th class="tabla-num">ID</th>
                 <th>Nombre</th>
                 <th>RFC</th>
-                <th>Teléfono</th>
+                <th class="tabla-num">Teléfono</th>
                 <th>Correo</th>
                 <th>Dirección</th>
                 <th>Acciones</th>
@@ -1065,14 +1136,80 @@
     </div>
   </div>
 
+  <div id="modal-cobro" class="modal-overlay" aria-hidden="true">
+    <div class="modal-content modal-cobro">
+      <div class="modal-cobro-header">
+        <button type="button" class="modal-cobro-cerrar" id="modal-cobro-cerrar" aria-label="Cerrar">×</button>
+        <div class="modal-cobro-header-centro">
+          <h3>Venta</h3>
+          <p class="modal-cobro-sub" id="modal-cobro-sucursal">—</p>
+        </div>
+      </div>
+      <div class="modal-cobro-body">
+        <section class="modal-cobro-seccion">
+          <h4 class="modal-cobro-seccion-titulo">Resumen del pedido</h4>
+          <ul class="modal-cobro-items" id="modal-cobro-items"></ul>
+        </section>
+        <section class="modal-cobro-seccion">
+          <h4 class="modal-cobro-seccion-titulo">Método de pago</h4>
+          <div class="modal-cobro-pago-opciones" id="modal-cobro-pago-opciones" role="radiogroup" aria-label="Método de pago">
+            <button type="button" class="cobro-pago-btn" data-pago="efectivo" role="radio" aria-checked="false">
+              <i class="fa-solid fa-money-bill-wave" aria-hidden="true"></i>
+              <span>Efectivo</span>
+            </button>
+            <button type="button" class="cobro-pago-btn" data-pago="tarjeta" role="radio" aria-checked="false">
+              <i class="fa-solid fa-credit-card" aria-hidden="true"></i>
+              <span>Tarjeta</span>
+            </button>
+            <button type="button" class="cobro-pago-btn" data-pago="transferencia" role="radio" aria-checked="false">
+              <i class="fa-solid fa-building-columns" aria-hidden="true"></i>
+              <span>Transferencia</span>
+            </button>
+          </div>
+        </section>
+        <section class="modal-cobro-totales">
+          <div class="cobro-total-fila">
+            <span>Total antes de impuestos</span>
+            <span id="cobro-subtotal">$0.00</span>
+          </div>
+          <div class="cobro-total-fila">
+            <span>Impuesto total</span>
+            <span id="cobro-impuesto">$0.00</span>
+          </div>
+          <hr class="cobro-total-sep">
+          <div class="cobro-total-fila cobro-total-final">
+            <span>Importe total</span>
+            <span id="cobro-total">$0.00</span>
+          </div>
+        </section>
+        <div class="modal-cobro-efectivo" id="modal-cobro-efectivo">
+          <label class="cobro-efectivo-label" for="cobro-efectivo-recibido">Con cuánto paga</label>
+          <div class="cobro-efectivo-input-wrap">
+            <span class="cobro-efectivo-signo" aria-hidden="true">$</span>
+            <input type="number" id="cobro-efectivo-recibido" class="cobro-efectivo-input" min="0" step="0.01" inputmode="decimal" placeholder="0.00" autocomplete="off">
+          </div>
+          <div class="cobro-efectivo-cambio" id="cobro-efectivo-cambio-wrap" hidden>
+            <span class="cobro-efectivo-cambio-label">Cambio</span>
+            <strong class="cobro-efectivo-cambio-valor" id="cobro-efectivo-cambio">$0.00</strong>
+          </div>
+          <p class="cobro-efectivo-falta" id="cobro-efectivo-falta" hidden></p>
+        </div>
+      </div>
+      <div class="modal-acciones modal-cobro-acciones">
+        <button type="button" class="btn btn-vaciar" id="modal-cobro-cancelar">Cancelar</button>
+        <button type="button" class="btn btn-cobrar" id="modal-cobro-confirmar">Confirmar venta</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modal-venta">
     <div class="modal-content">
       <h3>Venta completada</h3>
-      <p>Total cobrado:</p>
+      <p id="modal-venta-sub">Pago registrado</p>
+      <p class="modal-venta-total-label">Total cobrado:</p>
       <div class="modal-total" id="modal-total">$0.00</div>
       <div class="modal-acciones">
-        <button type="button" class="btn btn-vaciar" id="modal-cerrar">Cerrar</button>
-        <button type="button" class="btn btn-cobrar" id="modal-nueva">Nueva venta</button>
+        <button type="button" class="btn btn-cobrar" id="modal-cerrar">Cerrar</button>
       </div>
     </div>
   </div>

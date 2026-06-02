@@ -1472,7 +1472,7 @@ body:not(.theme-dark) .inventario-producto-card:hover {
   background: none;
   box-shadow: none;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.92);
+  color: #f74040;
   font-size: 1.15rem;
   line-height: 1;
   transition: transform 0.15s ease, color 0.15s ease, opacity 0.15s ease;
@@ -1480,7 +1480,7 @@ body:not(.theme-dark) .inventario-producto-card:hover {
 
 .inventario-producto-favorito:hover {
   transform: scale(1.08);
-  color: #fff;
+  color: #e02828;
 }
 
 .inventario-producto-favorito:active {
@@ -1492,11 +1492,11 @@ body:not(.theme-dark) .inventario-producto-card:hover {
 }
 
 body.theme-dark .inventario-producto-favorito.activo {
-  color: #ff6b6b;
+  color: #00f0c2;
 }
 
 .inventario-producto-card--consignado .inventario-producto-favorito {
-  color: var(--text-muted);
+  color: #f74040;
 }
 
 .inventario-producto-card--consignado .inventario-producto-favorito.activo {
@@ -1504,7 +1504,24 @@ body.theme-dark .inventario-producto-favorito.activo {
 }
 
 body.theme-dark .inventario-producto-card--consignado .inventario-producto-favorito.activo {
-  color: #ff6b6b;
+  color: #00f0c2;
+}
+
+body.theme-dark .inventario-producto-favorito {
+  color: rgba(0, 212, 170, 0.85);
+  background: rgba(5, 17, 20, 0.48);
+  border: 1px solid rgba(0, 212, 170, 0.22);
+  border-radius: 999px;
+}
+
+body.theme-dark .inventario-producto-favorito:hover {
+  color: var(--accent);
+  border-color: rgba(0, 212, 170, 0.42);
+  background: rgba(0, 212, 170, 0.14);
+}
+
+body.theme-dark .inventario-producto-card--consignado .inventario-producto-favorito {
+  color: rgba(0, 212, 170, 0.85);
 }
 
 .inventario-producto-img-wrap {
@@ -1586,7 +1603,7 @@ body:not(.theme-dark) .inventario-producto-precio {
 }
 
 body.theme-dark .inventario-producto-stock--agotado {
-  color: #ff5252;
+  color: #00f0c2;
 }
 
 .inventario-producto-sin-stock-layer {
@@ -1615,6 +1632,12 @@ body:not(.theme-dark) .inventario-producto-sin-stock-layer {
   padding: 0.4rem 0.85rem;
   border-radius: 8px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+body.theme-dark .inventario-producto-sin-stock-etiqueta {
+  color: #08231d;
+  background: rgba(0, 212, 170, 0.92);
+  border: 1px solid rgba(0, 212, 170, 0.36);
 }
 
 .inventario-producto-sucursal {
@@ -1826,6 +1849,21 @@ body:not(.theme-dark) .inventario-producto-sucursal {
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
+.inventario-producto-btn:disabled,
+.inventario-tabla-carrito:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.inventario-producto-btn:disabled:hover,
+.inventario-tabla-carrito:disabled:hover {
+  opacity: 0.45;
+  transform: none;
+  box-shadow: none;
+}
+
 .inventario-producto-editar svg {
   display: block;
   width: 15px;
@@ -2032,6 +2070,14 @@ body.theme-dark .inventario-producto-card--consignado .inventario-producto-edita
   font-size: 1rem;
 }
 
+.inventario-cargando {
+  opacity: 0.75;
+}
+
+.inventario-producto-img--lazy:not([src]) {
+  opacity: 0;
+}
+
 .inventario-vacio-error {
   color: var(--danger, #c00);
 }
@@ -2135,6 +2181,8 @@ body:not(.theme-dark) .carrito-item {
 }
 
 body:not(.theme-dark) .carrito-item-cantidad button {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.12);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
@@ -2148,8 +2196,21 @@ body:not(.theme-dark) .btn-carrito-expand {
 }
 
 body:not(.theme-dark) .carrito-panel .btn-vaciar {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.12);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
+
+body:not(.theme-dark) .carrito-panel .btn-vaciar:hover {
+  color: #ff3131;
+  border-color: #ff3131;
+  background: #fff;
+}
+
+body:not(.theme-dark) .carrito-panel .btn-cobrar {
+  background: #ff3131;
+}
+
 
 .carrito-overlay {
   display: none;
@@ -2591,6 +2652,23 @@ body:not(.theme-dark) .carrito-item-cantidad button:hover {
   color: #f74040;
 }
 
+.carrito-item-cantidad button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.carrito-item-cantidad button:disabled:hover {
+  border-color: var(--border);
+  color: var(--text);
+  opacity: 0.35;
+}
+
+body:not(.theme-dark) .carrito-item-cantidad button:disabled:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+
 body:not(.theme-dark) .carrito-panel h2 span {
   background: #f74040;
 }
@@ -2767,6 +2845,12 @@ body.modo-restock-rapido .inventario-producto-editar {
   text-align: right;
 }
 
+body.theme-dark .carrito-restock-promedio-valor,
+html.theme-dark .carrito-restock-promedio-valor {
+  border-color: rgba(0, 212, 170, 0.3);
+  background: rgba(0, 212, 170, 0.12);
+}
+
 .carrito-totales-restock[hidden] {
   display: none !important;
 }
@@ -2807,6 +2891,14 @@ body.modo-restock-rapido .inventario-producto-editar {
 .btn-vaciar:hover {
   color: var(--danger);
   border-color: var(--danger);
+}
+
+body.theme-dark .carrito-panel .btn-vaciar:hover,
+body.theme-dark #vista-modulo-ventas .btn-vaciar:hover,
+body.theme-dark #modal-cobro .btn-vaciar:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: transparent;
 }
 
 .btn-cobrar {
@@ -2880,6 +2972,12 @@ body:not(.theme-dark) .modal-content {
   margin-bottom: 1.5rem;
 }
 
+#modal-venta .modal-content h3,
+#modal-venta .modal-venta-total-label,
+#modal-venta .modal-total {
+  text-align: center;
+}
+
 .modal-acciones {
   display: flex;
   gap: 0.5rem;
@@ -2895,6 +2993,386 @@ body:not(.theme-dark) .modal-content {
 
 .modal-acciones .btn {
   flex: 1;
+}
+
+/* ===== Modal cobro (checkout) ===== */
+.modal-cobro {
+  max-width: 520px;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: min(92vh, 720px);
+}
+
+body:not(.theme-dark) .modal-cobro {
+  padding: 0;
+}
+
+.modal-cobro-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem 3rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-cobro-header-centro {
+  text-align: center;
+  min-width: 0;
+}
+
+.modal-cobro-header h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+}
+
+.modal-cobro-sub {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.modal-cobro-cerrar {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-cobro-cerrar:hover {
+  background: rgba(127, 127, 127, 0.12);
+  color: var(--text);
+}
+
+.modal-cobro-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 1.5rem 1rem;
+}
+
+.modal-cobro-seccion {
+  margin-top: 1rem;
+}
+
+.modal-cobro-seccion-titulo {
+  margin: 0 0 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.modal-cobro-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.cobro-item {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(127, 127, 127, 0.04);
+}
+
+body:not(.theme-dark) .cobro-item {
+  background: #fafafa;
+  border-color: rgba(0, 0, 0, 0.07);
+}
+
+.cobro-item-media {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+body.theme-dark .cobro-item-media {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
+}
+
+.cobro-item-img {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 8%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+  background: transparent;
+}
+
+.cobro-item-img--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(127, 127, 127, 0.12);
+  color: var(--text-muted);
+  font-size: 1.25rem;
+}
+
+.cobro-item-info {
+  min-width: 0;
+}
+
+.cobro-item-nombre {
+  font-weight: 600;
+  font-size: 0.92rem;
+  line-height: 1.3;
+  margin-bottom: 0.2rem;
+  word-break: break-word;
+}
+
+.cobro-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.cobro-item-badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 49, 49, 0.12);
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cobro-item-cat {
+  text-transform: capitalize;
+}
+
+.cobro-item-linea-total {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.modal-cobro-pago-opciones {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.cobro-pago-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.75rem 0.5rem;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.cobro-pago-btn i {
+  font-size: 1.1rem;
+}
+
+.cobro-pago-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.cobro-pago-btn.activo {
+  border-color: var(--accent);
+  background: rgba(0, 212, 170, 0.14);
+  color: var(--accent);
+}
+
+body:not(.theme-dark) .cobro-pago-btn.activo {
+  background: rgba(255, 49, 49, 0.06);
+}
+
+.modal-cobro-efectivo {
+  margin-top: 0.85rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(127, 127, 127, 0.04);
+}
+
+body:not(.theme-dark) .modal-cobro-efectivo {
+  background: #fafafa;
+  border-color: rgba(0, 0, 0, 0.07);
+}
+
+.cobro-efectivo-label {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.cobro-efectivo-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.55rem 0.75rem;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.cobro-efectivo-input-wrap:focus-within {
+  border-color: var(--accent);
+}
+
+.cobro-efectivo-signo {
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.cobro-efectivo-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  outline: none;
+}
+
+.cobro-efectivo-input::-webkit-outer-spin-button,
+.cobro-efectivo-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cobro-efectivo-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.cobro-efectivo-cambio {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--border);
+}
+
+.cobro-efectivo-cambio-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cobro-efectivo-cambio-valor {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.25rem;
+  color: var(--accent);
+}
+
+.cobro-efectivo-falta {
+  margin: 0.55rem 0 0;
+  font-size: 0.82rem;
+  color: #e53935;
+}
+
+.modal-cobro-totales {
+  margin-top: 1.25rem;
+  padding-top: 0.25rem;
+}
+
+.cobro-total-fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.cobro-total-fila span:last-child {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text);
+}
+
+.cobro-total-sep {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.5rem 0 0.65rem;
+}
+
+.cobro-total-final {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.cobro-total-final span:last-child {
+  font-size: 1.35rem;
+  color: #3fb750;
+}
+
+body.theme-dark .cobro-total-final span:last-child,
+html.theme-dark .cobro-total-final span:last-child {
+  color: var(--accent);
+}
+
+.modal-cobro-acciones {
+  padding: 1rem 1.5rem 1.25rem;
+  border-top: 1px solid var(--border);
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .modal-cobro-pago-opciones {
+    grid-template-columns: 1fr;
+  }
+
+  .cobro-pago-btn {
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 0.65rem 0.85rem;
+  }
 }
 
 /* ===== Módulos Gestión, Ventas/Reportes y Clientes/Proveedores ===== */
@@ -3448,6 +3926,21 @@ body:not(.theme-dark) .modulo-tab.activo {
   z-index: 30;
 }
 
+#vista-modulo-ventas .modulo-toolbar-reportes .reporte-movimientos-filtros {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  margin-bottom: 0;
+  margin-top: 0;
+}
+
+#vista-modulo-ventas .modulo-toolbar-reportes .reporte-movimientos-filtros .reporte-accion-chips {
+  gap: 0.45rem;
+}
+
+#vista-modulo-ventas .modulo-toolbar-reportes .reporte-movimientos-filtros[hidden] {
+  display: none !important;
+}
+
 #vista-modulo-ventas .modulo-toolbar-reportes .modulo-acciones {
   grid-column: 3;
   justify-self: end;
@@ -3504,6 +3997,36 @@ body.theme-dark #vista-modulo-ventas .custom-select-option.activo {
   display: none !important;
 }
 
+.reporte-corte-resumen {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.reporte-corte-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 0.55rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.reporte-corte-card-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.reporte-corte-card-valor {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.96rem;
+  color: var(--text);
+}
+
 .reporte-historial-cambios-cell {
   min-width: 280px;
 }
@@ -3516,18 +4039,43 @@ body.theme-dark #vista-modulo-ventas .custom-select-option.activo {
 .reporte-mov-productos {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
+  justify-content: flex-start;
+  gap: 0;
   min-width: 0;
 }
 
 .reporte-mov-producto-texto {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.35;
+}
+
+#tabla-reporte-movimientos tbody tr[data-movimiento-id] {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+body:not(.theme-dark) #tabla-reporte-movimientos tbody tr[data-movimiento-id]:hover {
+  background: rgba(255, 49, 49, 0.05);
+}
+
+body.theme-dark #tabla-reporte-movimientos tbody tr[data-movimiento-id]:hover {
+  background: rgba(0, 212, 170, 0.08);
+}
+
+#tabla-reporte-movimientos tbody tr.reporte-mov-row-seleccionada {
+  background: rgba(127, 127, 127, 0.12);
+}
+
+body.theme-dark #tabla-reporte-movimientos tbody tr.reporte-mov-row-seleccionada {
+  background: rgba(0, 212, 170, 0.12);
+}
+
+.reporte-mov-detalle-wrap {
+  margin-top: 0.75rem;
 }
 
 .reporte-mov-producto-ver {
@@ -3579,6 +4127,83 @@ body.theme-dark .reporte-mov-producto-ver {
   opacity: 0.65;
   font-weight: 700;
   letter-spacing: 0.05em;
+}
+
+.reporte-historial-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.reporte-historial-filtros-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.reporte-accion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.reporte-accion-chip {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.2;
+  min-height: var(--inventario-chip-altura, 2.125rem);
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.4), 0 3px 8px rgba(0, 0, 0, 0.1), 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+body.theme-dark .reporte-accion-chip {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 3px 8px rgba(0, 0, 0, 0.2), 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+body:not(.theme-dark) .reporte-accion-chip:hover {
+  color: #fa3030;
+  border-color: #fa3030;
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.4), 0 3px 8px rgba(0, 0, 0, 0.1), 0 0 0 3px rgba(250, 48, 48, 0.15);
+}
+
+body:not(.theme-dark) .reporte-accion-chip.activo:hover {
+  color: #fff;
+}
+
+body.theme-dark .reporte-accion-chip:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 3px 8px rgba(0, 0, 0, 0.2), 0 0 0 3px rgba(0, 212, 170, 0.2);
+}
+
+body.theme-dark .reporte-accion-chip.activo:hover {
+  color: #fff;
+}
+
+.reporte-accion-chip.activo {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.2), 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+body.theme-dark .reporte-accion-chip.activo {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 3px 8px rgba(0, 0, 0, 0.25), 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
 .reporte-historial-stock-eliminado {
@@ -3744,6 +4369,11 @@ body:not(.theme-dark) .tabla-wrap {
   border-bottom: 1px solid var(--border);
 }
 
+.tabla th.tabla-num,
+.tabla td.tabla-num {
+  text-align: center;
+}
+
 .tabla-vacio {
   text-align: center;
   opacity: 0.55;
@@ -3753,6 +4383,12 @@ body:not(.theme-dark) .tabla-wrap {
 .reporte-mov-cantidad {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 700;
+}
+
+.reporte-mov-metrica {
+  font-family: inherit;
+  font-weight: 600;
+  color: inherit;
 }
 
 .reporte-mov-cantidad--pos {
@@ -3935,6 +4571,10 @@ body.modal-producto-abierto {
 }
 
 body.modal-inventario-filtros-abierto {
+  overflow: hidden;
+}
+
+body.modal-cobro-abierto {
   overflow: hidden;
 }
 

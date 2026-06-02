@@ -988,19 +988,42 @@ function actualizarOpcionOrdenCategoriaFiltro() {
   customSelectFiltroOrden?.refresh?.();
 }
 
+function inventarioOrdenDefaultActivo() {
+  const orden = inventarioFiltrosBusqueda.orden || '';
+  return (orden === '' || orden === 'categoria') && orden !== 'mas-vendidos';
+}
+
+function puntajeStockInventarioOrden(p) {
+  if (Boolean(p?.es_consignado)) return 0;
+  if (p?.inventario_agrupado_todas && Array.isArray(p.sucursales_detalle)) {
+    return p.sucursales_detalle.some((s) => !s.es_consignado && (Number(s.stock) || 0) > 0) ? 1 : 0;
+  }
+  return (Number(p?.stock) || 0) > 0 ? 1 : 0;
+}
+
 function ordenarProductosInventario(lista) {
   const copia = [...lista];
   const orden = inventarioFiltrosBusqueda.orden || '';
+  const usarOrdenDefault = !inventarioEsVistaConsignados()
+    && inventarioOrdenDefaultActivo()
+    && orden !== 'mas-vendidos';
+  const usarOrdenPorCategoria = usarOrdenDefault && inventarioChipTodosActivo();
 
   copia.sort((a, b) => {
     const diffFav = Number(esInventarioFavorito(b)) - Number(esInventarioFavorito(a));
     if (diffFav !== 0) return diffFav;
 
-    if (orden === 'categoria' && inventarioChipTodosActivo() && !inventarioEsVistaConsignados()) {
-      const ordenCategorias = obtenerOrdenCategoriasInventarioChips();
-      const diffCat = indiceCategoriaInventario(a.categoria, ordenCategorias)
-        - indiceCategoriaInventario(b.categoria, ordenCategorias);
-      if (diffCat !== 0) return diffCat;
+    if (usarOrdenDefault) {
+      const diffStock = puntajeStockInventarioOrden(b) - puntajeStockInventarioOrden(a);
+      if (diffStock !== 0) return diffStock;
+
+      if (usarOrdenPorCategoria) {
+        const ordenCategorias = obtenerOrdenCategoriasInventarioChips();
+        const diffCat = indiceCategoriaInventario(a.categoria, ordenCategorias)
+          - indiceCategoriaInventario(b.categoria, ordenCategorias);
+        if (diffCat !== 0) return diffCat;
+      }
+
       return (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' });
     }
 
@@ -1131,6 +1154,22 @@ function iconoBotonAgregarInventarioCarrito() {
   return window.ucModoRestockRapido?.() ? 'fa-dolly' : 'fa-cart-shopping';
 }
 
+function inventarioPuedeAgregarAlCarrito(p, esConsignado = false) {
+  if (esConsignado) return !window.ucModoRestockRapido?.();
+  if (window.ucModoRestockRapido?.()) return true;
+  return (Number(p?.stock) || 0) > 0;
+}
+
+function tituloBotonAgregarInventarioCarrito(p, esConsignado = false) {
+  const base = etiquetaBotonAgregarInventarioCarrito();
+  if (!inventarioPuedeAgregarAlCarrito(p, esConsignado)) {
+    if (window.ucModoRestockRapido?.()) return base;
+    if (esConsignado) return 'No disponible en restock';
+    return 'Sin stock para venta';
+  }
+  return base;
+}
+
 function claveAgrupacionProductoInventario(p) {
   const esConsignado = Boolean(p.es_consignado);
   const cat = String(p.categoria || '').trim().toLowerCase();
@@ -1151,6 +1190,7 @@ function detalleSucursalDesdeProducto(p) {
     costo_compra: p.costo_compra,
     categoria: p.categoria,
     imagen: p.imagen,
+    tiene_imagen: Boolean(p.tiene_imagen) || productoTieneImagenInventario(p),
     es_consignado: Boolean(p.es_consignado),
   };
 }
@@ -1172,10 +1212,11 @@ function consolidarProductosInventarioTodasSucursales(lista) {
     grupo.sucursales_detalle.sort((a, b) =>
       String(a.sucursal_nombre || '').localeCompare(String(b.sucursal_nombre || ''), 'es', { sensitivity: 'base' })
     );
-    const rep = grupo.sucursales_detalle.find((s) => productoTieneImagenInventario({ imagen: s.imagen }))
+    const rep = grupo.sucursales_detalle.find((s) => productoTieneImagenInventario(s))
       || grupo.sucursales_detalle[0];
     grupo.id = rep.id;
     grupo.imagen = rep.imagen;
+    grupo.tiene_imagen = productoTieneImagenInventario(rep);
     grupo.es_consignado = grupo.sucursales_detalle.some((s) => s.es_consignado);
     return grupo;
   });
@@ -1260,7 +1301,12 @@ function htmlPrecioUnicoAgrupadoInventario(p, formatearPrecio) {
 }
 
 function aplicarListaInventarioParaVista(lista, esTodasLasSucursales) {
-  return esTodasLasSucursales ? consolidarProductosInventarioTodasSucursales(lista) : lista;
+  if (!esTodasLasSucursales) return lista;
+  const agrupada = consolidarProductosInventarioTodasSucursales(lista);
+  if (!inventarioEsVistaConsignados() && inventarioOrdenDefaultActivo()) {
+    return ordenarProductosInventario(agrupada);
+  }
+  return agrupada;
 }
 
 function opcionesPrecioEnRangoFundas(min, max, step = FUNDAS_RANGO_PRECIO_STEP) {
@@ -2020,8 +2066,104 @@ function escHtmlInventario(s) {
 }
 
 function productoTieneImagenInventario(p) {
+  if (p?.tiene_imagen === true || p?.tiene_imagen === 't') return true;
   const img = p?.imagen;
   return typeof img === 'string' && img.trim().length > 0;
+}
+
+const inventarioImagenCache = new Map();
+const inventarioCachePorSucursal = new Map();
+let inventarioCargaEnCurso = null;
+let inventarioCargaReqId = 0;
+let inventarioLazyImagenObserver = null;
+
+function claveCacheInventarioSucursal(raw, esTodasLasSucursales) {
+  if (esTodasLasSucursales) return 'all';
+  return String(raw || '');
+}
+
+function invalidarCacheInventario(sucursalRaw) {
+  if (sucursalRaw == null || sucursalRaw === '') {
+    inventarioCachePorSucursal.clear();
+    inventarioImagenCache.clear();
+    return;
+  }
+  const key = String(sucursalRaw).toLowerCase() === 'all' || String(sucursalRaw).toLowerCase() === 'todas'
+    ? 'all'
+    : String(sucursalRaw);
+  inventarioCachePorSucursal.delete(key);
+  inventarioCachePorSucursal.delete('all');
+}
+
+window.ucInvalidarCacheInventario = invalidarCacheInventario;
+
+async function obtenerImagenProductoInventario(productoId) {
+  const id = Number(productoId);
+  if (!Number.isFinite(id)) return null;
+  if (inventarioImagenCache.has(id)) return inventarioImagenCache.get(id);
+  try {
+    const r = await fetch(`${API}/productos/${id}/imagen`, { headers: authHeaders(false) });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const url = data?.imagen && String(data.imagen).trim() ? String(data.imagen).trim() : null;
+    inventarioImagenCache.set(id, url);
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+async function resolverImagenProductoInventario(p) {
+  if (!productoTieneImagenInventario(p)) return null;
+  if (typeof p?.imagen === 'string' && p.imagen.trim()) return p.imagen.trim();
+  return obtenerImagenProductoInventario(p?.id);
+}
+
+function enlazarLazyImagenesInventario($root) {
+  if (!$root) return;
+  const pendientes = $root.querySelectorAll('img.inventario-producto-img[data-lazy-id]:not([data-lazy-listo])');
+  if (!pendientes.length) return;
+
+  const cargarImg = async (img) => {
+    const id = Number(img.dataset.lazyId);
+    if (!Number.isFinite(id) || img.dataset.lazyListo === '1') return;
+    img.dataset.lazyListo = '1';
+    const src = await obtenerImagenProductoInventario(id);
+    if (!src) {
+      ocultarImagenInventarioSiRota(img);
+      return;
+    }
+    img.addEventListener('error', () => ocultarImagenInventarioSiRota(img), { once: true });
+    img.src = src;
+  };
+
+  if (typeof IntersectionObserver === 'undefined') {
+    pendientes.forEach((img) => { void cargarImg(img); });
+    return;
+  }
+
+  if (!inventarioLazyImagenObserver) {
+    inventarioLazyImagenObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const img = entry.target;
+        inventarioLazyImagenObserver.unobserve(img);
+        void cargarImg(img);
+      });
+    }, { root: null, rootMargin: '120px', threshold: 0.01 });
+  }
+
+  pendientes.forEach((img) => inventarioLazyImagenObserver.observe(img));
+}
+
+function mostrarInventarioCargando() {
+  const $grid = document.getElementById('inventario-productos');
+  const $tbody = document.getElementById('tbody-inventario-productos');
+  const msg = '<div class="inventario-vacio inventario-cargando">Cargando inventario…</div>';
+  if ($grid && inventarioVistaModo !== 'tabla') $grid.innerHTML = msg;
+  if ($tbody && inventarioVistaModo === 'tabla') {
+    $tbody.innerHTML = '<tr><td colspan="8" class="inventario-tabla-vacio">Cargando inventario…</td></tr>';
+  }
 }
 
 function ocultarImagenInventarioSiRota(img) {
@@ -2059,8 +2201,13 @@ function htmlInventarioCardImagen(p, sinStock = false) {
   if (!productoTieneImagenInventario(p)) {
     return `<div class="inventario-producto-img-wrap inventario-producto-img-wrap--vacia${claseSinStock}" tabindex="0" role="button" aria-label="Ver detalle ampliado">${capaSinStock}</div>`;
   }
-  const src = escHtmlInventario(String(p.imagen).trim());
-  return `<div class="inventario-producto-img-wrap${claseSinStock}" tabindex="0" role="button" aria-label="Ver imagen ampliada"><img class="inventario-producto-img" src="${src}" alt="">${capaSinStock}</div>`;
+  if (typeof p.imagen === 'string' && p.imagen.trim()) {
+    const src = escHtmlInventario(String(p.imagen).trim());
+    return `<div class="inventario-producto-img-wrap${claseSinStock}" tabindex="0" role="button" aria-label="Ver imagen ampliada"><img class="inventario-producto-img" src="${src}" alt="">${capaSinStock}</div>`;
+  }
+  const pid = Number(p.id);
+  const lazyAttr = Number.isFinite(pid) ? ` data-lazy-id="${pid}"` : '';
+  return `<div class="inventario-producto-img-wrap${claseSinStock}" tabindex="0" role="button" aria-label="Ver imagen ampliada"><img class="inventario-producto-img inventario-producto-img--lazy"${lazyAttr} alt="">${capaSinStock}</div>`;
 }
 
 function etiquetaCategoriaInventario(cat) {
@@ -2180,65 +2327,104 @@ function initInventarioVista() {
   const $grid = document.getElementById('inventario-productos');
   const $btnAgregar = document.getElementById('btn-agregar-producto');
 
-  async function cargarProductosInventario() {
+  async function cargarProductosInventario(opciones = {}) {
+    const forzar = Boolean(opciones.forzar);
     const { raw, esTodasLasSucursales } = leerDatasetSucursalInventario();
-    productosInventario = [];
-    productosConsignadosInventario = [];
-    ultimoErrorCargaInventario = '';
+    const cacheKey = claveCacheInventarioSucursal(raw, esTodasLasSucursales);
+
     if (!raw) {
+      productosInventario = [];
+      productosConsignadosInventario = [];
+      ultimoErrorCargaInventario = '';
       renderInventarioProductos();
       return;
     }
-    try {
-      const url = esTodasLasSucursales
-        ? `${API}/productos/inventario-todas-sucursales`
-        : `${API}/productos?${new URLSearchParams({ sucursal_id: raw }).toString()}`;
-      const urlConsignados = esTodasLasSucursales
-        ? `${API}/productos-consignados/inventario-todas-sucursales`
-        : `${API}/productos-consignados?${new URLSearchParams({ sucursal_id: raw }).toString()}`;
-      const [r, rConsignados] = await Promise.all([
-        fetch(url, { headers: authHeaders(false) }),
-        fetch(urlConsignados, { headers: authHeaders(false) }),
-      ]);
-      if (!r.ok) {
-        const rawErr = await r.text().catch(() => r.statusText);
-        try {
-          const j = JSON.parse(rawErr);
-          ultimoErrorCargaInventario = (j && j.error) ? String(j.error) : rawErr || r.statusText;
-        } catch {
-          ultimoErrorCargaInventario = rawErr || r.statusText || 'Error de red';
-        }
-        console.error('productos inventario:', r.status, ultimoErrorCargaInventario);
-        productosInventario = [];
-      } else {
-        const data = await r.json();
-        productosInventario = Array.isArray(data) ? data : [];
-      }
-      if (rConsignados.ok) {
-        const dataConsignados = await rConsignados.json();
-        productosConsignadosInventario = (Array.isArray(dataConsignados) ? dataConsignados : [])
-          .map(normalizarConsignadoInventario);
-      } else {
-        productosConsignadosInventario = [];
-      }
-    } catch (err) {
-      console.error(err);
-      productosInventario = [];
-      productosConsignadosInventario = [];
-      ultimoErrorCargaInventario = err?.message ? String(err.message) : 'Error de red';
+
+    if (forzar) {
+      invalidarCacheInventario(cacheKey);
+      inventarioImagenCache.clear();
     }
-    renderInventarioProductos();
+
+    if (!forzar && inventarioCachePorSucursal.has(cacheKey)) {
+      const cached = inventarioCachePorSucursal.get(cacheKey);
+      productosInventario = cached.productos;
+      productosConsignadosInventario = cached.consignados;
+      ultimoErrorCargaInventario = cached.error || '';
+      renderInventarioProductos();
+      return;
+    }
+
+    if (inventarioCargaEnCurso) return inventarioCargaEnCurso;
+
+    const reqId = ++inventarioCargaReqId;
+    productosInventario = [];
+    productosConsignadosInventario = [];
+    ultimoErrorCargaInventario = '';
+    mostrarInventarioCargando();
+
+    inventarioCargaEnCurso = (async () => {
+      try {
+        const url = esTodasLasSucursales
+          ? `${API}/productos/inventario-todas-sucursales`
+          : `${API}/productos?${new URLSearchParams({ sucursal_id: raw }).toString()}`;
+        const urlConsignados = esTodasLasSucursales
+          ? `${API}/productos-consignados/inventario-todas-sucursales`
+          : `${API}/productos-consignados?${new URLSearchParams({ sucursal_id: raw }).toString()}`;
+        const [r, rConsignados] = await Promise.all([
+          fetch(url, { headers: authHeaders(false) }),
+          fetch(urlConsignados, { headers: authHeaders(false) }),
+        ]);
+        if (reqId !== inventarioCargaReqId) return;
+        if (!r.ok) {
+          const rawErr = await r.text().catch(() => r.statusText);
+          try {
+            const j = JSON.parse(rawErr);
+            ultimoErrorCargaInventario = (j && j.error) ? String(j.error) : rawErr || r.statusText;
+          } catch {
+            ultimoErrorCargaInventario = rawErr || r.statusText || 'Error de red';
+          }
+          console.error('productos inventario:', r.status, ultimoErrorCargaInventario);
+          productosInventario = [];
+        } else {
+          const data = await r.json();
+          productosInventario = Array.isArray(data) ? data : [];
+        }
+        if (rConsignados.ok) {
+          const dataConsignados = await rConsignados.json();
+          productosConsignadosInventario = (Array.isArray(dataConsignados) ? dataConsignados : [])
+            .map(normalizarConsignadoInventario);
+        } else {
+          productosConsignadosInventario = [];
+        }
+        inventarioCachePorSucursal.set(cacheKey, {
+          productos: productosInventario,
+          consignados: productosConsignadosInventario,
+          error: ultimoErrorCargaInventario,
+        });
+      } catch (err) {
+        if (reqId !== inventarioCargaReqId) return;
+        console.error(err);
+        productosInventario = [];
+        productosConsignadosInventario = [];
+        ultimoErrorCargaInventario = err?.message ? String(err.message) : 'Error de red';
+      }
+      if (reqId !== inventarioCargaReqId) return;
+      renderInventarioProductos();
+    })();
+
+    try {
+      await inventarioCargaEnCurso;
+    } finally {
+      inventarioCargaEnCurso = null;
+    }
   }
 
-  window.ucCargarInventarioProductos = cargarProductosInventario;
+  window.ucCargarInventarioProductos = (opciones) => cargarProductosInventario(opciones || {});
 
   if (typeof initInventarioVista._inited !== 'undefined' && initInventarioVista._inited) {
     actualizarEstadoBtnAgregarProducto();
     renderInventarioChipsNavegacion();
-    void (async () => {
-      await cargarInventarioFavoritosDesdeApi();
-      await cargarProductosInventario();
-    })();
+    void Promise.all([cargarInventarioFavoritosDesdeApi(), cargarProductosInventario()]);
     return;
   }
   initInventarioVista._inited = true;
@@ -2246,10 +2432,7 @@ function initInventarioVista() {
   initInventarioFiltrosModal();
   productosInventario = [];
 
-  void (async () => {
-    await cargarInventarioFavoritosDesdeApi();
-    await cargarProductosInventario();
-  })();
+  void Promise.all([cargarInventarioFavoritosDesdeApi(), cargarProductosInventario()]);
 
   const $chipsLinea = document.getElementById('inventario-chips-linea');
   if ($chipsLinea && !initInventarioVista._chipsBound) {
@@ -2262,9 +2445,11 @@ function initInventarioVista() {
   }
   renderInventarioChipsNavegacion();
 
+  let inventarioBuscarDebounce = null;
   $buscador?.addEventListener('input', () => {
     actualizarBtnLimpiarBuscadorInventario();
-    renderInventarioProductos();
+    clearTimeout(inventarioBuscarDebounce);
+    inventarioBuscarDebounce = setTimeout(() => renderInventarioProductos(), 200);
   });
 
   const $btnLimpiarBuscador = document.getElementById('btn-inventario-buscador-limpiar');
@@ -2372,6 +2557,12 @@ function renderInventarioVistaTabla() {
   }
 
   const verTodasSucursales = esTodasLasSucursales;
+  const ocultarIdYStock = verTodasSucursales;
+  const $thSucursal = document.querySelector('#inventario-tabla thead .inventario-col-sucursal');
+  if ($thSucursal) $thSucursal.textContent = verTodasSucursales ? 'Sucursales y stock' : 'Sucursal';
+  document.querySelectorAll('#inventario-tabla .inventario-col-id, #inventario-tabla .inventario-col-stock').forEach((el) => {
+    el.hidden = ocultarIdYStock;
+  });
   document.querySelectorAll('.inventario-col-sucursal').forEach((el) => { el.hidden = !verTodasSucursales; });
   document.querySelectorAll('.inventario-col-acciones').forEach((el) => { el.hidden = verTodasSucursales; });
 
@@ -2383,7 +2574,8 @@ function renderInventarioVistaTabla() {
   if ($grid) $grid.innerHTML = '';
 
   if (lista.length === 0) {
-    $tbody.innerHTML = `<tr><td colspan="8" class="inventario-tabla-vacio">${escHtmlInventario(mensajeVacioInventarioTexto())}</td></tr>`;
+    const colsVacias = verTodasSucursales ? 6 : 7;
+    $tbody.innerHTML = `<tr><td colspan="${colsVacias}" class="inventario-tabla-vacio">${escHtmlInventario(mensajeVacioInventarioTexto())}</td></tr>`;
     renderInventarioPaginacion($pag, 1, 1, false);
     return;
   }
@@ -2426,28 +2618,33 @@ function renderInventarioVistaTabla() {
       ? formatearPrecio(Number(p.costo_consignacion) || 0)
       : formatearCostoCompraInventario(p);
     const puedeTrasladar = !agrupado && puedeTrasladarProductoInventario(p);
+    const puedeCarrito = !agrupado && inventarioPuedeAgregarAlCarrito(p, esConsignado);
+    const tituloCarrito = tituloBotonAgregarInventarioCarrito(p, esConsignado);
     const accionesHtml = `<div class="inventario-tabla-acciones-fila">
           <button type="button" class="btn-tabla inventario-tabla-editar" data-id="${p.id}">Editar</button>
           <button type="button" class="btn-tabla btn-tabla-danger inventario-tabla-eliminar" data-id="${p.id}">Eliminar</button>
         </div>
         <div class="inventario-tabla-acciones-fila inventario-tabla-acciones-fila--iconos">
-          <button type="button" class="btn-tabla btn-tabla-icono inventario-tabla-carrito" data-id="${p.id}" title="${escHtmlInventario(etiquetaBotonAgregarInventarioCarrito())}" aria-label="${escHtmlInventario(etiquetaBotonAgregarInventarioCarrito())}"><i class="fa-solid ${iconoBotonAgregarInventarioCarrito()}" aria-hidden="true"></i></button>
+          <button type="button" class="btn-tabla btn-tabla-icono inventario-tabla-carrito" data-id="${p.id}" title="${escHtmlInventario(tituloCarrito)}" aria-label="${escHtmlInventario(tituloCarrito)}"${puedeCarrito ? '' : ' disabled'}><i class="fa-solid ${iconoBotonAgregarInventarioCarrito()}" aria-hidden="true"></i></button>
           ${puedeTrasladar ? `<button type="button" class="btn-tabla btn-tabla-icono inventario-tabla-trasladar" data-id="${p.id}" title="Trasladar a otra sucursal" aria-label="Trasladar a otra sucursal"><i class="fa-solid fa-arrows-turn-to-dots" aria-hidden="true"></i></button>` : ''}
         </div>`;
     return `
     <tr data-id="${p.id}"${esConsignado ? ' data-consignado="1"' : ''}${agrupado ? ' data-agrupado="1"' : ''}>
-      <td>${agrupado ? '—' : p.id}</td>
+      <td class="tabla-num inventario-col-id">${agrupado ? '—' : p.id}</td>
       <td>${escHtmlInventario(nombreProductoInventarioDisplay(p))}</td>
       <td>${escHtmlInventario(esConsignado ? 'Consignado' : etiquetaCategoriaInventario(p.categoria))}</td>
-      <td>${colPrecioVenta}</td>
-      <td>${colCostoCompra}</td>
-      <td>${colStock}</td>
+      <td class="tabla-num">${colPrecioVenta}</td>
+      <td class="tabla-num">${colCostoCompra}</td>
+      <td class="tabla-num inventario-col-stock">${colStock}</td>
       ${verTodasSucursales ? `<td class="inventario-col-sucursal inventario-tabla-multisucursal">${celSucursalInner}</td>` : ''}
       ${verTodasSucursales ? '' : `<td class="inventario-tabla-acciones inventario-col-acciones">
         ${accionesHtml}
       </td>`}
     </tr>`;
   }).join('');
+  document.querySelectorAll('#inventario-tabla .inventario-col-id, #inventario-tabla .inventario-col-stock').forEach((el) => {
+    el.hidden = ocultarIdYStock;
+  });
 
   $tbody.querySelectorAll('.inventario-tabla-editar').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -2486,12 +2683,15 @@ function renderInventarioVistaTabla() {
         ? productosConsignadosInventario.find((item) => Number(item.id) === id)
         : productosInventario.find((item) => Number(item.id) === id);
       if (!prod) return;
+      if (!inventarioPuedeAgregarAlCarrito(prod, esConsignado)) return;
       if (esConsignado) {
         window.ucAgregarConsignadoAlCarrito?.({
+          consignadoId: prod.id,
           nombre: prod.nombre,
           precio: prod.precio_venta ?? prod.precio,
           costoConsignacion: prod.costo_consignacion,
           categoria: prod.categoria,
+          imagen: prod.imagen || null,
         });
       } else if (window.agregarAlCarrito) {
         window.agregarAlCarrito(prod);
@@ -2585,6 +2785,8 @@ function renderInventarioVistaCards() {
       const precioVenta = Number(p.precio_venta ?? p.precio) || 0;
       const costo = Number(p.costo_consignacion) || 0;
       const btnEditar = `<button type="button" class="inventario-producto-editar" data-id="${p.id}" title="Editar producto consignado" aria-label="Editar producto consignado">${UC_ICONO_EDITAR}</button>`;
+      const puedeCarrito = inventarioPuedeAgregarAlCarrito(p, true);
+      const tituloCarrito = tituloBotonAgregarInventarioCarrito(p, true);
       return `
     <article class="inventario-producto-card inventario-producto-card--consignado" data-id="${p.id}" data-consignado="1">
       ${htmlBotonFavoritoInventario(p)}
@@ -2601,7 +2803,7 @@ function renderInventarioVistaCards() {
         ${lineaSucursal}
       </div>
       <div class="inventario-producto-acciones">
-        <button type="button" class="inventario-producto-btn" data-id="${p.id}">${escHtmlInventario(etiquetaBotonAgregarInventarioCarrito())}</button>
+        <button type="button" class="inventario-producto-btn" data-id="${p.id}" title="${escHtmlInventario(tituloCarrito)}"${puedeCarrito ? '' : ' disabled'}>${escHtmlInventario(etiquetaBotonAgregarInventarioCarrito())}</button>
       </div>
     </article>
   `;
@@ -2610,6 +2812,8 @@ function renderInventarioVistaCards() {
     const sinStock = stockNum <= 0;
     const cantidadLabel = `Stock: ${stockNum}`;
     const btnEditar = `<button type="button" class="inventario-producto-editar" data-id="${p.id}" title="Editar producto" aria-label="Editar producto">${UC_ICONO_EDITAR}</button>`;
+    const puedeCarrito = inventarioPuedeAgregarAlCarrito(p, false);
+    const tituloCarrito = tituloBotonAgregarInventarioCarrito(p, false);
     return `
     <article class="inventario-producto-card${sinStock ? ' inventario-producto-card--sin-stock' : ''}" data-id="${p.id}">
       ${htmlBotonFavoritoInventario(p)}
@@ -2626,7 +2830,7 @@ function renderInventarioVistaCards() {
         ${lineaSucursal}
       </div>
       <div class="inventario-producto-acciones">
-        <button type="button" class="inventario-producto-btn" data-id="${p.id}">${escHtmlInventario(etiquetaBotonAgregarInventarioCarrito())}</button>
+        <button type="button" class="inventario-producto-btn" data-id="${p.id}" title="${escHtmlInventario(tituloCarrito)}"${puedeCarrito ? '' : ' disabled'}>${escHtmlInventario(etiquetaBotonAgregarInventarioCarrito())}</button>
       </div>
     </article>
   `;
@@ -2645,12 +2849,15 @@ function renderInventarioVistaCards() {
         ? productosConsignadosInventario.find((p) => Number(p.id) === id)
         : productosInventario.find((p) => Number(p.id) === id);
       if (!prod) return;
+      if (!inventarioPuedeAgregarAlCarrito(prod, esConsignado)) return;
       if (esConsignado) {
         window.ucAgregarConsignadoAlCarrito?.({
+          consignadoId: prod.id,
           nombre: prod.nombre,
           precio: prod.precio_venta ?? prod.precio,
           costoConsignacion: prod.costo_consignacion,
           categoria: prod.categoria,
+          imagen: prod.imagen || null,
         });
       } else if (window.agregarAlCarrito) {
         window.agregarAlCarrito(prod);
@@ -2726,9 +2933,10 @@ function renderInventarioVistaCards() {
     const img = wrap.querySelector('.inventario-producto-img');
     if (img) {
       img.addEventListener('error', () => ocultarImagenInventarioSiRota(img), { once: true });
-      if (img.complete && !img.naturalWidth) ocultarImagenInventarioSiRota(img);
+      if (img.complete && img.src && !img.naturalWidth) ocultarImagenInventarioSiRota(img);
     }
   });
+  enlazarLazyImagenesInventario($grid);
 }
 
 let inventarioZoomAbierto = false;
@@ -2804,10 +3012,12 @@ function abrirInventarioProductoZoom(p) {
   const $suc = document.getElementById('inventario-zoom-sucursal');
   if (!$bd || !$panel || !$img || !$nom || !p) return;
   const formatearPrecio = window.formatearPrecioPOS || (n => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 }));
+  configurarImagenZoomInventario($img, null);
   if (productoTieneImagenInventario(p)) {
-    configurarImagenZoomInventario($img, String(p.imagen).trim());
-  } else {
-    configurarImagenZoomInventario($img, null);
+    void resolverImagenProductoInventario(p).then((src) => {
+      if (inventarioZoomProducto !== p) return;
+      configurarImagenZoomInventario($img, src);
+    });
   }
   $nom.textContent = nombreProductoInventarioDisplay(p) || 'Producto';
   const esConsignado = Boolean(p.es_consignado);
@@ -3015,7 +3225,7 @@ function initModalTrasladarInventario() {
       cerrarModalTraslado();
       cerrarInventarioProductoZoom();
       window.ucCerrarModalProducto?.();
-      await window.ucCargarInventarioProductos?.();
+      await window.ucCargarInventarioProductos?.({ forzar: true });
     } catch (err) {
       console.error(err);
       alert('Error de red al trasladar inventario');
@@ -4809,7 +5019,7 @@ function initProductoModal() {
         resetInventarioNavegacionMica();
         categoriaInventarioActiva = 'consignados';
         renderInventarioChipsNavegacion();
-        await window.ucCargarInventarioProductos?.();
+        await window.ucCargarInventarioProductos?.({ forzar: true });
       });
       return;
     }
@@ -4822,7 +5032,7 @@ function initProductoModal() {
         return;
       }
       cerrarModal();
-      window.ucCargarInventarioProductos?.();
+      await window.ucCargarInventarioProductos?.({ forzar: true });
     });
   });
   $modal?.addEventListener('click', e => { if (e.target.id === 'modal-producto') cerrarModal(); });
@@ -5045,7 +5255,7 @@ function initProductoModal() {
         categoriaInventarioActiva = 'consignados';
         renderInventarioChipsNavegacion();
         actualizarEstadoBtnAgregarProducto();
-        await window.ucCargarInventarioProductos?.();
+        await window.ucCargarInventarioProductos?.({ forzar: true });
       } catch (err) {
         console.error(err);
         alert('Error de red al guardar el producto consignado');
@@ -5148,7 +5358,7 @@ function initProductoModal() {
         alert('El producto se guardó, pero la imagen no se almacenó. Intenta con otra foto.');
         return;
       }
-      await window.ucCargarInventarioProductos?.();
+      await window.ucCargarInventarioProductos?.({ forzar: true });
       cerrarModal();
     } catch (err) {
       console.error(err);
@@ -5180,6 +5390,7 @@ function initPOS() {
   const $totalesRestock = document.getElementById('carrito-totales-restock');
   const $restockUnidades = document.getElementById('restock-unidades');
   const $restockProductos = document.getElementById('restock-productos');
+  const $restockCostoTotal = document.getElementById('restock-costo-total');
   const $btnVaciar = document.getElementById('btn-vaciar');
   const $btnCobrar = document.getElementById('btn-cobrar');
   const $btnRestockConfirmar = document.getElementById('btn-restock-confirmar');
@@ -5187,7 +5398,23 @@ function initPOS() {
   const $modal = document.getElementById('modal-venta');
   const $modalTotal = document.getElementById('modal-total');
   const $modalCerrar = document.getElementById('modal-cerrar');
-  const $modalNueva = document.getElementById('modal-nueva');
+  const $modalCobro = document.getElementById('modal-cobro');
+  const $modalCobroItems = document.getElementById('modal-cobro-items');
+  const $modalCobroSucursal = document.getElementById('modal-cobro-sucursal');
+  const $cobroSubtotal = document.getElementById('cobro-subtotal');
+  const $cobroImpuesto = document.getElementById('cobro-impuesto');
+  const $cobroTotal = document.getElementById('cobro-total');
+  const $modalCobroPago = document.getElementById('modal-cobro-pago-opciones');
+  const $modalCobroConfirmar = document.getElementById('modal-cobro-confirmar');
+  const $modalCobroEfectivo = document.getElementById('modal-cobro-efectivo');
+  const $modalCobroBody = $modalCobro?.querySelector('.modal-cobro-body');
+  const $cobroEfectivoRecibido = document.getElementById('cobro-efectivo-recibido');
+  const $cobroEfectivoCambioWrap = document.getElementById('cobro-efectivo-cambio-wrap');
+  const $cobroEfectivoCambio = document.getElementById('cobro-efectivo-cambio');
+  const $cobroEfectivoFalta = document.getElementById('cobro-efectivo-falta');
+  let metodoPagoCobro = '';
+  let sucursalCobroId = null;
+  let totalCobroActualNum = 0;
 
   function formatearPrecio(n) {
     return '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 });
@@ -5197,11 +5424,59 @@ function initPOS() {
     return `${item.id}-${Number(item.precio)}`;
   }
 
+  function cantidadProductoEnCarritoVenta(productoId, excluirClave = null) {
+    const pid = Number(productoId);
+    if (!Number.isFinite(pid)) return 0;
+    return carrito
+      .filter((i) => !i.consignado && Number(i.id) === pid && claveCarritoItem(i) !== excluirClave)
+      .reduce((s, i) => s + (Number(i.cantidad) || 0), 0);
+  }
+
+  function stockDisponibleVentaProducto(prodOrId) {
+    if (prodOrId && typeof prodOrId === 'object') {
+      const n = Number(prodOrId.stock);
+      if (Number.isFinite(n)) return Math.max(0, n);
+      return stockDisponibleVentaProducto(prodOrId.id);
+    }
+    const live = productosInventario.find((p) => Number(p.id) === Number(prodOrId));
+    const n = live != null ? Number(live.stock) : NaN;
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  }
+
+  function stockMaxCarritoVentaItem(it, clave = null) {
+    if (it?.consignado) return 1;
+    const stockTotal = stockDisponibleVentaProducto(it);
+    const usadosOtros = cantidadProductoEnCarritoVenta(it.id, clave);
+    const maxLinea = stockTotal - usadosOtros;
+    if (maxLinea > 0) return maxLinea;
+    const reserva = Number(it?.stock);
+    if (Number.isFinite(reserva) && reserva > 0) {
+      return Math.max(Number(it.cantidad) || 1, reserva - usadosOtros);
+    }
+    return Math.max(Number(it.cantidad) || 1, 1);
+  }
+
   function agregarProductoAlCarritoDirecto(prod) {
     const precioSel = Number(prod.precio);
-    const item = carrito.find((i) => i.id === prod.id && Number(i.precio) === precioSel);
-    if (item) item.cantidad++;
-    else carrito.push({ ...prod, precio: precioSel, cantidad: 1 });
+    const stockMax = Number(prod.stock) || 0;
+    if (stockMax <= 0) return;
+    const nombreDisplay = typeof nombreProductoInventarioDisplay === 'function'
+      ? nombreProductoInventarioDisplay(prod)
+      : (prod.nombre || 'Producto');
+    const item = carrito.find((i) => Number(i.id) === Number(prod.id) && Number(i.precio) === precioSel);
+    if (item) {
+      const clave = claveCarritoItem(item);
+      if (item.cantidad >= stockMaxCarritoVentaItem(item, clave)) return;
+      item.cantidad++;
+    } else {
+      carrito.push({
+        ...prod,
+        nombre: nombreDisplay,
+        precio: precioSel,
+        cantidad: 1,
+        stock: stockDisponibleVentaProducto(prod),
+      });
+    }
     actualizarCarrito();
   }
 
@@ -5217,6 +5492,7 @@ function initPOS() {
   }
 
   function abrirModalPrecioFundaCarrito(prod) {
+    if (!modoRestockRapido && (Number(prod?.stock) || 0) <= 0) return;
     if (!$modalFundaPrecio || !$fundaPrecioChipsCarrito) {
       agregarProductoAlCarritoDirecto(prod);
       return;
@@ -5348,9 +5624,17 @@ function initPOS() {
 
   function refrescarTotalesRestock() {
     const totalItems = carritoRestock.reduce((s, i) => s + i.cantidad, 0);
+    const totalCostoCompra = carritoRestock.reduce((s, i) => {
+      const cantidad = Number(i?.cantidad) || 0;
+      const costo = Number(String(i?.costoNuevo ?? '').replace(',', '.'));
+      if (!Number.isFinite(costo) || costo <= 0 || cantidad <= 0) return s;
+      return s + (costo * cantidad);
+    }, 0);
+    const totalCostoCompraRedondeado = Math.round(totalCostoCompra * 100) / 100;
     $carritoCount.textContent = totalItems;
     if ($restockUnidades) $restockUnidades.textContent = String(totalItems);
     if ($restockProductos) $restockProductos.textContent = String(carritoRestock.length);
+    if ($restockCostoTotal) $restockCostoTotal.textContent = formatearPrecio(totalCostoCompraRedondeado);
     if ($btnRestockConfirmar) {
       $btnRestockConfirmar.disabled = !(carritoRestock.length > 0 && carritoRestock.every(restockItemValido));
     }
@@ -5500,6 +5784,11 @@ function initPOS() {
   }
 
   function actualizarCarritoVenta() {
+    carrito.forEach((i) => {
+      if (i.consignado) return;
+      const live = productosInventario.find((p) => Number(p.id) === Number(i.id));
+      if (live != null) i.stock = Number(live.stock) || 0;
+    });
     const totalItems = carrito.reduce((s, i) => s + i.cantidad, 0);
     const subtotalNum = carrito.reduce((s, i) => s + i.precio * i.cantidad, 0);
     $carritoCount.textContent = totalItems;
@@ -5516,18 +5805,22 @@ function initPOS() {
       $carritoVacio.classList.toggle('carrito-vacio-link', !enInventario);
     } else {
       $carritoVacio.style.display = 'none';
-      $carritoLista.innerHTML = carrito.map(i => `
-        <div class="carrito-item" data-clave="${claveCarritoItem(i)}">
+      $carritoLista.innerHTML = carrito.map(i => {
+        const clave = claveCarritoItem(i);
+        const maxQty = stockMaxCarritoVentaItem(i, clave);
+        const enTope = (Number(i.cantidad) || 0) >= maxQty;
+        return `
+        <div class="carrito-item" data-clave="${clave}">
           <span class="carrito-item-nombre">${i.nombre}</span>
           <div class="carrito-item-cantidad">
             <button type="button" aria-label="Menos">−</button>
             <span>${i.cantidad}</span>
-            <button type="button" aria-label="Más">+</button>
+            <button type="button" aria-label="Más"${enTope ? ' disabled title="Stock máximo"' : ''}>+</button>
           </div>
           <span class="carrito-item-precio">${formatearPrecio(i.precio * i.cantidad)}</span>
           <button type="button" class="carrito-item-quitar" aria-label="Quitar">×</button>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
       $carritoLista.querySelectorAll('.carrito-item').forEach(row => {
         const clave = row.getAttribute('data-clave');
         row.querySelector('.carrito-item-cantidad button:first-child').onclick = () => {
@@ -5535,9 +5828,11 @@ function initPOS() {
           if (it) { it.cantidad--; if (it.cantidad <= 0) carrito = carrito.filter(i => claveCarritoItem(i) !== clave); }
           actualizarCarrito();
         };
-        row.querySelector('.carrito-item-cantidad button:last-child').onclick = () => {
+        const $btnMas = row.querySelector('.carrito-item-cantidad button:last-child');
+        $btnMas.onclick = () => {
+          if ($btnMas.disabled) return;
           const it = carrito.find(i => claveCarritoItem(i) === clave);
-          if (it) it.cantidad++;
+          if (it && it.cantidad < stockMaxCarritoVentaItem(it, clave)) it.cantidad++;
           actualizarCarrito();
         };
         row.querySelector('.carrito-item-quitar').onclick = () => {
@@ -5580,7 +5875,7 @@ function initPOS() {
       }
       carritoRestock = [];
       setModoRestockRapido(false);
-      await window.ucCargarInventarioProductos?.();
+      await window.ucCargarInventarioProductos?.({ forzar: true });
     } catch (err) {
       alert(err?.message || 'Error de red al aplicar restock');
     } finally {
@@ -5675,13 +5970,336 @@ function initPOS() {
     $carritoVacio.textContent = enInventario ? 'Agrega productos' : 'Agrega productos tocando aquí';
     $carritoVacio.classList.toggle('carrito-vacio-link', !enInventario);
   };
-  $btnCobrar.addEventListener('click', () => {
-    if (carrito.length === 0) return;
-    $modalTotal.textContent = formatearPrecio(carrito.reduce((s, i) => s + i.precio * i.cantidad, 0));
-    $modal.classList.add('visible');
+  $btnCobrar.addEventListener('click', () => { abrirModalCobro(); });
+
+  function escHtmlCobro(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function iconoPlaceholderCobroDesdeNodo(nodo) {
+    const esConsignado = nodo?.closest('.cobro-item')?.dataset?.consignado === '1';
+    return esConsignado ? 'fa-handshake' : 'fa-box';
+  }
+
+  function reemplazarImagenCobroPorPlaceholder(img) {
+    const wrap = img?.closest('.cobro-item-media');
+    if (!wrap) return;
+    const icono = iconoPlaceholderCobroDesdeNodo(wrap);
+    wrap.innerHTML = `<div class="cobro-item-img cobro-item-img--placeholder" aria-hidden="true"><i class="fa-solid ${icono}"></i></div>`;
+  }
+
+  function htmlImagenCobroItem(item) {
+    const img = item?.imagen;
+    if (typeof img === 'string' && img.trim()) {
+      return `<img class="cobro-item-img" src="${escHtmlCobro(img.trim())}" alt="" loading="lazy">`;
+    }
+    const pid = Number(item?.id);
+    const tieneImagenLazy = Number.isFinite(pid) && (productoTieneImagenInventario(item) || inventarioImagenCache.has(pid));
+    if (!item?.consignado && tieneImagenLazy) {
+      return `<img class="cobro-item-img cobro-item-img--lazy" data-cobro-lazy-id="${pid}" alt="" loading="lazy">`;
+    }
+    const icono = item?.consignado ? 'fa-handshake' : 'fa-box';
+    return `<div class="cobro-item-img cobro-item-img--placeholder" aria-hidden="true"><i class="fa-solid ${icono}"></i></div>`;
+  }
+
+  function totalImporteCobro() {
+    return carrito.reduce((s, i) => s + i.precio * i.cantidad, 0);
+  }
+
+  function parseMontoCobroInput(valor) {
+    if (valor == null || valor === '') return null;
+    const n = Number(String(valor).replace(',', '.').trim());
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  }
+
+  function ocultarIndicadoresEfectivoCobro() {
+    if ($cobroEfectivoCambioWrap) {
+      $cobroEfectivoCambioWrap.hidden = true;
+      $cobroEfectivoCambioWrap.setAttribute('hidden', '');
+    }
+    if ($cobroEfectivoFalta) {
+      $cobroEfectivoFalta.hidden = true;
+      $cobroEfectivoFalta.setAttribute('hidden', '');
+      $cobroEfectivoFalta.textContent = '';
+    }
+    if ($cobroEfectivoCambio) $cobroEfectivoCambio.textContent = formatearPrecio(0);
+  }
+
+  function actualizarPanelEfectivoCobro() {
+    const metodoSeleccionado = metodoPagoCobro === 'efectivo'
+      || metodoPagoCobro === 'tarjeta'
+      || metodoPagoCobro === 'transferencia';
+    const esEfectivo = metodoPagoCobro === 'efectivo';
+    if ($modalCobroEfectivo) $modalCobroEfectivo.hidden = !esEfectivo;
+    if (!metodoSeleccionado) {
+      ocultarIndicadoresEfectivoCobro();
+      if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = true;
+      return;
+    }
+    if (!esEfectivo) {
+      ocultarIndicadoresEfectivoCobro();
+      if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = false;
+      return;
+    }
+
+    const recibido = parseMontoCobroInput($cobroEfectivoRecibido?.value);
+    const total = totalCobroActualNum;
+
+    if (recibido == null || recibido <= 0) {
+      ocultarIndicadoresEfectivoCobro();
+      if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = true;
+      return;
+    }
+
+    if (recibido < total) {
+      const falta = total - recibido;
+      if ($cobroEfectivoCambioWrap) {
+        $cobroEfectivoCambioWrap.hidden = true;
+        $cobroEfectivoCambioWrap.setAttribute('hidden', '');
+      }
+      if ($cobroEfectivoFalta) {
+        $cobroEfectivoFalta.hidden = false;
+        $cobroEfectivoFalta.removeAttribute('hidden');
+        $cobroEfectivoFalta.textContent = `Faltan ${formatearPrecio(falta)} para cubrir el total`;
+      }
+      if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = true;
+      return;
+    }
+
+    const cambio = recibido - total;
+    if ($cobroEfectivoFalta) {
+      $cobroEfectivoFalta.hidden = true;
+      $cobroEfectivoFalta.setAttribute('hidden', '');
+    }
+    if ($cobroEfectivoCambioWrap) {
+      $cobroEfectivoCambioWrap.hidden = false;
+      $cobroEfectivoCambioWrap.removeAttribute('hidden');
+    }
+    if ($cobroEfectivoCambio) $cobroEfectivoCambio.textContent = formatearPrecio(cambio);
+    if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = false;
+  }
+
+  function resetPanelEfectivoCobro() {
+    if ($cobroEfectivoRecibido) $cobroEfectivoRecibido.value = '';
+    actualizarPanelEfectivoCobro();
+  }
+
+  function etiquetaMetodoPago(valor) {
+    if (valor === 'tarjeta') return 'Tarjeta';
+    if (valor === 'transferencia') return 'Transferencia';
+    return 'Efectivo';
+  }
+
+  function renderModalCobro() {
+    if (!$modalCobroItems) return;
+    const subtotalNum = carrito.reduce((s, i) => s + i.precio * i.cantidad, 0);
+    const impuestoNum = 0;
+    const totalNum = subtotalNum + impuestoNum;
+
+    $modalCobroItems.innerHTML = carrito.map((i) => {
+      const lineaSub = i.precio * i.cantidad;
+      const detalleExtra = i.consignado
+        ? '<span class="cobro-item-badge">Consignado</span>'
+        : (i.categoria ? `<span class="cobro-item-cat">${escHtmlCobro(i.categoria)}</span>` : '');
+      return `
+        <li class="cobro-item"${i.consignado ? ' data-consignado="1"' : ''}>
+          <div class="cobro-item-media">${htmlImagenCobroItem(i)}</div>
+          <div class="cobro-item-info">
+            <div class="cobro-item-nombre">${escHtmlCobro(i.nombre)}</div>
+            <div class="cobro-item-meta">
+              ${detalleExtra}
+              <span class="cobro-item-cant">${i.cantidad} × ${formatearPrecio(i.precio)}</span>
+            </div>
+          </div>
+          <div class="cobro-item-linea-total">${formatearPrecio(lineaSub)}</div>
+        </li>`;
+    }).join('');
+
+    if ($cobroSubtotal) $cobroSubtotal.textContent = formatearPrecio(subtotalNum);
+    if ($cobroImpuesto) $cobroImpuesto.textContent = formatearPrecio(impuestoNum);
+    if ($cobroTotal) $cobroTotal.textContent = formatearPrecio(totalNum);
+    totalCobroActualNum = totalNum;
+    actualizarPanelEfectivoCobro();
+
+    $modalCobroItems.querySelectorAll('.cobro-item-img:not(.cobro-item-img--placeholder)').forEach((img) => {
+      img.addEventListener('error', () => {
+        reemplazarImagenCobroPorPlaceholder(img);
+      }, { once: true });
+    });
+
+    $modalCobroItems.querySelectorAll('.cobro-item-img--lazy[data-cobro-lazy-id]').forEach((img) => {
+      const id = Number(img.dataset.cobroLazyId);
+      if (!Number.isFinite(id)) {
+        reemplazarImagenCobroPorPlaceholder(img);
+        return;
+      }
+      void obtenerImagenProductoInventario(id).then((src) => {
+        if (!src) {
+          reemplazarImagenCobroPorPlaceholder(img);
+          return;
+        }
+        img.addEventListener('error', () => reemplazarImagenCobroPorPlaceholder(img), { once: true });
+        img.src = src;
+      }).catch(() => {
+        reemplazarImagenCobroPorPlaceholder(img);
+      });
+    });
+  }
+
+  function seleccionarMetodoPagoCobro(valor) {
+    metodoPagoCobro = (valor === 'efectivo' || valor === 'tarjeta' || valor === 'transferencia') ? valor : '';
+    $modalCobroPago?.querySelectorAll('.cobro-pago-btn').forEach((btn) => {
+      const activo = metodoPagoCobro !== '' && btn.dataset.pago === metodoPagoCobro;
+      btn.classList.toggle('activo', activo);
+      btn.setAttribute('aria-checked', activo ? 'true' : 'false');
+    });
+    if (metodoPagoCobro !== 'efectivo') resetPanelEfectivoCobro();
+    else actualizarPanelEfectivoCobro();
+  }
+
+  function cerrarModalCobro() {
+    $modalCobro?.classList.remove('visible');
+    $modalCobro?.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-cobro-abierto');
+    sucursalCobroId = null;
+  }
+
+  function abrirModalCobro() {
+    if (carrito.length === 0 || modoRestockRapido) return;
+    minimizarCarritoSiAbierto();
+
+    const { raw, esTodasLasSucursales } = leerDatasetSucursalInventario();
+    if (esTodasLasSucursales) {
+      alert('Elige una sucursal concreta (no «Todas las sucursales») para cobrar');
+      return;
+    }
+    const sucursalId = Number(raw);
+    if (!Number.isFinite(sucursalId)) {
+      alert('Selecciona una sucursal en la barra superior para cobrar');
+      return;
+    }
+
+    sucursalCobroId = sucursalId;
+    const $label = document.getElementById('dropdown-sucursales-label');
+    const nombreSucursal = $label?.textContent?.trim() || 'Sucursal';
+    if ($modalCobroSucursal) {
+      $modalCobroSucursal.textContent = `${nombreSucursal} · ${carrito.reduce((s, i) => s + i.cantidad, 0)} artículo(s)`;
+    }
+
+    seleccionarMetodoPagoCobro('');
+    if ($cobroEfectivoRecibido) $cobroEfectivoRecibido.value = '';
+    renderModalCobro();
+    if ($modalCobroBody) $modalCobroBody.scrollTop = 0;
+    $modalCobro?.classList.add('visible');
+    $modalCobro?.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-cobro-abierto');
+    requestAnimationFrame(() => {
+      if ($modalCobroBody) $modalCobroBody.scrollTop = 0;
+    });
+  }
+
+  $cobroEfectivoRecibido?.addEventListener('input', actualizarPanelEfectivoCobro);
+  redirigirWheelScrollPanelDesdeInputNumerico($modalCobroBody);
+
+  $modalCobroPago?.querySelectorAll('.cobro-pago-btn').forEach((btn) => {
+    btn.addEventListener('click', () => seleccionarMetodoPagoCobro(btn.dataset.pago || 'efectivo'));
   });
+
+  document.getElementById('modal-cobro-cerrar')?.addEventListener('click', cerrarModalCobro);
+  document.getElementById('modal-cobro-cancelar')?.addEventListener('click', cerrarModalCobro);
+  $modalCobro?.addEventListener('click', (e) => { if (e.target === $modalCobro) cerrarModalCobro(); });
+  $modalCobroConfirmar?.addEventListener('click', () => { void procesarCobro(); });
+
+  async function procesarCobro() {
+    if (carrito.length === 0 || modoRestockRapido) return;
+
+    const sucursalId = sucursalCobroId ?? Number(leerDatasetSucursalInventario().raw);
+    if (!Number.isFinite(sucursalId)) {
+      alert('Selecciona una sucursal en la barra superior para cobrar');
+      return;
+    }
+
+    const totalVenta = totalImporteCobro();
+    let efectivoRecibido = null;
+    let efectivoCambio = null;
+    if (metodoPagoCobro !== 'efectivo' && metodoPagoCobro !== 'tarjeta' && metodoPagoCobro !== 'transferencia') {
+      alert('Selecciona un método de pago');
+      actualizarPanelEfectivoCobro();
+      return;
+    }
+    if (metodoPagoCobro === 'efectivo') {
+      efectivoRecibido = parseMontoCobroInput($cobroEfectivoRecibido?.value);
+      if (efectivoRecibido == null || efectivoRecibido < totalVenta) {
+        alert('Ingresa un monto en efectivo igual o mayor al total');
+        actualizarPanelEfectivoCobro();
+        return;
+      }
+      efectivoCambio = efectivoRecibido - totalVenta;
+    }
+
+    const items = carrito.map((i) => {
+      if (i.consignado) {
+        return {
+          es_consignado: true,
+          producto_consignado_id: i.consignadoId ?? null,
+          producto_nombre: i.nombre,
+          cantidad: i.cantidad,
+          precio_unitario: Number(i.precio),
+        };
+      }
+      return {
+        producto_id: Number(i.id),
+        producto_nombre: i.nombre,
+        cantidad: i.cantidad,
+        precio_unitario: Number(i.precio),
+      };
+    });
+
+    if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = true;
+    if ($btnCobrar) $btnCobrar.disabled = true;
+    try {
+      const r = await fetch(`${API}/ventas`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          sucursal_id: sucursalId,
+          metodo_pago: metodoPagoCobro,
+          items,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        alert(data.error || 'No se pudo registrar la venta');
+        return;
+      }
+      cerrarModalCobro();
+      $modalTotal.textContent = formatearPrecio(totalVenta);
+      const $modalVentaSub = document.getElementById('modal-venta-sub');
+      if ($modalVentaSub) {
+        if (metodoPagoCobro === 'efectivo' && efectivoRecibido != null) {
+          $modalVentaSub.textContent = `Efectivo · Recibido ${formatearPrecio(efectivoRecibido)} · Cambio ${formatearPrecio(efectivoCambio)}`;
+        } else {
+          $modalVentaSub.textContent = `Pago con ${etiquetaMetodoPago(metodoPagoCobro)}`;
+        }
+      }
+      minimizarCarritoSiAbierto();
+      $modal.classList.add('visible');
+      carrito = [];
+      actualizarCarrito();
+      await window.ucCargarInventarioProductos?.({ forzar: true });
+    } catch (err) {
+      alert(err?.message || 'Error de red al cobrar');
+    } finally {
+      if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = false;
+      if ($btnCobrar) $btnCobrar.disabled = carrito.length === 0;
+    }
+  }
+
   $modalCerrar.addEventListener('click', () => $modal.classList.remove('visible'));
-  $modalNueva.addEventListener('click', () => { $modal.classList.remove('visible'); carrito = []; actualizarCarrito(); });
   $modal.addEventListener('click', e => { if (e.target === $modal) $modal.classList.remove('visible'); });
 
   renderProductos();
@@ -5693,6 +6311,7 @@ function initPOS() {
       agregarProductoAlRestock(prod);
       return;
     }
+    if ((Number(prod?.stock) || 0) <= 0) return;
     if (productoFundaTieneRangoPrecio(prod)) {
       abrirModalPrecioFundaCarrito(prod);
       return;
@@ -5709,8 +6328,10 @@ function initPOS() {
 
   window.ucAgregarConsignadoAlCarrito = (datos) => {
     if (!datos) return false;
-    const costoConsignacion = Number(datos.costoConsignacion);
-    const precioVenta = Number(datos.precio);
+    const costoConsignacion = Number(datos.costoConsignacion ?? datos.costo_consignacion);
+    const precioVenta = Number(datos.precio ?? datos.precio_venta);
+    const consignadoIdRaw = datos.consignadoId ?? datos.consignado_id ?? datos.id ?? null;
+    const consignadoId = consignadoIdRaw != null ? Number(consignadoIdRaw) : null;
     if (!Number.isFinite(costoConsignacion) || costoConsignacion <= 0) {
       alert('Ingresa un costo de consignación válido');
       return false;
@@ -5723,12 +6344,17 @@ function initPOS() {
       alert('El costo de consignación no puede ser mayor al precio de venta');
       return false;
     }
+    if (Number.isFinite(consignadoId) && carrito.some((i) => i.consignado && Number(i.consignadoId) === consignadoId)) {
+      alert('Este producto consignado ya está en el carrito');
+      return false;
+    }
     const cantidad = Math.max(1, parseInt(datos.cantidad, 10) || 1);
     carrito.push({
-      id: `consignado-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: Number.isFinite(consignadoId) ? `consignado-${consignadoId}` : `consignado-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      consignadoId: Number.isFinite(consignadoId) ? consignadoId : null,
       nombre: datos.nombre || 'Producto consignado',
-      precio: Number(datos.precio) || 0,
-      costoConsignacion: Number(datos.costoConsignacion) || 0,
+      precio: precioVenta,
+      costoConsignacion,
       categoria: datos.categoria || 'otros',
       imagen: datos.imagen || null,
       consignado: true,
@@ -5815,22 +6441,48 @@ function lineaProductoRestockMovimientoReporte(producto, index) {
 }
 
 const movimientosInventarioProductosCache = new Map();
+const movimientosInventarioRegistrosCache = new Map();
+let movimientosInventarioListaActual = [];
+let reporteMovimientoSeleccionadoId = null;
 
 function htmlCeldaProductoMovimientoInventarioReporte(m) {
   const texto = textoProductoMovimientoInventarioReporte(m);
   if (!texto || texto === '—') return '<span class="reporte-historial-sin-cambio">—</span>';
-  const id = Number(m.id);
-  const navHtml = `
-    <button type="button" class="btn-tabla btn-tabla-icono reporte-mov-producto-ver" data-movimiento-id="${id}" title="Ver productos del restock" aria-label="Ver productos del restock">
-      <i class="fa-solid fa-eye" aria-hidden="true"></i>
-    </button>
-  `;
   return `
-    <div class="reporte-mov-productos" data-movimiento-id="${id}">
+    <div class="reporte-mov-productos">
       <span class="reporte-mov-producto-texto" title="${escReporteTexto(texto)}">${escReporteTexto(texto)}</span>
-      ${navHtml}
     </div>
   `;
+}
+
+function renderDetalleMovimientoInventarioSeleccionado(movimientoId) {
+  const $wrap = document.getElementById('reporte-mov-detalle-wrap');
+  const $tbody = document.getElementById('tbody-reporte-mov-detalle');
+  if (!$wrap || !$tbody) return;
+  if (movimientoId == null || !Number.isFinite(Number(movimientoId))) {
+    $wrap.hidden = true;
+    $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">Selecciona un registro para ver el detalle</td></tr>';
+    return;
+  }
+  const productos = movimientosInventarioProductosCache.get(Number(movimientoId)) || [];
+  if (!productos.length) {
+    $wrap.hidden = false;
+    $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">Este registro no tiene detalle de productos</td></tr>';
+    return;
+  }
+  $wrap.hidden = false;
+  $tbody.innerHTML = productos.map((p, i) => {
+    const cantidad = Math.abs(Number(p?.cantidad) || 0);
+    return `
+      <tr>
+        <td class="tabla-num">${i + 1}</td>
+        <td>${escReporteTexto(p?.nombre || 'Producto')}</td>
+        <td class="tabla-num">${escReporteTexto(String(cantidad))}</td>
+        <td class="tabla-num">${escReporteTexto(formatCostoReporte(p?.costo_anterior))}</td>
+        <td class="tabla-num">${escReporteTexto(formatCostoReporte(p?.costo_entrada))}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function abrirModalMovimientosInventarioProductos(movimientoId) {
@@ -5861,24 +6513,14 @@ function initMovimientosInventarioReporteUI() {
   initMovimientosInventarioReporteUI._done = true;
 
   const $tbody = document.getElementById('tbody-reporte-movimientos');
-  const $modal = document.getElementById('modal-reporte-mov-productos');
 
   $tbody?.addEventListener('click', (e) => {
-    const $ver = e.target.closest('.reporte-mov-producto-ver');
-    if (!$ver) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const id = Number($ver.dataset.movimientoId);
-    if (!movimientosInventarioProductosCache.has(id)) return;
-    abrirModalMovimientosInventarioProductos(id);
-  });
-
-  document.getElementById('modal-reporte-mov-productos-cerrar')?.addEventListener('click', cerrarModalMovimientosInventarioProductos);
-  $modal?.addEventListener('click', (e) => {
-    if (e.target === $modal) cerrarModalMovimientosInventarioProductos();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && $modal?.classList.contains('visible')) cerrarModalMovimientosInventarioProductos();
+    const $row = e.target.closest('tr[data-movimiento-id]');
+    if (!$row) return;
+    const id = Number($row.dataset.movimientoId);
+    if (!movimientosInventarioRegistrosCache.has(id)) return;
+    reporteMovimientoSeleccionadoId = reporteMovimientoSeleccionadoId === id ? null : id;
+    renderTablaMovimientosInventarioReporte(movimientosInventarioListaActual);
   });
 }
 
@@ -5904,35 +6546,67 @@ function claseCantidadMovimientoInventario(cantidad) {
   return '';
 }
 
+function totalCompraMovimientoInventarioReporte(m) {
+  const productos = productosDetalleMovimientoInventarioDesdeFila(m);
+  let total = 0;
+  let tieneCosto = false;
+  productos.forEach((p) => {
+    const cantidad = Math.abs(Number(p?.cantidad) || 0);
+    const costo = Number(p?.costo_entrada ?? p?.costoEntrada);
+    if (!Number.isFinite(costo) || costo <= 0 || cantidad <= 0) return;
+    total += cantidad * costo;
+    tieneCosto = true;
+  });
+  return tieneCosto ? total : null;
+}
+
 function renderTablaMovimientosInventarioReporte(lista) {
   const $tbody = document.getElementById('tbody-reporte-movimientos');
   if (!$tbody) return;
+  movimientosInventarioListaActual = Array.isArray(lista) ? [...lista] : [];
   movimientosInventarioProductosCache.clear();
-  if (!Array.isArray(lista) || lista.length === 0) {
-    $tbody.innerHTML = '<tr><td colspan="6" class="tabla-vacio">No hay movimientos registrados</td></tr>';
+  movimientosInventarioRegistrosCache.clear();
+  if (!movimientosInventarioListaActual.length) {
+    reporteMovimientoSeleccionadoId = null;
+    renderDetalleMovimientoInventarioSeleccionado(null);
+    $tbody.innerHTML = '<tr><td colspan="7" class="tabla-vacio">No hay movimientos registrados</td></tr>';
     return;
   }
-  lista.forEach((m) => {
+  movimientosInventarioListaActual.forEach((m) => {
     const productos = productosDetalleMovimientoInventarioDesdeFila(m);
     if (m?.id != null && productos.length > 0) {
       movimientosInventarioProductosCache.set(Number(m.id), productos);
     }
+    if (m?.id != null) movimientosInventarioRegistrosCache.set(Number(m.id), m);
   });
-  $tbody.innerHTML = lista.map((m) => {
+  if (reporteMovimientoSeleccionadoId != null && !movimientosInventarioRegistrosCache.has(Number(reporteMovimientoSeleccionadoId))) {
+    reporteMovimientoSeleccionadoId = null;
+  }
+  const listaVisible = reporteMovimientoSeleccionadoId == null
+    ? movimientosInventarioListaActual
+    : movimientosInventarioListaActual.filter((m) => Number(m?.id) === Number(reporteMovimientoSeleccionadoId));
+  $tbody.innerHTML = listaVisible.map((m) => {
+    const productos = productosDetalleMovimientoInventarioDesdeFila(m);
     const fecha = formatFecha(m.created_at);
     const cantidadNum = Number(m.cantidad) || 0;
-    const cantidadTxt = `${cantidadNum > 0 ? '+' : ''}${cantidadNum}`;
+    const unidadesTxt = String(Math.abs(cantidadNum));
+    const totalProductos = productos.length;
+    const totalCompra = totalCompraMovimientoInventarioReporte(m);
+    const totalCompraTxt = totalCompra != null ? formatCostoReporte(totalCompra) : '—';
+    const filaSeleccionada = Number(m?.id) === Number(reporteMovimientoSeleccionadoId);
     return `
-      <tr>
+      <tr data-movimiento-id="${Number(m.id) || 0}" class="${filaSeleccionada ? 'reporte-mov-row-seleccionada' : ''}">
         <td>${escReporteTexto(fecha)}</td>
-        <td>${escReporteTexto(etiquetaMovimientoInventarioReporte(m.movimiento, m.detalle))}</td>
         <td class="reporte-mov-productos-cell">${htmlCeldaProductoMovimientoInventarioReporte(m)}</td>
-        <td><span class="reporte-mov-cantidad${claseCantidadMovimientoInventario(cantidadNum)}">${escReporteTexto(cantidadTxt)}</span></td>
+        <td class="tabla-num"><span class="reporte-mov-metrica">${escReporteTexto(unidadesTxt)}</span></td>
+        <td class="tabla-num"><span class="reporte-mov-metrica">${escReporteTexto(String(totalProductos))}</span></td>
+        <td class="tabla-num"><span class="reporte-mov-metrica">${escReporteTexto(totalCompraTxt)}</span></td>
         <td>${escReporteTexto(m.sucursal_nombre || 'Sin sucursal')}</td>
         <td>${escReporteTexto(m.usuario_nombre || 'Sistema')}</td>
       </tr>
     `;
   }).join('');
+  renderDetalleMovimientoInventarioSeleccionado(reporteMovimientoSeleccionadoId);
 }
 
 function renderTablaTransferenciasSucursalesReporte(lista) {
@@ -5949,10 +6623,67 @@ function renderTablaTransferenciasSucursalesReporte(lista) {
       <tr>
         <td>${escReporteTexto(fecha)}</td>
         <td>${escReporteTexto(t.producto_nombre || '—')}</td>
-        <td><span class="reporte-mov-cantidad">${escReporteTexto(String(cantidadNum))}</span></td>
+        <td class="tabla-num"><span class="reporte-mov-cantidad">${escReporteTexto(String(cantidadNum))}</span></td>
         <td>${escReporteTexto(t.sucursal_origen_nombre || 'Sin sucursal')}</td>
         <td>${escReporteTexto(t.sucursal_destino_nombre || 'Sin sucursal')}</td>
         <td>${escReporteTexto(t.usuario_nombre || 'Sistema')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function etiquetaMetodoPagoCorteCaja(metodo) {
+  const key = String(metodo || '').toLowerCase().trim();
+  if (key === 'tarjeta') return 'Tarjeta';
+  if (key === 'transferencia') return 'Transferencia';
+  return 'Efectivo';
+}
+
+function renderTablaCorteCajaReporte(lista) {
+  const $tbody = document.getElementById('tbody-reporte-corte-caja');
+  const $ventas = document.getElementById('reporte-corte-ventas');
+  const $total = document.getElementById('reporte-corte-total');
+  const $efectivo = document.getElementById('reporte-corte-efectivo');
+  const $tarjeta = document.getElementById('reporte-corte-tarjeta');
+  const $transferencia = document.getElementById('reporte-corte-transferencia');
+  if (!$tbody) return;
+
+  const rows = Array.isArray(lista) ? lista : [];
+  const monto = (n) => '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  let sumaTotal = 0;
+  let sumaEfectivo = 0;
+  let sumaTarjeta = 0;
+  let sumaTransferencia = 0;
+  rows.forEach((v) => {
+    const totalVenta = Number(v.total) || 0;
+    sumaTotal += totalVenta;
+    const metodo = String(v.metodo_pago || '').toLowerCase();
+    if (metodo === 'tarjeta') sumaTarjeta += totalVenta;
+    else if (metodo === 'transferencia') sumaTransferencia += totalVenta;
+    else sumaEfectivo += totalVenta;
+  });
+  if ($ventas) $ventas.textContent = String(rows.length);
+  if ($total) $total.textContent = monto(sumaTotal);
+  if ($efectivo) $efectivo.textContent = monto(sumaEfectivo);
+  if ($tarjeta) $tarjeta.textContent = monto(sumaTarjeta);
+  if ($transferencia) $transferencia.textContent = monto(sumaTransferencia);
+
+  if (rows.length === 0) {
+    $tbody.innerHTML = '<tr><td colspan="6" class="tabla-vacio">No hay ventas registradas</td></tr>';
+    return;
+  }
+  $tbody.innerHTML = rows.map((v) => {
+    const fecha = formatFecha(v.created_at);
+    const folio = Number(v.id) || 0;
+    const totalTxt = monto(v.total);
+    return `
+      <tr>
+        <td>${escReporteTexto(fecha)}</td>
+        <td>#${escReporteTexto(String(folio))}</td>
+        <td>${escReporteTexto(etiquetaMetodoPagoCorteCaja(v.metodo_pago))}</td>
+        <td class="tabla-num">${escReporteTexto(totalTxt)}</td>
+        <td>${escReporteTexto(v.usuario_nombre || 'Sistema')}</td>
+        <td>${escReporteTexto(v.sucursal_nombre || 'Sin sucursal')}</td>
       </tr>
     `;
   }).join('');
@@ -6082,16 +6813,47 @@ function htmlCeldaCambiosHistorialProductoReporte(h) {
 }
 
 const historialProductosCambiosCache = new Map();
+let reporteHistorialAccionFiltro = '';
+
+function initReporteHistorialAccionFiltros(recargarFn) {
+  const $chips = document.getElementById('reporte-historial-accion-chips');
+  if (!$chips || initReporteHistorialAccionFiltros._done) return;
+  initReporteHistorialAccionFiltros._done = true;
+
+  $chips.querySelectorAll('.reporte-accion-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const accion = String(chip.getAttribute('data-accion') ?? '').trim().toLowerCase();
+      reporteHistorialAccionFiltro = accion;
+      $chips.querySelectorAll('.reporte-accion-chip').forEach((c) => {
+        const val = String(c.getAttribute('data-accion') ?? '').trim().toLowerCase();
+        c.classList.toggle('activo', val === accion);
+      });
+      if (typeof recargarFn === 'function') void recargarFn();
+    });
+  });
+}
+
+function resetReporteHistorialAccionFiltro() {
+  reporteHistorialAccionFiltro = '';
+  const $chips = document.getElementById('reporte-historial-accion-chips');
+  $chips?.querySelectorAll('.reporte-accion-chip').forEach((c) => {
+    const val = String(c.getAttribute('data-accion') ?? '').trim().toLowerCase();
+    c.classList.toggle('activo', val === '');
+  });
+}
+
+function filaHistorialVisibleEnReporte(h) {
+  const accion = String(h?.accion || '').toLowerCase().trim();
+  if (reporteHistorialAccionFiltro && accion !== reporteHistorialAccionFiltro) return false;
+  if (accion !== 'edicion') return true;
+  return cambiosHistorialProductoDesdeFila(h).length > 0;
+}
 
 function renderTablaHistorialProductosReporte(lista) {
   const $tbody = document.getElementById('tbody-reporte-historial-productos');
   if (!$tbody) return;
   historialProductosCambiosCache.clear();
-  const visible = (Array.isArray(lista) ? lista : []).filter((h) => {
-    const accion = String(h?.accion || '').toLowerCase();
-    if (accion !== 'edicion') return true;
-    return cambiosHistorialProductoDesdeFila(h).length > 0;
-  });
+  const visible = (Array.isArray(lista) ? lista : []).filter(filaHistorialVisibleEnReporte);
   if (visible.length === 0) {
     $tbody.innerHTML = '<tr><td colspan="6" class="tabla-vacio">No hay cambios registrados</td></tr>';
     return;
@@ -6164,13 +6926,41 @@ function initHistorialProductosReporteUI() {
 }
 
 const REPORTE_TIPO_DEFAULT = 'movimientos-inventario';
+const REPORTE_CHIP_DEFAULT = 'restock';
+const REPORTES_CHIPS_CONFIG = {
+  restock: {
+    tipo: 'movimientos-inventario',
+    placeholder: 'Buscar restock...',
+    accion: '',
+  },
+  transferencia: {
+    tipo: 'transferencias-sucursales',
+    placeholder: 'Buscar transferencia...',
+    accion: '',
+  },
+  alta: {
+    tipo: 'historial-productos',
+    placeholder: 'Buscar altas...',
+    accion: 'alta',
+  },
+  eliminacion: {
+    tipo: 'historial-productos',
+    placeholder: 'Buscar eliminaciones...',
+    accion: 'eliminacion',
+  },
+  edicion: {
+    tipo: 'historial-productos',
+    placeholder: 'Buscar ediciones...',
+    accion: 'edicion',
+  },
+};
 
 const REPORTES_CONFIG = {
   'movimientos-inventario': {
     placeholder: 'Buscar movimiento...',
     endpoint: '/reportes/movimientos-inventario',
     tbodyId: 'tbody-reporte-movimientos',
-    cols: 6,
+    cols: 7,
     vacio: 'No hay movimientos registrados',
     cargando: 'Cargando movimientos...',
     error: 'Error al cargar movimientos',
@@ -6196,6 +6986,16 @@ const REPORTES_CONFIG = {
     error: 'Error al cargar historial',
     render: renderTablaHistorialProductosReporte,
   },
+  'corte-caja': {
+    placeholder: 'Buscar corte de caja...',
+    endpoint: '/reportes/corte-caja',
+    tbodyId: 'tbody-reporte-corte-caja',
+    cols: 6,
+    vacio: 'No hay ventas registradas',
+    cargando: 'Cargando corte de caja...',
+    error: 'Error al cargar corte de caja',
+    render: renderTablaCorteCajaReporte,
+  },
 };
 
 function initModuloVentas() {
@@ -6205,6 +7005,8 @@ function initModuloVentas() {
   const $svReportes = document.getElementById('subvista-reportes-modulo');
   const $toolbarReportes = document.getElementById('modulo-toolbar-reportes');
   const $tipoReporte = document.getElementById('reporte-tipo-select');
+  const $filtrosMovimientos = document.getElementById('reporte-movimientos-filtros');
+  const $chipsMovimientos = document.getElementById('reporte-movimientos-chips');
   const $buscar = document.getElementById('buscar-reporte');
   const $btnRecargar = document.getElementById('btn-recargar-reporte');
   const $panelesReporte = document.querySelectorAll('#subvista-reportes-modulo .reporte-panel');
@@ -6216,24 +7018,38 @@ function initModuloVentas() {
 
   let reporteReqId = 0;
   let debounceBuscar = null;
-  let reporteActivo = REPORTE_TIPO_DEFAULT;
+  let reporteModuloActivo = REPORTE_TIPO_DEFAULT;
+  let reporteActivo = REPORTES_CHIPS_CONFIG[REPORTE_CHIP_DEFAULT]?.tipo || REPORTE_TIPO_DEFAULT;
+  let reporteChipActivo = REPORTE_CHIP_DEFAULT;
 
-  function reporteTipoDisponible(tipo) {
-    const opt = $tipoReporte?.querySelector(`option[value="${tipo}"]`);
-    return Boolean(opt && !opt.disabled);
+  function configChipActivo() {
+    return REPORTES_CHIPS_CONFIG[reporteChipActivo] || REPORTES_CHIPS_CONFIG[REPORTE_CHIP_DEFAULT];
   }
 
   function configReporteActivo() {
     return REPORTES_CONFIG[reporteActivo] || null;
   }
 
+  function syncSelectTipoReporte() {
+    if ($tipoReporte && $tipoReporte.value !== reporteModuloActivo) {
+      $tipoReporte.value = reporteModuloActivo;
+    }
+    reporteTipoCustomSelect?.syncDisplay?.();
+  }
+
+  function actualizarVisibilidadFiltrosMovimientos() {
+    if (!$filtrosMovimientos) return;
+    $filtrosMovimientos.hidden = reporteModuloActivo !== 'movimientos-inventario';
+  }
+
   function actualizarControlesReporteToolbar() {
     const cfg = configReporteActivo();
+    const cfgChip = reporteModuloActivo === 'movimientos-inventario' ? configChipActivo() : null;
     const tieneBusqueda = Boolean(cfg);
     if ($buscar) {
       $buscar.hidden = !tieneBusqueda;
       $buscar.disabled = !tieneBusqueda;
-      $buscar.placeholder = cfg?.placeholder || 'Buscar...';
+      $buscar.placeholder = cfgChip?.placeholder || cfg?.placeholder || 'Buscar...';
     }
     if ($btnRecargar) {
       $btnRecargar.hidden = !tieneBusqueda;
@@ -6241,16 +7057,43 @@ function initModuloVentas() {
     }
   }
 
-  function mostrarPanelReporte(tipo) {
+  function mostrarPanelReporte(tipo, { recargar = true } = {}) {
     reporteActivo = tipo;
     $panelesReporte.forEach(($panel) => {
       const activo = $panel.dataset.reporte === tipo;
       $panel.hidden = !activo;
     });
-    if ($tipoReporte && $tipoReporte.value !== tipo) $tipoReporte.value = tipo;
-    reporteTipoCustomSelect?.syncDisplay?.();
     actualizarControlesReporteToolbar();
-    if (REPORTES_CONFIG[tipo]) void cargarReporteActivo();
+    if (recargar && REPORTES_CONFIG[tipo]) void cargarReporteActivo();
+  }
+
+  function activarChipReporte(chip, { limpiarBusqueda = true, recargar = true } = {}) {
+    const cfgChip = REPORTES_CHIPS_CONFIG[chip];
+    if (!cfgChip) return;
+    reporteChipActivo = chip;
+    reporteHistorialAccionFiltro = cfgChip.accion || '';
+    reporteMovimientoSeleccionadoId = null;
+    renderDetalleMovimientoInventarioSeleccionado(null);
+    $chipsMovimientos?.querySelectorAll('.reporte-accion-chip[data-reporte-chip]').forEach((btn) => {
+      const activo = btn.dataset.reporteChip === chip;
+      btn.classList.toggle('activo', activo);
+    });
+    if (limpiarBusqueda && $buscar) $buscar.value = '';
+    mostrarPanelReporte(cfgChip.tipo, { recargar });
+  }
+
+  function activarModuloReporte(tipo, { limpiarBusqueda = true, recargar = true } = {}) {
+    const modulo = tipo === 'corte-caja' ? 'corte-caja' : 'movimientos-inventario';
+    reporteModuloActivo = modulo;
+    if (limpiarBusqueda && $buscar) $buscar.value = '';
+    if (modulo === 'corte-caja') {
+      mostrarPanelReporte('corte-caja', { recargar });
+    } else {
+      activarChipReporte(REPORTE_CHIP_DEFAULT, { limpiarBusqueda: false, recargar });
+    }
+    actualizarVisibilidadFiltrosMovimientos();
+    syncSelectTipoReporte();
+    actualizarControlesReporteToolbar();
   }
 
   async function cargarReporteActivo() {
@@ -6264,6 +7107,9 @@ function initModuloVentas() {
     const params = new URLSearchParams({ limit: '300' });
     const q = ($buscar?.value || '').trim();
     if (q) params.set('q', q);
+    if (reporteActivo === 'historial-productos' && reporteHistorialAccionFiltro) {
+      params.set('accion', reporteHistorialAccionFiltro);
+    }
     try {
       const r = await fetch(`${API}${cfg.endpoint}?${params.toString()}`, {
         headers: authHeaders(false),
@@ -6308,8 +7154,7 @@ function initModuloVentas() {
     if ($toolbarReportes) $toolbarReportes.hidden = modo !== 'reportes';
     try { localStorage.setItem(VENTAS_SUBMODULO_KEY, modo); } catch (_) {}
     if (modo === 'reportes') {
-      if ($buscar) $buscar.value = '';
-      mostrarPanelReporte(REPORTE_TIPO_DEFAULT);
+      activarModuloReporte(reporteModuloActivo || REPORTE_TIPO_DEFAULT, { limpiarBusqueda: true, recargar: true });
     }
   }
 
@@ -6317,12 +7162,19 @@ function initModuloVentas() {
   $tabReportes.addEventListener('click', () => irASubvista('reportes'));
   $tipoReporte?.addEventListener('change', () => {
     const tipo = $tipoReporte.value;
-    if (!reporteTipoDisponible(tipo)) {
-      $tipoReporte.value = reporteActivo;
-      return;
-    }
-    if ($buscar) $buscar.value = '';
-    mostrarPanelReporte(tipo);
+    activarModuloReporte(tipo, { limpiarBusqueda: true, recargar: true });
+  });
+  $chipsMovimientos?.querySelectorAll('.reporte-accion-chip[data-reporte-chip]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const id = String(chip.dataset.reporteChip || '').trim().toLowerCase();
+      if (!REPORTES_CHIPS_CONFIG[id]) return;
+      if (reporteModuloActivo !== 'movimientos-inventario') {
+        reporteModuloActivo = 'movimientos-inventario';
+        actualizarVisibilidadFiltrosMovimientos();
+        syncSelectTipoReporte();
+      }
+      activarChipReporte(id, { limpiarBusqueda: true, recargar: true });
+    });
   });
   $btnRecargar?.addEventListener('click', () => { void cargarReporteActivo(); });
   $buscar?.addEventListener('input', () => {
@@ -6332,7 +7184,8 @@ function initModuloVentas() {
   });
 
   window.ucVentasIrASubvista = irASubvista;
-  if ($tipoReporte) $tipoReporte.value = REPORTE_TIPO_DEFAULT;
+  window.ucRecargarReporteActivo = () => { void cargarReporteActivo(); };
+  activarModuloReporte(REPORTE_TIPO_DEFAULT, { limpiarBusqueda: false, recargar: false });
   actualizarControlesReporteToolbar();
   irASubvista(localStorage.getItem(VENTAS_SUBMODULO_KEY) || 'ventas');
 }
@@ -6380,7 +7233,7 @@ function renderTablaUsuarios(lista) {
   }
   $tbody.innerHTML = lista.map(u => `
     <tr>
-      <td>${u.id}</td>
+      <td class="tabla-num">${u.id}</td>
       <td>${u.usuario}</td>
       <td>${u.nombre}</td>
       <td><span class="badge ${u.rol === 'admin' ? 'badge-admin' : 'badge-vendedor'}">${u.rol}</span></td>
@@ -6499,9 +7352,9 @@ function renderTablaSucursales(lista) {
   }
   $tbody.innerHTML = lista.map(s => `
     <tr>
-      <td>${s.id}</td>
+      <td class="tabla-num">${s.id}</td>
       <td>${s.nombre}</td>
-      <td>${s.empleados || '<span style="opacity:.4">Sin empleados</span>'}</td>
+      <td class="tabla-num">${s.empleados || '<span style="opacity:.4">Sin empleados</span>'}</td>
       <td><span class="badge ${s.activo ? 'badge-activo' : 'badge-inactivo'}">${s.activo ? 'Activa' : 'Inactiva'}</span></td>
       <td>
         <button class="btn-tabla" onclick="editarSucursal(${s.id})">Editar</button>
@@ -6625,9 +7478,9 @@ function renderTablaClientes(lista) {
   }
   $tbody.innerHTML = lista.map(c => `
     <tr>
-      <td>${c.id}</td>
+      <td class="tabla-num">${c.id}</td>
       <td>${esc(c.nombre)}</td>
-      <td>${esc(c.telefono) || '<span style="opacity:.4">—</span>'}</td>
+      <td class="tabla-num">${esc(c.telefono) || '<span style="opacity:.4">—</span>'}</td>
       <td>${esc(c.correo) || '<span style="opacity:.4">—</span>'}</td>
       <td>${esc(c.direccion) || '<span style="opacity:.4">—</span>'}</td>
       <td>
@@ -6734,10 +7587,10 @@ function renderTablaProveedores(lista) {
   }
   $tbody.innerHTML = lista.map(p => `
     <tr>
-      <td>${p.id}</td>
+      <td class="tabla-num">${p.id}</td>
       <td>${esc(p.nombre)}</td>
       <td>${esc(p.rfc) || '<span style="opacity:.4">—</span>'}</td>
-      <td>${esc(p.telefono) || '<span style="opacity:.4">—</span>'}</td>
+      <td class="tabla-num">${esc(p.telefono) || '<span style="opacity:.4">—</span>'}</td>
       <td>${esc(p.correo) || '<span style="opacity:.4">—</span>'}</td>
       <td>${esc(p.direccion) || '<span style="opacity:.4">—</span>'}</td>
       <td>
@@ -6853,7 +7706,7 @@ function eliminarProductoDesdeInventario(id, nombre, esConsignado = false) {
       alert(d.error || `No se pudo eliminar el ${tipo}`);
       return;
     }
-    await window.ucCargarInventarioProductos?.();
+    await window.ucCargarInventarioProductos?.({ forzar: true });
   });
 }
 

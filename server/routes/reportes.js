@@ -137,6 +137,14 @@ router.get('/historial-productos', async (req, res) => {
     idx++;
   }
 
+  const accionFiltro = String(req.query.accion || '').trim().toLowerCase();
+  const accionesValidas = new Set(['alta', 'edicion', 'eliminacion']);
+  if (accionFiltro && accionesValidas.has(accionFiltro)) {
+    filtros.push(`ph.accion = $${idx}`);
+    vals.push(accionFiltro);
+    idx++;
+  }
+
   vals.push(limit);
   const where = filtros.length ? `WHERE ${filtros.join(' AND ')}` : '';
 
@@ -161,6 +169,54 @@ router.get('/historial-productos', async (req, res) => {
        LEFT JOIN sucursales s ON s.id = ph.sucursal_id
        ${where}
        ORDER BY ph.created_at DESC, ph.id DESC
+       LIMIT $${idx}`,
+      vals
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/corte-caja', async (req, res) => {
+  const limitRaw = Number(req.query.limit);
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 1000) : 300;
+  const q = String(req.query.q || '').trim();
+  const filtros = [];
+  const vals = [];
+  let idx = 1;
+
+  if (q) {
+    filtros.push(`(
+      CAST(v.id AS TEXT) ILIKE $${idx}
+      OR COALESCE(v.metodo_pago, '') ILIKE $${idx}
+      OR COALESCE(u.nombre, '') ILIKE $${idx}
+      OR COALESCE(s.nombre, '') ILIKE $${idx}
+    )`);
+    vals.push(`%${q}%`);
+    idx++;
+  }
+
+  vals.push(limit);
+  const where = filtros.length ? `WHERE ${filtros.join(' AND ')}` : '';
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         v.id,
+         v.created_at,
+         v.subtotal::float8 AS subtotal,
+         v.total::float8 AS total,
+         COALESCE(v.metodo_pago, 'efectivo') AS metodo_pago,
+         v.usuario_id,
+         COALESCE(u.nombre, 'Sistema') AS usuario_nombre,
+         v.sucursal_id,
+         COALESCE(s.nombre, 'Sin sucursal') AS sucursal_nombre
+       FROM ventas v
+       LEFT JOIN usuarios u ON u.id = v.usuario_id
+       LEFT JOIN sucursales s ON s.id = v.sucursal_id
+       ${where}
+       ORDER BY v.created_at DESC, v.id DESC
        LIMIT $${idx}`,
       vals
     );
