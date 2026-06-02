@@ -10,7 +10,8 @@
     "migrate-productos-consignados": "node migrate-productos-consignados.js",
     "migrate-inventario-favoritos": "node migrate-inventario-favoritos.js",
     "migrate-inventario-movimientos": "node migrate-inventario-movimientos.js",
-    "migrate-productos-historial": "node migrate-productos-historial.js"
+    "migrate-productos-historial": "node migrate-productos-historial.js",
+    "migrate-ventas": "node migrate-ventas.js"
   },
   "keywords": [],
   "author": "",
