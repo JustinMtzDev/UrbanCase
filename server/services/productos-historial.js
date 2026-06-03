@@ -130,13 +130,25 @@ async function registrarHistorialProductoAlta({
 }) {
   if (!producto) return false;
   const texto = 'Producto registrado en inventario';
+  const costoCompraNum = Number(producto.costo_compra);
+  const precioNum = Number(producto.precio);
+  const stockNum = Number(producto.stock);
+  const detalleAlta = {
+    costo_compra: Number.isFinite(costoCompraNum) ? Math.round(costoCompraNum * 100) / 100 : null,
+    precio: Number.isFinite(precioNum) ? Math.round(precioNum * 100) / 100 : null,
+    stock: Number.isFinite(stockNum) ? Math.max(0, Math.trunc(stockNum)) : null,
+  };
   return insertarHistorialProducto({
     executor,
     productoId: producto.id,
     productoNombre: producto.nombre,
     accion: 'alta',
     valorNuevo: texto,
-    detalle: { cambios: [{ etiqueta: 'Alta', valor_anterior: '—', valor_nuevo: texto }] },
+    detalle: {
+      alta: detalleAlta,
+      ...detalleAlta,
+      cambios: [{ etiqueta: 'Alta', valor_anterior: '—', valor_nuevo: texto }],
+    },
     usuarioId,
     sucursalId: producto.sucursal_id,
     strict,
@@ -196,9 +208,16 @@ async function registrarHistorialProductoEdicion({
     const despues = actual[campo];
     if (valoresCampoEquivalentes(campo, antes, despues)) continue;
     if (campo === 'imagen') {
+      const valorAnterior = formatearValorHistorial(campo, antes);
+      const valorNuevo = formatearValorHistorial(campo, despues);
+      if (valorAnterior === valorNuevo) continue;
       cambios.push({
         campo,
-        etiqueta: 'Imagen cambiada',
+        etiqueta: 'Imagen',
+        valor_anterior: valorAnterior,
+        valor_nuevo: valorNuevo,
+        tenia_imagen: Boolean(antes),
+        tiene_imagen: Boolean(despues),
       });
       continue;
     }

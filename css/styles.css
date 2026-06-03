@@ -3948,6 +3948,26 @@ body:not(.theme-dark) .modulo-tab.activo {
   margin-left: 0;
 }
 
+#subvista-ventas-modulo .modulo-toolbar-ventas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+#subvista-ventas-modulo .modulo-toolbar-ventas .reporte-ventas-filtros {
+  margin-bottom: 0;
+  flex: 1 1 auto;
+  min-width: min(100%, 320px);
+}
+
+#subvista-ventas-modulo .modulo-toolbar-ventas .modulo-acciones {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 #vista-modulo-ventas .custom-select-trigger {
   font-size: 0.9rem;
   font-weight: 600;
@@ -4074,6 +4094,27 @@ body.theme-dark #tabla-reporte-movimientos tbody tr.reporte-mov-row-seleccionada
   background: rgba(0, 212, 170, 0.12);
 }
 
+#tabla-reporte-historial-productos tbody tr[data-historial-edicion-id] {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+body:not(.theme-dark) #tabla-reporte-historial-productos tbody tr[data-historial-edicion-id]:hover {
+  background: rgba(255, 49, 49, 0.05);
+}
+
+body.theme-dark #tabla-reporte-historial-productos tbody tr[data-historial-edicion-id]:hover {
+  background: rgba(0, 212, 170, 0.08);
+}
+
+#tabla-reporte-historial-productos tbody tr.reporte-hist-row-seleccionada {
+  background: rgba(127, 127, 127, 0.12);
+}
+
+body.theme-dark #tabla-reporte-historial-productos tbody tr.reporte-hist-row-seleccionada {
+  background: rgba(0, 212, 170, 0.12);
+}
+
 .reporte-mov-detalle-wrap {
   margin-top: 0.75rem;
 }
@@ -4135,6 +4176,12 @@ body.theme-dark .reporte-mov-producto-ver {
   align-items: center;
   gap: 0.65rem 0.75rem;
   margin-bottom: 0.75rem;
+}
+
+.reporte-ventas-fecha {
+  width: auto;
+  min-width: 170px;
+  max-width: 200px;
 }
 
 .reporte-historial-filtros-label {
