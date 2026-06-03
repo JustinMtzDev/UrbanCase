@@ -6598,9 +6598,9 @@ function renderTablaMovimientosInventarioReporte(lista) {
       <tr data-movimiento-id="${Number(m.id) || 0}" class="${filaSeleccionada ? 'reporte-mov-row-seleccionada' : ''}">
         <td>${escReporteTexto(fecha)}</td>
         <td class="reporte-mov-productos-cell">${htmlCeldaProductoMovimientoInventarioReporte(m)}</td>
-        <td class="tabla-num"><span class="reporte-mov-metrica">${escReporteTexto(unidadesTxt)}</span></td>
-        <td class="tabla-num"><span class="reporte-mov-metrica">${escReporteTexto(String(totalProductos))}</span></td>
-        <td class="tabla-num"><span class="reporte-mov-metrica">${escReporteTexto(totalCompraTxt)}</span></td>
+        <td class="tabla-num">${escReporteTexto(unidadesTxt)}</td>
+        <td class="tabla-num">${escReporteTexto(String(totalProductos))}</td>
+        <td class="tabla-num">${escReporteTexto(totalCompraTxt)}</td>
         <td>${escReporteTexto(m.sucursal_nombre || 'Sin sucursal')}</td>
         <td>${escReporteTexto(m.usuario_nombre || 'Sistema')}</td>
       </tr>
@@ -6623,7 +6623,7 @@ function renderTablaTransferenciasSucursalesReporte(lista) {
       <tr>
         <td>${escReporteTexto(fecha)}</td>
         <td>${escReporteTexto(t.producto_nombre || '—')}</td>
-        <td class="tabla-num"><span class="reporte-mov-cantidad">${escReporteTexto(String(cantidadNum))}</span></td>
+        <td class="tabla-num">${escReporteTexto(String(cantidadNum))}</td>
         <td>${escReporteTexto(t.sucursal_origen_nombre || 'Sin sucursal')}</td>
         <td>${escReporteTexto(t.sucursal_destino_nombre || 'Sin sucursal')}</td>
         <td>${escReporteTexto(t.usuario_nombre || 'Sistema')}</td>
@@ -6703,6 +6703,7 @@ function etiquetaCampoHistorialProductoReporte(campo) {
     nombre: 'Nombre',
     precio: 'Precio',
     precio_max: 'Precio máximo',
+    rango_precio: 'Rango de precio',
     stock: 'Stock',
     categoria: 'Categoría',
     imagen: 'Imagen',
@@ -6716,14 +6717,158 @@ function cambioEsCostoCompraHistorial(cambio) {
   return campo === 'costo_compra' || etiqueta === 'costo compra';
 }
 
-function filtrarCambiosHistorialProducto(cambios) {
-  return (Array.isArray(cambios) ? cambios : []).filter((c) => !cambioEsCostoCompraHistorial(c));
+function cambioEsPrecioHistorial(cambio) {
+  return String(cambio?.campo || '').toLowerCase() === 'precio';
+}
+
+function cambioEsPrecioMaxHistorial(cambio) {
+  return String(cambio?.campo || '').toLowerCase() === 'precio_max';
+}
+
+function normalizarMonedaRangoPrecioHistorial(valor) {
+  if (valor == null || valor === '') return null;
+  const raw = String(valor).trim();
+  if (!raw || raw === '—') return null;
+  const limpio = raw.replace(/[^0-9,.\-]/g, '').replace(/,/g, '');
+  const n = Number(limpio);
+  if (!Number.isFinite(n)) return raw.replace(/\s+/g, '');
+  const minDec = Math.abs(n % 1) < 0.0000001 ? 0 : 2;
+  return `$${n.toLocaleString('es-MX', { minimumFractionDigits: minDec, maximumFractionDigits: 2 })}`;
+}
+
+function textoRangoPrecioHistorial(precio, precioMax) {
+  if (precio && precioMax) return `${precio}-${precioMax}`;
+  return precio || precioMax || '—';
+}
+
+let historialProductosContextoPrecioMap = null;
+let historialProductosContextoPrecioPromise = null;
+let historialProductosContextoPrecioTs = 0;
+
+async function obtenerContextoPrecioHistorialProductos() {
+  const ahora = Date.now();
+  if (historialProductosContextoPrecioMap && (ahora - historialProductosContextoPrecioTs) < 10_000) {
+    return historialProductosContextoPrecioMap;
+  }
+  if (historialProductosContextoPrecioPromise) return historialProductosContextoPrecioPromise;
+  historialProductosContextoPrecioPromise = (async () => {
+    const r = await fetch(`${API}/productos/inventario-todas-sucursales`, {
+      headers: authHeaders(false),
+    });
+    if (!r.ok) throw new Error(`No se pudo cargar contexto de precios (${r.status})`);
+    const data = await r.json();
+    const mapa = new Map();
+    (Array.isArray(data) ? data : []).forEach((p) => {
+      const id = Number(p?.id);
+      if (!Number.isFinite(id)) return;
+      mapa.set(id, {
+        precio: p?.precio,
+        precio_max: p?.precio_max,
+      });
+    });
+    historialProductosContextoPrecioMap = mapa;
+    historialProductosContextoPrecioTs = Date.now();
+    return mapa;
+  })().finally(() => {
+    historialProductosContextoPrecioPromise = null;
+  });
+  return historialProductosContextoPrecioPromise;
+}
+
+async function enriquecerFilasHistorialProductosConContextoPrecio(rows) {
+  const lista = Array.isArray(rows) ? rows : [];
+  if (!lista.length) return lista;
+  try {
+    const mapa = await obtenerContextoPrecioHistorialProductos();
+    return lista.map((row) => {
+      const id = Number(row?.producto_id);
+      if (!Number.isFinite(id)) return row;
+      const ctx = mapa.get(id);
+      if (!ctx) return row;
+      return {
+        ...row,
+        producto_precio: row?.producto_precio ?? ctx.precio ?? null,
+        producto_precio_max: row?.producto_precio_max === undefined ? (ctx.precio_max ?? null) : row.producto_precio_max,
+      };
+    });
+  } catch (_) {
+    return lista;
+  }
+}
+
+function combinarCambiosPrecioEnRangoHistorial(cambios, row = null) {
+  const base = [];
+  let idxInsercion = -1;
+  let cambioPrecio = null;
+  let cambioPrecioMax = null;
+
+  (Array.isArray(cambios) ? cambios : []).forEach((c) => {
+    if (cambioEsPrecioHistorial(c) || cambioEsPrecioMaxHistorial(c)) {
+      if (idxInsercion < 0) idxInsercion = base.length;
+      if (cambioEsPrecioHistorial(c)) cambioPrecio = c;
+      if (cambioEsPrecioMaxHistorial(c)) cambioPrecioMax = c;
+      return;
+    }
+    base.push(c);
+  });
+
+  if (!cambioPrecio && !cambioPrecioMax) return base;
+
+  let precioAntes = normalizarMonedaRangoPrecioHistorial(cambioPrecio?.valor_anterior);
+  let precioDespues = normalizarMonedaRangoPrecioHistorial(cambioPrecio?.valor_nuevo);
+  let precioMaxAntes = normalizarMonedaRangoPrecioHistorial(cambioPrecioMax?.valor_anterior);
+  let precioMaxDespues = normalizarMonedaRangoPrecioHistorial(cambioPrecioMax?.valor_nuevo);
+  const localProducto = datosProductoAltaDesdeInventarioLocal(row) || {};
+  const precioContexto = normalizarMonedaRangoPrecioHistorial(
+    row?.producto_precio ?? localProducto.precio
+  );
+  const precioMaxContexto = normalizarMonedaRangoPrecioHistorial(
+    row?.producto_precio_max ?? localProducto.precio_max
+  );
+
+  if (precioAntes == null && precioDespues != null) precioAntes = precioDespues;
+  if (precioDespues == null && precioAntes != null) precioDespues = precioAntes;
+  if (precioAntes == null) precioAntes = precioContexto;
+  if (precioDespues == null) precioDespues = precioContexto;
+
+  if (precioMaxAntes == null && precioMaxDespues == null && !cambioPrecioMax && precioMaxContexto != null) {
+    precioMaxAntes = precioMaxContexto;
+    precioMaxDespues = precioMaxContexto;
+  }
+  if (precioMaxAntes == null && precioMaxDespues != null) precioMaxAntes = null;
+  if (precioMaxDespues == null && precioMaxAntes != null) precioMaxDespues = null;
+  const tieneMaxAntes = precioMaxAntes != null;
+  const tieneMaxDespues = precioMaxDespues != null;
+  const campoResultado = tieneMaxDespues ? 'rango_precio' : 'precio';
+  const etiquetaResultado = campoResultado === 'rango_precio' ? 'Rango de precio' : 'Precio';
+  const valorAnterior = tieneMaxAntes
+    ? textoRangoPrecioHistorial(precioAntes, precioMaxAntes)
+    : (precioAntes || textoRangoPrecioHistorial(precioAntes, precioMaxAntes));
+  const valorNuevo = tieneMaxDespues
+    ? textoRangoPrecioHistorial(precioDespues, precioMaxDespues)
+    : (precioDespues || textoRangoPrecioHistorial(precioDespues, precioMaxDespues));
+
+  const cambioRango = {
+    campo: campoResultado,
+    etiqueta: etiquetaResultado,
+    valor_anterior: valorAnterior,
+    valor_nuevo: valorNuevo,
+  };
+
+  const at = Math.max(0, idxInsercion);
+  base.splice(at, 0, cambioRango);
+  return base;
+}
+
+function filtrarCambiosHistorialProducto(cambios, row = null) {
+  const sinCosto = (Array.isArray(cambios) ? cambios : []).filter((c) => !cambioEsCostoCompraHistorial(c));
+  return combinarCambiosPrecioEnRangoHistorial(sinCosto, row);
 }
 
 function cambiosHistorialProductoDesdeFila(row) {
   const detalle = row?.detalle;
   if (detalle && Array.isArray(detalle.cambios) && detalle.cambios.length) {
-    const cambios = filtrarCambiosHistorialProducto(detalle.cambios);
+    const cambios = filtrarCambiosHistorialProducto(detalle.cambios, row);
     if (cambios.length) return cambios;
   }
   const accion = String(row?.accion || '').toLowerCase();
@@ -6743,18 +6888,22 @@ function cambiosHistorialProductoDesdeFila(row) {
     }];
   }
   if (row?.campo && String(row.campo).toLowerCase() !== 'costo_compra') {
-    return [{
+    return combinarCambiosPrecioEnRangoHistorial([{
       campo: row.campo,
       etiqueta: etiquetaCampoHistorialProductoReporte(row.campo),
       valor_anterior: row.valor_anterior || '—',
       valor_nuevo: row.valor_nuevo || '—',
-    }];
+    }], row);
   }
   return [];
 }
 
 function stockEliminadoHistorialProducto(cambio, row) {
-  const n = Number(cambio?.stock_eliminado ?? row?.detalle?.stock_eliminado);
+  const n = Number(
+    cambio?.stock_eliminado
+    ?? row?.detalle?.stock_eliminado
+    ?? row?.detalle?.cambios?.[0]?.stock_eliminado
+  );
   return Number.isFinite(n) ? n : null;
 }
 
@@ -6793,27 +6942,57 @@ function htmlCeldaCambiosHistorialProductoReporte(h) {
   if (!cambios.length) {
     return '<span class="reporte-historial-sin-cambio">—</span>';
   }
-  const id = Number(h.id);
   const textoHtmlBase = htmlLineaCambioHistorialProductoReporte(cambios[0], 0, h);
-  const multiples = cambios.length > 1;
-  const navHtml = multiples ? `
-    <button type="button" class="btn-tabla btn-tabla-icono reporte-historial-cambio-ver" data-historial-id="${id}" title="Ver todos los cambios" aria-label="Ver todos los cambios">
-      <i class="fa-solid fa-eye" aria-hidden="true"></i>
-    </button>
-  ` : '';
-  const textoHtml = multiples
-    ? `${textoHtmlBase} <span class="reporte-historial-cambio-ellipsis">...</span>`
-    : textoHtmlBase;
   return `
-    <div class="reporte-historial-cambios" data-historial-id="${id}">
-      <span class="reporte-historial-cambio-texto">${textoHtml}</span>
-      ${navHtml}
+    <div class="reporte-historial-cambios">
+      <span class="reporte-historial-cambio-texto">${textoHtmlBase}</span>
     </div>
   `;
 }
 
 const historialProductosCambiosCache = new Map();
+let historialProductosEdicionListaActual = [];
 let reporteHistorialAccionFiltro = '';
+let reporteHistorialEdicionSeleccionadoId = null;
+let reporteVentasPeriodoFiltro = 'diario';
+let reporteVentasFechaFiltro = '';
+
+function fechaHoyLocalInput() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function initReporteVentasFiltros(recargarFn) {
+  const $chips = document.getElementById('reporte-ventas-periodo-chips');
+  const $fecha = document.getElementById('reporte-ventas-fecha');
+  if (!$chips || !$fecha || initReporteVentasFiltros._done) return;
+  initReporteVentasFiltros._done = true;
+  if (!$fecha.value) $fecha.value = fechaHoyLocalInput();
+  reporteVentasFechaFiltro = $fecha.value || '';
+
+  $chips.querySelectorAll('.reporte-accion-chip[data-reporte-ventas-periodo]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const periodo = String(chip.getAttribute('data-reporte-ventas-periodo') || '').trim().toLowerCase();
+      if (!periodo) return;
+      reporteVentasPeriodoFiltro = periodo;
+      $chips.querySelectorAll('.reporte-accion-chip[data-reporte-ventas-periodo]').forEach((c) => {
+        c.classList.toggle(
+          'activo',
+          String(c.getAttribute('data-reporte-ventas-periodo') || '').trim().toLowerCase() === periodo
+        );
+      });
+      if (typeof recargarFn === 'function') void recargarFn();
+    });
+  });
+
+  $fecha.addEventListener('change', () => {
+    reporteVentasFechaFiltro = $fecha.value || '';
+    if (typeof recargarFn === 'function') void recargarFn();
+  });
+}
 
 function initReporteHistorialAccionFiltros(recargarFn) {
   const $chips = document.getElementById('reporte-historial-accion-chips');
@@ -6835,6 +7014,10 @@ function initReporteHistorialAccionFiltros(recargarFn) {
 
 function resetReporteHistorialAccionFiltro() {
   reporteHistorialAccionFiltro = '';
+  historialProductosEdicionListaActual = [];
+  reporteHistorialEdicionSeleccionadoId = null;
+  renderEncabezadoTablaHistorialProductosReporte();
+  renderDetalleHistorialEdicionSeleccionada(null);
   const $chips = document.getElementById('reporte-historial-accion-chips');
   $chips?.querySelectorAll('.reporte-accion-chip').forEach((c) => {
     const val = String(c.getAttribute('data-accion') ?? '').trim().toLowerCase();
@@ -6849,15 +7032,348 @@ function filaHistorialVisibleEnReporte(h) {
   return cambiosHistorialProductoDesdeFila(h).length > 0;
 }
 
+function esReporteHistorialChipAltaActivo() {
+  return String(reporteHistorialAccionFiltro || '').toLowerCase() === 'alta';
+}
+
+function esReporteHistorialChipEliminacionActivo() {
+  return String(reporteHistorialAccionFiltro || '').toLowerCase() === 'eliminacion';
+}
+
+function esReporteHistorialChipEdicionActivo() {
+  return String(reporteHistorialAccionFiltro || '').toLowerCase() === 'edicion';
+}
+
+function columnasTablaHistorialProductosReporte() {
+  if (esReporteHistorialChipAltaActivo()) return 7;
+  if (esReporteHistorialChipEliminacionActivo()) return 5;
+  if (esReporteHistorialChipEdicionActivo()) return 5;
+  return 6;
+}
+
+function renderEncabezadoTablaHistorialProductosReporte() {
+  const $tabla = document.getElementById('tabla-reporte-historial-productos');
+  const $fila = $tabla?.querySelector('thead tr');
+  if (!$fila) return;
+  if (esReporteHistorialChipAltaActivo()) {
+    $fila.innerHTML = `
+      <th>Fecha</th>
+      <th>Producto</th>
+      <th class="tabla-num">Costo de compra</th>
+      <th class="tabla-num">Precio</th>
+      <th class="tabla-num">Stock</th>
+      <th>Usuario</th>
+      <th>Sucursal</th>
+    `;
+    return;
+  }
+  if (esReporteHistorialChipEliminacionActivo()) {
+    $fila.innerHTML = `
+      <th>Fecha</th>
+      <th>Producto</th>
+      <th class="tabla-num">Stock al eliminar</th>
+      <th>Usuario</th>
+      <th>Sucursal</th>
+    `;
+    return;
+  }
+  if (esReporteHistorialChipEdicionActivo()) {
+    $fila.innerHTML = `
+      <th>Fecha</th>
+      <th>Producto</th>
+      <th class="tabla-num">Total de cambios</th>
+      <th>Usuario</th>
+      <th>Sucursal</th>
+    `;
+    return;
+  }
+  $fila.innerHTML = `
+    <th>Fecha</th>
+    <th>Producto</th>
+    <th>Acción</th>
+    <th>Cambio</th>
+    <th>Usuario</th>
+    <th>Sucursal</th>
+  `;
+}
+
+function datosProductoAltaDesdeInventarioLocal(row) {
+  const lista = Array.isArray(productosInventario) ? productosInventario : [];
+  if (!lista.length) return null;
+  const productoId = Number(row?.producto_id);
+  const sucursalId = Number(row?.sucursal_id);
+  const nombre = String(row?.producto_nombre || '').trim().toLowerCase();
+  let producto = null;
+  if (Number.isFinite(productoId)) {
+    producto = lista.find((p) => Number(p?.id) === productoId) || null;
+  }
+  if (!producto && nombre) {
+    producto = lista.find((p) => String(p?.nombre || '').trim().toLowerCase() === nombre) || null;
+  }
+  if (!producto) return null;
+
+  if (Array.isArray(producto?.sucursales_detalle) && producto.sucursales_detalle.length > 0) {
+    const detalleSucursal = Number.isFinite(sucursalId)
+      ? (producto.sucursales_detalle.find((s) => Number(s?.sucursal_id ?? s?.id_sucursal) === sucursalId) || null)
+      : null;
+    const origen = detalleSucursal || producto.sucursales_detalle[0];
+    return {
+      costo_compra: origen?.costo_compra ?? origen?.costoCompra ?? producto?.costo_compra ?? null,
+      precio: origen?.precio_venta ?? origen?.precio ?? producto?.precio ?? null,
+      precio_max: origen?.precio_max ?? producto?.precio_max ?? null,
+      stock: origen?.stock ?? producto?.stock ?? producto?.stock_total ?? null,
+    };
+  }
+
+  return {
+    costo_compra: producto?.costo_compra ?? producto?.costoCompra ?? null,
+    precio: producto?.precio_venta ?? producto?.precio ?? null,
+    precio_max: producto?.precio_max ?? null,
+    stock: producto?.stock ?? producto?.stock_total ?? null,
+  };
+}
+
+function valorDetalleAltaHistorialProducto(row, campo) {
+  const detalle = row?.detalle;
+  const campoLower = String(campo || '').toLowerCase();
+  const local = datosProductoAltaDesdeInventarioLocal(row) || {};
+  const fallbackCampo = {
+    costo_compra: row?.producto_costo_compra ?? local.costo_compra,
+    precio: row?.producto_precio ?? local.precio,
+    stock: row?.producto_stock ?? local.stock,
+  };
+  if (!detalle || typeof detalle !== 'object') return fallbackCampo[campoLower] ?? null;
+  const valorAlta = detalle?.alta?.[campoLower];
+  if (valorAlta != null && valorAlta !== '') return valorAlta;
+  const valorDirecto = detalle?.[campoLower];
+  if (valorDirecto != null && valorDirecto !== '') return valorDirecto;
+  const cambios = Array.isArray(detalle?.cambios) ? detalle.cambios : [];
+  const cambio = cambios.find((c) => String(c?.campo || '').toLowerCase() === campoLower);
+  if (cambio?.valor_nuevo != null && cambio.valor_nuevo !== '') return cambio.valor_nuevo;
+  return fallbackCampo[campoLower] ?? null;
+}
+
+function formatearStockHistorialAltaReporte(valor) {
+  if (valor == null || valor === '') return '—';
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return '—';
+  return String(Math.max(0, Math.trunc(n)));
+}
+
+function stockEliminadoDesdeFilaHistorialProducto(row) {
+  const n = Number(
+    row?.detalle?.stock_eliminado
+    ?? row?.detalle?.cambios?.[0]?.stock_eliminado
+  );
+  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : null;
+}
+
+function renderTablaHistorialProductosAltaReporte(lista) {
+  const $tbody = document.getElementById('tbody-reporte-historial-productos');
+  if (!$tbody) return;
+  if (!Array.isArray(lista) || lista.length === 0) {
+    $tbody.innerHTML = '<tr><td colspan="7" class="tabla-vacio">No hay altas registradas</td></tr>';
+    return;
+  }
+  $tbody.innerHTML = lista.map((h) => {
+    const fecha = formatFecha(h.created_at);
+    const costoCompra = valorDetalleAltaHistorialProducto(h, 'costo_compra');
+    const precio = valorDetalleAltaHistorialProducto(h, 'precio');
+    const stock = valorDetalleAltaHistorialProducto(h, 'stock');
+    return `
+      <tr>
+        <td>${escReporteTexto(fecha)}</td>
+        <td>${escReporteTexto(h.producto_nombre || '—')}</td>
+        <td class="tabla-num">${escReporteTexto(formatCostoReporte(costoCompra))}</td>
+        <td class="tabla-num">${escReporteTexto(formatCostoReporte(precio))}</td>
+        <td class="tabla-num">${escReporteTexto(formatearStockHistorialAltaReporte(stock))}</td>
+        <td>${escReporteTexto(h.usuario_nombre || 'Sistema')}</td>
+        <td>${escReporteTexto(h.sucursal_nombre || 'Sin sucursal')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderTablaHistorialProductosEliminacionReporte(lista) {
+  const $tbody = document.getElementById('tbody-reporte-historial-productos');
+  if (!$tbody) return;
+  if (!Array.isArray(lista) || lista.length === 0) {
+    $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">No hay eliminaciones registradas</td></tr>';
+    return;
+  }
+  $tbody.innerHTML = lista.map((h) => {
+    const fecha = formatFecha(h.created_at);
+    const stockEliminado = stockEliminadoDesdeFilaHistorialProducto(h);
+    return `
+      <tr>
+        <td>${escReporteTexto(fecha)}</td>
+        <td>${escReporteTexto(h.producto_nombre || '—')}</td>
+        <td class="tabla-num">${escReporteTexto(stockEliminado != null ? String(stockEliminado) : '—')}</td>
+        <td>${escReporteTexto(h.usuario_nombre || 'Sistema')}</td>
+        <td>${escReporteTexto(h.sucursal_nombre || 'Sin sucursal')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function etiquetaCampoDetalleEdicionHistorial(cambio) {
+  const etiqueta = String(cambio?.etiqueta || '').trim();
+  if (etiqueta && etiqueta.toLowerCase() !== 'imagen cambiada') return etiqueta;
+  return etiquetaCampoHistorialProductoReporte(cambio?.campo) || 'Campo';
+}
+
+function textoSiTeniaImagenHistorial(valor) {
+  if (valor == null || valor === '') return null;
+  if (typeof valor === 'boolean') return valor ? 'Con imagen' : 'Sin imagen';
+  const raw = String(valor).trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  if (lower === 'con imagen') return 'Con imagen';
+  if (lower === 'sin imagen') return 'Sin imagen';
+  if (lower === 'true' || lower === '1') return 'Con imagen';
+  if (lower === 'false' || lower === '0') return 'Sin imagen';
+  if (raw.startsWith('data:image') || raw.length > 50) return 'Con imagen';
+  return null;
+}
+
+function valorDetalleEdicionHistorial(cambio, tipo = 'anterior') {
+  const key = tipo === 'nuevo' ? 'valor_nuevo' : 'valor_anterior';
+  const esImagen = String(cambio?.campo || '').toLowerCase() === 'imagen'
+    || String(cambio?.etiqueta || '').toLowerCase().includes('imagen');
+  const valor = cambio?.[key];
+  if (esImagen) {
+    const textoAnteriorImagen = textoSiTeniaImagenHistorial(cambio?.valor_anterior)
+      || textoSiTeniaImagenHistorial(cambio?.tenia_imagen)
+      || 'Sin imagen';
+    if (tipo === 'nuevo') {
+      return textoAnteriorImagen === 'Sin imagen' ? 'Imagen agregada' : 'Imagen cambiada';
+    }
+    const textoImagen = textoSiTeniaImagenHistorial(valor);
+    if (textoImagen) return textoImagen;
+    const flagImagen = tipo === 'nuevo' ? cambio?.tiene_imagen : cambio?.tenia_imagen;
+    const textoFlag = textoSiTeniaImagenHistorial(flagImagen);
+    if (textoFlag) return textoFlag;
+    return 'Sin imagen';
+  }
+  if (valor == null || valor === '') {
+    return '—';
+  }
+  return String(valor);
+}
+
+function renderDetalleHistorialEdicionSeleccionada(historialId) {
+  const $wrap = document.getElementById('reporte-historial-edicion-detalle-wrap');
+  const $tbody = document.getElementById('tbody-reporte-historial-edicion-detalle');
+  if (!$wrap || !$tbody) return;
+  if (historialId == null || !Number.isFinite(Number(historialId))) {
+    $wrap.hidden = true;
+    $tbody.innerHTML = '<tr><td colspan="4" class="tabla-vacio">Selecciona un registro para ver el detalle</td></tr>';
+    return;
+  }
+  const cambios = historialProductosCambiosCache.get(Number(historialId)) || [];
+  if (!cambios.length) {
+    $wrap.hidden = false;
+    $tbody.innerHTML = '<tr><td colspan="4" class="tabla-vacio">Este registro no tiene cambios para mostrar</td></tr>';
+    return;
+  }
+  $wrap.hidden = false;
+  $tbody.innerHTML = cambios.map((c, i) => {
+    const campo = etiquetaCampoDetalleEdicionHistorial(c);
+    const anterior = valorDetalleEdicionHistorial(c, 'anterior');
+    const nuevo = valorDetalleEdicionHistorial(c, 'nuevo');
+    return `
+      <tr>
+        <td class="tabla-num">${i + 1}</td>
+        <td>${escReporteTexto(campo)}</td>
+        <td>${escReporteTexto(anterior)}</td>
+        <td>${escReporteTexto(nuevo)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderTablaHistorialProductosEdicionReporte(lista) {
+  const $tbody = document.getElementById('tbody-reporte-historial-productos');
+  if (!$tbody) return;
+  historialProductosEdicionListaActual = Array.isArray(lista) ? [...lista] : [];
+  historialProductosCambiosCache.clear();
+  historialProductosEdicionListaActual.forEach((h) => {
+    if (h?.id == null) return;
+    const cambios = cambiosHistorialProductoDesdeFila(h);
+    if (cambios.length) historialProductosCambiosCache.set(Number(h.id), cambios);
+  });
+  if (
+    reporteHistorialEdicionSeleccionadoId != null
+    && !historialProductosCambiosCache.has(Number(reporteHistorialEdicionSeleccionadoId))
+  ) {
+    reporteHistorialEdicionSeleccionadoId = null;
+  }
+  const visible = reporteHistorialEdicionSeleccionadoId == null
+    ? historialProductosEdicionListaActual
+    : historialProductosEdicionListaActual.filter((h) => Number(h?.id) === Number(reporteHistorialEdicionSeleccionadoId));
+  if (!visible.length) {
+    $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">No hay ediciones registradas</td></tr>';
+    renderDetalleHistorialEdicionSeleccionada(null);
+    return;
+  }
+  $tbody.innerHTML = visible.map((h) => {
+    const fecha = formatFecha(h.created_at);
+    const filaSeleccionada = Number(h?.id) === Number(reporteHistorialEdicionSeleccionadoId);
+    const totalCambios = (historialProductosCambiosCache.get(Number(h?.id)) || []).length;
+    return `
+      <tr data-historial-edicion-id="${Number(h.id) || 0}" class="${filaSeleccionada ? 'reporte-hist-row-seleccionada' : ''}">
+        <td>${escReporteTexto(fecha)}</td>
+        <td>${escReporteTexto(h.producto_nombre || '—')}</td>
+        <td class="tabla-num">${escReporteTexto(String(totalCambios))}</td>
+        <td>${escReporteTexto(h.usuario_nombre || 'Sistema')}</td>
+        <td>${escReporteTexto(h.sucursal_nombre || 'Sin sucursal')}</td>
+      </tr>
+    `;
+  }).join('');
+  renderDetalleHistorialEdicionSeleccionada(reporteHistorialEdicionSeleccionadoId);
+}
+
 function renderTablaHistorialProductosReporte(lista) {
   const $tbody = document.getElementById('tbody-reporte-historial-productos');
   if (!$tbody) return;
-  historialProductosCambiosCache.clear();
+  renderEncabezadoTablaHistorialProductosReporte();
   const visible = (Array.isArray(lista) ? lista : []).filter(filaHistorialVisibleEnReporte);
+  const esAlta = esReporteHistorialChipAltaActivo();
+  const esEliminacion = esReporteHistorialChipEliminacionActivo();
+  const esEdicion = esReporteHistorialChipEdicionActivo();
   if (visible.length === 0) {
-    $tbody.innerHTML = '<tr><td colspan="6" class="tabla-vacio">No hay cambios registrados</td></tr>';
+    const cols = columnasTablaHistorialProductosReporte();
+    const vacio = esAlta
+      ? 'No hay altas registradas'
+      : (esEliminacion
+        ? 'No hay eliminaciones registradas'
+        : (esEdicion ? 'No hay ediciones registradas' : 'No hay cambios registrados'));
+    $tbody.innerHTML = `<tr><td colspan="${cols}" class="tabla-vacio">${escReporteTexto(vacio)}</td></tr>`;
+    renderDetalleHistorialEdicionSeleccionada(null);
     return;
   }
+  if (esAlta) {
+    historialProductosEdicionListaActual = [];
+    reporteHistorialEdicionSeleccionadoId = null;
+    renderTablaHistorialProductosAltaReporte(visible);
+    renderDetalleHistorialEdicionSeleccionada(null);
+    return;
+  }
+  if (esEliminacion) {
+    historialProductosEdicionListaActual = [];
+    reporteHistorialEdicionSeleccionadoId = null;
+    renderTablaHistorialProductosEliminacionReporte(visible);
+    renderDetalleHistorialEdicionSeleccionada(null);
+    return;
+  }
+  if (esEdicion) {
+    renderTablaHistorialProductosEdicionReporte(visible);
+    return;
+  }
+  historialProductosEdicionListaActual = [];
+  reporteHistorialEdicionSeleccionadoId = null;
+  historialProductosCambiosCache.clear();
+  renderDetalleHistorialEdicionSeleccionada(null);
   visible.forEach((h) => {
     if (h?.id != null) historialProductosCambiosCache.set(Number(h.id), cambiosHistorialProductoDesdeFila(h));
   });
@@ -6907,13 +7423,13 @@ function initHistorialProductosReporteUI() {
   const $modal = document.getElementById('modal-reporte-historial-cambios');
 
   $tbody?.addEventListener('click', (e) => {
-    const $ver = e.target.closest('.reporte-historial-cambio-ver');
-    if (!$ver) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const id = Number($ver.dataset.historialId);
+    if (!esReporteHistorialChipEdicionActivo()) return;
+    const $row = e.target.closest('tr[data-historial-edicion-id]');
+    if (!$row) return;
+    const id = Number($row.dataset.historialEdicionId);
     if (!historialProductosCambiosCache.has(id)) return;
-    abrirModalHistorialProductosCambios(id);
+    reporteHistorialEdicionSeleccionadoId = reporteHistorialEdicionSeleccionadoId === id ? null : id;
+    renderTablaHistorialProductosEdicionReporte(historialProductosEdicionListaActual);
   });
 
   document.getElementById('modal-reporte-historial-cerrar')?.addEventListener('click', cerrarModalHistorialProductosCambios);
@@ -6986,16 +7502,17 @@ const REPORTES_CONFIG = {
     error: 'Error al cargar historial',
     render: renderTablaHistorialProductosReporte,
   },
-  'corte-caja': {
-    placeholder: 'Buscar corte de caja...',
-    endpoint: '/reportes/corte-caja',
-    tbodyId: 'tbody-reporte-corte-caja',
-    cols: 6,
-    vacio: 'No hay ventas registradas',
-    cargando: 'Cargando corte de caja...',
-    error: 'Error al cargar corte de caja',
-    render: renderTablaCorteCajaReporte,
-  },
+};
+
+const VENTAS_MODULO_CONFIG = {
+  placeholder: 'Buscar venta...',
+  endpoint: '/reportes/corte-caja',
+  tbodyId: 'tbody-reporte-corte-caja',
+  cols: 6,
+  vacio: 'No hay ventas en el periodo',
+  cargando: 'Cargando ventas...',
+  error: 'Error al cargar ventas',
+  render: renderTablaCorteCajaReporte,
 };
 
 function initModuloVentas() {
@@ -7009,16 +7526,20 @@ function initModuloVentas() {
   const $chipsMovimientos = document.getElementById('reporte-movimientos-chips');
   const $buscar = document.getElementById('buscar-reporte');
   const $btnRecargar = document.getElementById('btn-recargar-reporte');
+  const $buscarVentas = document.getElementById('buscar-ventas');
+  const $btnRecargarVentas = document.getElementById('btn-recargar-ventas');
   const $panelesReporte = document.querySelectorAll('#subvista-reportes-modulo .reporte-panel');
   if (!$tabVentas || !$tabReportes || !$svVentas || !$svReportes) return;
 
-  const reporteTipoCustomSelect = initCustomSelectBasico($tipoReporte);
+  initCustomSelectBasico($tipoReporte);
   initHistorialProductosReporteUI();
   initMovimientosInventarioReporteUI();
+  initReporteVentasFiltros(() => cargarVentasModulo());
 
   let reporteReqId = 0;
+  let ventasReqId = 0;
   let debounceBuscar = null;
-  let reporteModuloActivo = REPORTE_TIPO_DEFAULT;
+  let debounceBuscarVentas = null;
   let reporteActivo = REPORTES_CHIPS_CONFIG[REPORTE_CHIP_DEFAULT]?.tipo || REPORTE_TIPO_DEFAULT;
   let reporteChipActivo = REPORTE_CHIP_DEFAULT;
 
@@ -7030,21 +7551,9 @@ function initModuloVentas() {
     return REPORTES_CONFIG[reporteActivo] || null;
   }
 
-  function syncSelectTipoReporte() {
-    if ($tipoReporte && $tipoReporte.value !== reporteModuloActivo) {
-      $tipoReporte.value = reporteModuloActivo;
-    }
-    reporteTipoCustomSelect?.syncDisplay?.();
-  }
-
-  function actualizarVisibilidadFiltrosMovimientos() {
-    if (!$filtrosMovimientos) return;
-    $filtrosMovimientos.hidden = reporteModuloActivo !== 'movimientos-inventario';
-  }
-
   function actualizarControlesReporteToolbar() {
     const cfg = configReporteActivo();
-    const cfgChip = reporteModuloActivo === 'movimientos-inventario' ? configChipActivo() : null;
+    const cfgChip = configChipActivo();
     const tieneBusqueda = Boolean(cfg);
     if ($buscar) {
       $buscar.hidden = !tieneBusqueda;
@@ -7072,6 +7581,10 @@ function initModuloVentas() {
     if (!cfgChip) return;
     reporteChipActivo = chip;
     reporteHistorialAccionFiltro = cfgChip.accion || '';
+    historialProductosEdicionListaActual = [];
+    reporteHistorialEdicionSeleccionadoId = null;
+    renderDetalleHistorialEdicionSeleccionada(null);
+    if (cfgChip.tipo === 'historial-productos') renderEncabezadoTablaHistorialProductosReporte();
     reporteMovimientoSeleccionadoId = null;
     renderDetalleMovimientoInventarioSeleccionado(null);
     $chipsMovimientos?.querySelectorAll('.reporte-accion-chip[data-reporte-chip]').forEach((btn) => {
@@ -7082,27 +7595,63 @@ function initModuloVentas() {
     mostrarPanelReporte(cfgChip.tipo, { recargar });
   }
 
-  function activarModuloReporte(tipo, { limpiarBusqueda = true, recargar = true } = {}) {
-    const modulo = tipo === 'corte-caja' ? 'corte-caja' : 'movimientos-inventario';
-    reporteModuloActivo = modulo;
-    if (limpiarBusqueda && $buscar) $buscar.value = '';
-    if (modulo === 'corte-caja') {
-      mostrarPanelReporte('corte-caja', { recargar });
-    } else {
-      activarChipReporte(REPORTE_CHIP_DEFAULT, { limpiarBusqueda: false, recargar });
+  async function cargarVentasModulo() {
+    const cfg = VENTAS_MODULO_CONFIG;
+    const $tbody = document.getElementById(cfg.tbodyId);
+    const reqId = ++ventasReqId;
+    if ($tbody) {
+      $tbody.innerHTML = `<tr><td colspan="${cfg.cols}" class="tabla-vacio">${escReporteTexto(cfg.cargando)}</td></tr>`;
     }
-    actualizarVisibilidadFiltrosMovimientos();
-    syncSelectTipoReporte();
-    actualizarControlesReporteToolbar();
+    const params = new URLSearchParams({ limit: '300' });
+    const q = ($buscarVentas?.value || '').trim();
+    if (q) params.set('q', q);
+    params.set('periodo', reporteVentasPeriodoFiltro || 'diario');
+    if (reporteVentasFechaFiltro) params.set('fecha', reporteVentasFechaFiltro);
+    try {
+      const r = await fetch(`${API}${cfg.endpoint}?${params.toString()}`, {
+        headers: authHeaders(false),
+      });
+      if (reqId !== ventasReqId) return;
+      if (r.status === 401) {
+        window.location.href = '/login.html';
+        return;
+      }
+      if (!r.ok) {
+        let msg = cfg.error;
+        if (r.status === 404) {
+          msg = 'Ruta de ventas no encontrada. Reinicia el servidor (npm start en server/).';
+        } else {
+          try {
+            const err = await r.json();
+            if (err?.error) msg = `Error: ${err.error}`;
+          } catch (_) {}
+        }
+        if ($tbody) {
+          $tbody.innerHTML = `<tr><td colspan="${cfg.cols}" class="tabla-vacio">${escReporteTexto(msg)}</td></tr>`;
+        }
+        return;
+      }
+      const data = await r.json();
+      cfg.render(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+      if (reqId !== ventasReqId) return;
+      if ($tbody) {
+        $tbody.innerHTML = `<tr><td colspan="${cfg.cols}" class="tabla-vacio">${escReporteTexto(cfg.error)}</td></tr>`;
+      }
+    }
   }
 
   async function cargarReporteActivo() {
     const cfg = configReporteActivo();
     if (!cfg) return;
     const $tbody = document.getElementById(cfg.tbodyId);
+    const cols = (reporteActivo === 'historial-productos')
+      ? columnasTablaHistorialProductosReporte()
+      : cfg.cols;
     const reqId = ++reporteReqId;
     if ($tbody) {
-      $tbody.innerHTML = `<tr><td colspan="${cfg.cols}" class="tabla-vacio">${escReporteTexto(cfg.cargando)}</td></tr>`;
+      $tbody.innerHTML = `<tr><td colspan="${cols}" class="tabla-vacio">${escReporteTexto(cfg.cargando)}</td></tr>`;
     }
     const params = new URLSearchParams({ limit: '300' });
     const q = ($buscar?.value || '').trim();
@@ -7130,17 +7679,21 @@ function initModuloVentas() {
           } catch (_) {}
         }
         if ($tbody) {
-          $tbody.innerHTML = `<tr><td colspan="${cfg.cols}" class="tabla-vacio">${escReporteTexto(msg)}</td></tr>`;
+          $tbody.innerHTML = `<tr><td colspan="${cols}" class="tabla-vacio">${escReporteTexto(msg)}</td></tr>`;
         }
         return;
       }
       const data = await r.json();
-      cfg.render(Array.isArray(data) ? data : []);
+      let filas = Array.isArray(data) ? data : [];
+      if (reporteActivo === 'historial-productos') {
+        filas = await enriquecerFilasHistorialProductosConContextoPrecio(filas);
+      }
+      cfg.render(filas);
     } catch (err) {
       console.error(err);
       if (reqId !== reporteReqId) return;
       if ($tbody) {
-        $tbody.innerHTML = `<tr><td colspan="${cfg.cols}" class="tabla-vacio">${escReporteTexto(cfg.error)}</td></tr>`;
+        $tbody.innerHTML = `<tr><td colspan="${cols}" class="tabla-vacio">${escReporteTexto(cfg.error)}</td></tr>`;
       }
     }
   }
@@ -7154,25 +7707,18 @@ function initModuloVentas() {
     if ($toolbarReportes) $toolbarReportes.hidden = modo !== 'reportes';
     try { localStorage.setItem(VENTAS_SUBMODULO_KEY, modo); } catch (_) {}
     if (modo === 'reportes') {
-      activarModuloReporte(reporteModuloActivo || REPORTE_TIPO_DEFAULT, { limpiarBusqueda: true, recargar: true });
+      activarChipReporte(reporteChipActivo, { limpiarBusqueda: false, recargar: true });
+    } else {
+      void cargarVentasModulo();
     }
   }
 
   $tabVentas.addEventListener('click', () => irASubvista('ventas'));
   $tabReportes.addEventListener('click', () => irASubvista('reportes'));
-  $tipoReporte?.addEventListener('change', () => {
-    const tipo = $tipoReporte.value;
-    activarModuloReporte(tipo, { limpiarBusqueda: true, recargar: true });
-  });
   $chipsMovimientos?.querySelectorAll('.reporte-accion-chip[data-reporte-chip]').forEach((chip) => {
     chip.addEventListener('click', () => {
       const id = String(chip.dataset.reporteChip || '').trim().toLowerCase();
       if (!REPORTES_CHIPS_CONFIG[id]) return;
-      if (reporteModuloActivo !== 'movimientos-inventario') {
-        reporteModuloActivo = 'movimientos-inventario';
-        actualizarVisibilidadFiltrosMovimientos();
-        syncSelectTipoReporte();
-      }
       activarChipReporte(id, { limpiarBusqueda: true, recargar: true });
     });
   });
@@ -7182,10 +7728,16 @@ function initModuloVentas() {
     clearTimeout(debounceBuscar);
     debounceBuscar = setTimeout(() => { void cargarReporteActivo(); }, 250);
   });
+  $btnRecargarVentas?.addEventListener('click', () => { void cargarVentasModulo(); });
+  $buscarVentas?.addEventListener('input', () => {
+    clearTimeout(debounceBuscarVentas);
+    debounceBuscarVentas = setTimeout(() => { void cargarVentasModulo(); }, 250);
+  });
 
   window.ucVentasIrASubvista = irASubvista;
   window.ucRecargarReporteActivo = () => { void cargarReporteActivo(); };
-  activarModuloReporte(REPORTE_TIPO_DEFAULT, { limpiarBusqueda: false, recargar: false });
+  window.ucRecargarVentasModulo = () => { void cargarVentasModulo(); };
+  activarChipReporte(REPORTE_CHIP_DEFAULT, { limpiarBusqueda: false, recargar: false });
   actualizarControlesReporteToolbar();
   irASubvista(localStorage.getItem(VENTAS_SUBMODULO_KEY) || 'ventas');
 }

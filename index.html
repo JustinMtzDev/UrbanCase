@@ -226,7 +226,6 @@
         <div class="modulo-toolbar-reportes" id="modulo-toolbar-reportes" hidden>
           <select id="reporte-tipo-select" aria-label="Tipo de reporte">
             <option value="movimientos-inventario">Movimientos de inventario</option>
-            <option value="corte-caja">Corte de caja</option>
           </select>
           <div class="modulo-acciones">
             <input type="text" class="modulo-buscar" id="buscar-reporte" placeholder="Buscar...">
@@ -245,7 +244,63 @@
         </div>
       </div>
       <div id="subvista-ventas-modulo">
-        <div class="modulo-vacio-placeholder">Sin contenido por ahora</div>
+        <div class="modulo-toolbar-ventas" id="modulo-toolbar-ventas">
+          <div class="reporte-historial-filtros reporte-ventas-filtros" id="reporte-ventas-filtros">
+            <span class="reporte-historial-filtros-label">Ventas:</span>
+            <div class="reporte-accion-chips" id="reporte-ventas-periodo-chips" role="group" aria-label="Filtrar ventas por periodo">
+              <button type="button" class="reporte-accion-chip activo" data-reporte-ventas-periodo="diario">Diario</button>
+              <button type="button" class="reporte-accion-chip" data-reporte-ventas-periodo="semanal">Semanal</button>
+              <button type="button" class="reporte-accion-chip" data-reporte-ventas-periodo="mensual">Mensual</button>
+              <button type="button" class="reporte-accion-chip" data-reporte-ventas-periodo="anual">Anual</button>
+            </div>
+            <input type="date" class="modulo-buscar reporte-ventas-fecha" id="reporte-ventas-fecha" aria-label="Filtrar ventas por fecha">
+          </div>
+          <div class="modulo-acciones">
+            <input type="text" class="modulo-buscar" id="buscar-ventas" placeholder="Buscar venta...">
+            <button type="button" class="btn btn-cobrar" id="btn-recargar-ventas">Recargar</button>
+          </div>
+        </div>
+        <div id="ventas-panel-corte-caja" class="ventas-panel">
+          <div class="reporte-corte-resumen" id="reporte-corte-resumen">
+            <div class="reporte-corte-card">
+              <span class="reporte-corte-card-label">Ventas</span>
+              <strong class="reporte-corte-card-valor" id="reporte-corte-ventas">0</strong>
+            </div>
+            <div class="reporte-corte-card">
+              <span class="reporte-corte-card-label">Total</span>
+              <strong class="reporte-corte-card-valor" id="reporte-corte-total">$0.00</strong>
+            </div>
+            <div class="reporte-corte-card">
+              <span class="reporte-corte-card-label">Efectivo</span>
+              <strong class="reporte-corte-card-valor" id="reporte-corte-efectivo">$0.00</strong>
+            </div>
+            <div class="reporte-corte-card">
+              <span class="reporte-corte-card-label">Tarjeta</span>
+              <strong class="reporte-corte-card-valor" id="reporte-corte-tarjeta">$0.00</strong>
+            </div>
+            <div class="reporte-corte-card">
+              <span class="reporte-corte-card-label">Transferencia</span>
+              <strong class="reporte-corte-card-valor" id="reporte-corte-transferencia">$0.00</strong>
+            </div>
+          </div>
+          <div class="tabla-wrap">
+            <table class="tabla" id="tabla-reporte-corte-caja">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Folio</th>
+                  <th>Método</th>
+                  <th class="tabla-num">Total</th>
+                  <th>Usuario</th>
+                  <th>Sucursal</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reporte-corte-caja">
+                <tr><td colspan="6" class="tabla-vacio">Sin datos</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
       <div id="subvista-reportes-modulo" style="display:none">
         <div id="reporte-panel-movimientos-inventario" class="reporte-panel" data-reporte="movimientos-inventario">
@@ -321,44 +376,18 @@
               </tbody>
             </table>
           </div>
-        </div>
-        <div id="reporte-panel-corte-caja" class="reporte-panel" data-reporte="corte-caja" hidden>
-          <div class="reporte-corte-resumen" id="reporte-corte-resumen">
-            <div class="reporte-corte-card">
-              <span class="reporte-corte-card-label">Ventas</span>
-              <strong class="reporte-corte-card-valor" id="reporte-corte-ventas">0</strong>
-            </div>
-            <div class="reporte-corte-card">
-              <span class="reporte-corte-card-label">Total</span>
-              <strong class="reporte-corte-card-valor" id="reporte-corte-total">$0.00</strong>
-            </div>
-            <div class="reporte-corte-card">
-              <span class="reporte-corte-card-label">Efectivo</span>
-              <strong class="reporte-corte-card-valor" id="reporte-corte-efectivo">$0.00</strong>
-            </div>
-            <div class="reporte-corte-card">
-              <span class="reporte-corte-card-label">Tarjeta</span>
-              <strong class="reporte-corte-card-valor" id="reporte-corte-tarjeta">$0.00</strong>
-            </div>
-            <div class="reporte-corte-card">
-              <span class="reporte-corte-card-label">Transferencia</span>
-              <strong class="reporte-corte-card-valor" id="reporte-corte-transferencia">$0.00</strong>
-            </div>
-          </div>
-          <div class="tabla-wrap">
-            <table class="tabla" id="tabla-reporte-corte-caja">
+          <div class="tabla-wrap reporte-mov-detalle-wrap" id="reporte-historial-edicion-detalle-wrap" hidden>
+            <table class="tabla" id="tabla-reporte-historial-edicion-detalle">
               <thead>
                 <tr>
-                  <th>Fecha</th>
-                  <th>Folio</th>
-                  <th>Método</th>
-                  <th class="tabla-num">Total</th>
-                  <th>Usuario</th>
-                  <th>Sucursal</th>
+                  <th class="tabla-num">#</th>
+                  <th>Campo editado</th>
+                  <th>Valor anterior</th>
+                  <th>Valor nuevo</th>
                 </tr>
               </thead>
-              <tbody id="tbody-reporte-corte-caja">
-                <tr><td colspan="6" class="tabla-vacio">Sin datos</td></tr>
+              <tbody id="tbody-reporte-historial-edicion-detalle">
+                <tr><td colspan="4" class="tabla-vacio">Selecciona un registro para ver el detalle</td></tr>
               </tbody>
             </table>
           </div>

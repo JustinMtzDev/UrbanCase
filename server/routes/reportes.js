@@ -163,10 +163,15 @@ router.get('/historial-productos', async (req, res) => {
          ph.usuario_id,
          COALESCE(u.nombre, 'Sistema') AS usuario_nombre,
          ph.sucursal_id,
-         COALESCE(s.nombre, 'Sin sucursal') AS sucursal_nombre
+         COALESCE(s.nombre, 'Sin sucursal') AS sucursal_nombre,
+         p.costo_compra::float8 AS producto_costo_compra,
+         p.precio::float8 AS producto_precio,
+         p.precio_max::float8 AS producto_precio_max,
+         p.stock AS producto_stock
        FROM productos_historial ph
        LEFT JOIN usuarios u ON u.id = ph.usuario_id
        LEFT JOIN sucursales s ON s.id = ph.sucursal_id
+       LEFT JOIN productos p ON p.id = ph.producto_id
        ${where}
        ORDER BY ph.created_at DESC, ph.id DESC
        LIMIT $${idx}`,
@@ -182,6 +187,10 @@ router.get('/corte-caja', async (req, res) => {
   const limitRaw = Number(req.query.limit);
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 1000) : 300;
   const q = String(req.query.q || '').trim();
+  const periodoRaw = String(req.query.periodo || 'diario').trim().toLowerCase();
+  const periodosValidos = new Set(['diario', 'semanal', 'mensual', 'anual']);
+  const periodo = periodosValidos.has(periodoRaw) ? periodoRaw : 'diario';
+  const fechaRaw = String(req.query.fecha || '').trim();
   const filtros = [];
   const vals = [];
   let idx = 1;
@@ -195,6 +204,40 @@ router.get('/corte-caja', async (req, res) => {
     )`);
     vals.push(`%${q}%`);
     idx++;
+  }
+
+  let fechaExpr = `((NOW() AT TIME ZONE 'America/Mexico_City')::date)`;
+  if (fechaRaw) {
+    const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw);
+    if (!fechaValida) {
+      return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD' });
+    }
+    fechaExpr = `$${idx}::date`;
+    vals.push(fechaRaw);
+    idx++;
+  }
+
+  const tsVenta = `(v.created_at AT TIME ZONE 'America/Mexico_City')`;
+  if (periodo === 'semanal') {
+    filtros.push(`
+      ${tsVenta} >= date_trunc('week', ${fechaExpr}::timestamp)
+      AND ${tsVenta} < (date_trunc('week', ${fechaExpr}::timestamp) + INTERVAL '1 week')
+    `);
+  } else if (periodo === 'mensual') {
+    filtros.push(`
+      ${tsVenta} >= date_trunc('month', ${fechaExpr}::timestamp)
+      AND ${tsVenta} < (date_trunc('month', ${fechaExpr}::timestamp) + INTERVAL '1 month')
+    `);
+  } else if (periodo === 'anual') {
+    filtros.push(`
+      ${tsVenta} >= date_trunc('year', ${fechaExpr}::timestamp)
+      AND ${tsVenta} < (date_trunc('year', ${fechaExpr}::timestamp) + INTERVAL '1 year')
+    `);
+  } else {
+    filtros.push(`
+      ${tsVenta} >= ${fechaExpr}::timestamp
+      AND ${tsVenta} < (${fechaExpr}::timestamp + INTERVAL '1 day')
+    `);
   }
 
   vals.push(limit);
