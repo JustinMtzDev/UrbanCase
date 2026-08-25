@@ -38,7 +38,17 @@ app.use(express.json({ limit: '4mb' }));
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ ok: true, message: 'Servidor activo' });
+    const mpToken = Boolean(String(process.env.MP_ACCESS_TOKEN || '').trim());
+    const mpTerminal = String(process.env.MP_TERMINAL_ID || '').trim() || null;
+    res.json({
+      ok: true,
+      message: 'Servidor activo',
+      mp_point: {
+        token: mpToken,
+        terminal_id: mpTerminal,
+        impresion_habilitada: mpToken && Boolean(mpTerminal),
+      },
+    });
   } catch (err) {
     res.status(503).json({ ok: false, message: IS_PROD ? 'Servicio no disponible' : err.message });
   }
