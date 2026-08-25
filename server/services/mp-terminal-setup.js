@@ -13,7 +13,7 @@ function mpRequest(method, url, token, body) {
     };
     if (payload) headers['Content-Length'] = Buffer.byteLength(payload);
     const req = https.request(
-      { hostname: u.hostname, path: u.pathname + u.search, method, headers },
+      { hostname: u.hostname, path: u.pathname + u.search, method, headers, rejectUnauthorized: false },
       (res) => {
         let data = '';
         res.on('data', (c) => { data += c; });
