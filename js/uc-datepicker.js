@@ -289,11 +289,13 @@
         const esSel = sel && sel.y === c.y && sel.m === c.m && sel.d === c.d;
         const esHoy = hoy && hoy.y === c.y && hoy.m === c.m && hoy.d === c.d;
         const deshab = diaDeshabilitado(c.y, c.m, c.d);
+        const conReg = fechasActivas instanceof Set && fechasActivas.has(iso);
         const cls = [
           'uc-datepicker-day',
           c.otro ? 'uc-datepicker-day--otro' : '',
           esSel ? 'uc-datepicker-day--sel' : '',
           esHoy ? 'uc-datepicker-day--hoy' : '',
+          conReg ? 'uc-datepicker-day--con-registro' : '',
           deshab ? 'uc-datepicker-day--disabled' : '',
         ].filter(Boolean).join(' ');
         const dis = deshab ? ' disabled aria-disabled="true"' : '';
