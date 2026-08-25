@@ -3,6 +3,7 @@ const { randomUUID } = require('crypto');
 
 const ORDERS_URL = 'https://api.mercadopago.com/v1/orders';
 const ESPERA_ORDEN_MS = 15 * 60 * 1000;
+const MONTO_MINIMO_TARJETA = 5;
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -60,13 +61,30 @@ function mpRequest(method, url, { token, body, idempotencyKey, extraHeaders }) {
 }
 
 function mensajeMercadoPago(status, body) {
-  const detalle = body?.errors?.[0]?.message || body?.message || body?.error;
-  const codigo = body?.errors?.[0]?.code || '';
+  const err = body?.errors?.[0] || {};
+  const detalleExtra = Array.isArray(err.details) ? err.details.join(' ') : '';
+  const detalle = err.message || body?.message || body?.error;
+  const codigo = err.code || '';
   if (status === 409 || String(codigo).includes('already_queued')) {
     return 'La Point tiene una operación en cola. Entrá a Ingresar monto y pulsá Actualizar.';
   }
+  if (String(detalleExtra).includes('greater than or equal to 5.00')) {
+    return `Mercado Pago exige mínimo $${MONTO_MINIMO_TARJETA.toFixed(2)} MXN para cobro con tarjeta en la Point.`;
+  }
+  if (detalleExtra) return String(detalleExtra);
   if (detalle) return String(detalle);
   return `Mercado Pago ${status}`;
+}
+
+function validarMontoTarjeta(amount) {
+  const monto = redondearMoneda(amount);
+  if (monto < MONTO_MINIMO_TARJETA) {
+    return {
+      ok: false,
+      error: `El cobro con tarjeta en la Point requiere un mínimo de $${MONTO_MINIMO_TARJETA.toFixed(2)} MXN.`,
+    };
+  }
+  return { ok: true, monto };
 }
 
 function paymentIdDeOrden(order) {
@@ -85,6 +103,8 @@ async function crearOrdenCobro({ amount, terminalId, externalReference, descript
   if (!token || !terminal) {
     return { ok: false, error: 'Falta MP_ACCESS_TOKEN o terminal de la Point' };
   }
+  const montoCheck = validarMontoTarjeta(amount);
+  if (!montoCheck.ok) return montoCheck;
   const res = await mpRequest('POST', ORDERS_URL, {
     token,
     idempotencyKey: randomUUID(),
@@ -180,9 +200,11 @@ async function esperarOrdenProcesada(orderId) {
 }
 
 module.exports = {
+  MONTO_MINIMO_TARJETA,
   crearOrdenCobro,
   consultarOrden,
   esperarOrdenProcesada,
   crearReferenciaExterna,
   mensajePagoPoint,
+  validarMontoTarjeta,
 };

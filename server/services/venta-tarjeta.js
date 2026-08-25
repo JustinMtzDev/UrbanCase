@@ -3,9 +3,11 @@ const { armarDatosTicket } = require('./ticket-contenido');
 const { generarPdfTicket } = require('./ticket-pdf');
 const { reimprimirTicketAhora, terminalParaSucursal } = require('./ticket-point');
 const {
+  MONTO_MINIMO_TARJETA,
   crearOrdenCobro,
   crearReferenciaExterna,
   esperarOrdenProcesada,
+  validarMontoTarjeta,
 } = require('./mp-point-order');
 const {
   obtenerSucursalVenta,
@@ -104,6 +106,11 @@ async function procesarVentaTarjeta(req, res, { items, sucursalId, metodoPago })
     return res.status(400).json({
       error: 'Cobro con tarjeta requiere MP_ACCESS_TOKEN y terminal configurada en Railway.',
     });
+  }
+
+  const montoCheck = validarMontoTarjeta(subtotal);
+  if (!montoCheck.ok) {
+    return res.status(400).json({ error: montoCheck.error, monto_minimo_tarjeta: MONTO_MINIMO_TARJETA });
   }
 
   const externalReference = crearReferenciaExterna();
