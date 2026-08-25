@@ -5,6 +5,7 @@
   let periodoActivo = 'diario';
   let cargando = false;
   let chart7d = null;
+  let chart7dDiasCache = null;
 
   function apiBase() {
     if (typeof global.ucResolveApiBase === 'function') return global.ucResolveApiBase();
@@ -42,11 +43,35 @@
   }
 
   function esTemaOscuro() {
-    return document.body.classList.contains('theme-dark') || document.documentElement.classList.contains('theme-dark');
+    // Misma regla visual que las cards del dashboard (body:not(.theme-dark) → claro).
+    if (document.body) return document.body.classList.contains('theme-dark');
+    return document.documentElement.classList.contains('theme-dark');
+  }
+
+  function coloresChartTema() {
+    const oscuro = esTemaOscuro();
+    if (oscuro) {
+      return {
+        accent: '#00d4aa',
+        texto: '#8888a0',
+        titulo: '#e8e8ed',
+        tooltipBg: '#1a1a1f',
+        tooltipBorder: '#2d2d36',
+        grid: 'rgba(255,255,255,0.08)',
+      };
+    }
+    return {
+      accent: '#fa3030',
+      texto: '#5c5c66',
+      titulo: '#1c1c1e',
+      tooltipBg: '#ffffff',
+      tooltipBorder: 'rgba(0,0,0,0.12)',
+      grid: 'rgba(0,0,0,0.08)',
+    };
   }
 
   function colorAccent() {
-    return esTemaOscuro() ? '#00d4aa' : '#fa3030';
+    return coloresChartTema().accent;
   }
 
   function textoVariacion(pct, etiqueta) {
@@ -221,8 +246,9 @@
     const canvas = document.getElementById('home-chart-ventas-7d');
     if (!canvas || typeof global.Chart === 'undefined') return;
 
+    chart7dDiasCache = Array.isArray(dias) ? dias : [];
     destruirChart7d();
-    const lista = ordenarDiasLunDom(dias);
+    const lista = ordenarDiasLunDom(chart7dDiasCache);
     const labels = lista.map((d) => d.etiqueta || '');
     const ingresos = lista.map((d) => Number(d.ingresos) || 0);
     const meta = lista.map((d) => ({
@@ -231,9 +257,7 @@
       promedio: Number(d.ticket_promedio) || 0,
     }));
     const maxIng = Math.max(0, ...ingresos);
-    const c = colorAccent();
-    const texto = esTemaOscuro() ? '#b8b8c8' : '#5c5c66';
-    const grid = esTemaOscuro() ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+    const tema = coloresChartTema();
 
     chart7d = new global.Chart(canvas, {
       type: 'bar',
@@ -242,7 +266,7 @@
         datasets: [{
           label: 'Ingresos',
           data: ingresos,
-          backgroundColor: c,
+          backgroundColor: tema.accent,
           borderRadius: { topLeft: 8, topRight: 8 },
           borderSkipped: false,
           maxBarThickness: 48,
@@ -255,10 +279,10 @@
         plugins: {
           legend: { display: false },
           tooltip: {
-            backgroundColor: esTemaOscuro() ? '#1a1a1f' : '#fff',
-            titleColor: esTemaOscuro() ? '#e8e8ed' : '#1a1a1f',
-            bodyColor: texto,
-            borderColor: esTemaOscuro() ? '#2d2d36' : 'rgba(0,0,0,0.1)',
+            backgroundColor: tema.tooltipBg,
+            titleColor: tema.titulo,
+            bodyColor: tema.texto,
+            borderColor: tema.tooltipBorder,
             borderWidth: 1,
             padding: 12,
             displayColors: false,
@@ -280,24 +304,29 @@
         },
         scales: {
           x: {
-            ticks: { color: texto, font: { family: 'DM Sans', size: 11, weight: '600' } },
+            ticks: { color: tema.texto, font: { family: 'DM Sans', size: 11, weight: '600' } },
             grid: { display: false },
           },
           y: {
             beginAtZero: true,
             suggestedMax: maxIng <= 0 ? 100 : undefined,
             ticks: {
-              color: texto,
+              color: tema.texto,
               font: { size: 10 },
               callback: (v) => formatearPrecio(v),
             },
-            grid: { color: grid },
+            grid: { color: tema.grid },
           },
         },
       },
     });
 
     requestAnimationFrame(() => requestAnimationFrame(redimensionarChart7d));
+  }
+
+  function refrescarTemaChart7d() {
+    if (!chart7dDiasCache) return;
+    renderChart7d(chart7dDiasCache);
   }
 
   async function cargarChart7d() {
@@ -425,6 +454,7 @@
 
   global.ucCargarHomeDashboards = cargarHomeDashboards;
   global.initHomeDashboards = initHomeDashboards;
+  global.ucRefrescarTemaChart7d = refrescarTemaChart7d;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initHomeDashboards);
