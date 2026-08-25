@@ -12,7 +12,8 @@
     "migrate-inventario-movimientos": "node migrate-inventario-movimientos.js",
     "migrate-productos-historial": "node migrate-productos-historial.js",
     "migrate-ventas": "node migrate-ventas.js",
-    "migrate-tickets": "node migrate-tickets.js"
+    "migrate-tickets": "node migrate-tickets.js",
+    "setup-mp-terminal": "node setup-mp-terminal.js"
   },
   "keywords": [],
   "author": "",
