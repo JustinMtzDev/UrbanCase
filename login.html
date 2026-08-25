@@ -228,12 +228,15 @@
       height: 32px;
     }
     .icon-ojo-hover { display: none; }
-    .btn-toggle-pass:hover .icon-ojo-default { display: none; }
-    .btn-toggle-pass:hover .icon-ojo-hover { display: block; }
     .btn-toggle-pass.pass-visible .icon-ojo-default { display: none; }
     .btn-toggle-pass.pass-visible .icon-ojo-hover { display: block; }
-    .btn-toggle-pass.pass-visible:hover .icon-ojo-default { display: block; }
-    .btn-toggle-pass.pass-visible:hover .icon-ojo-hover { display: none; }
+    /* Hover solo en mouse: en touch :hover se pega e invierte el icono del ojo */
+    @media (hover: hover) and (pointer: fine) {
+      .btn-toggle-pass:hover .icon-ojo-default { display: none; }
+      .btn-toggle-pass:hover .icon-ojo-hover { display: block; }
+      .btn-toggle-pass.pass-visible:hover .icon-ojo-default { display: block; }
+      .btn-toggle-pass.pass-visible:hover .icon-ojo-hover { display: none; }
+    }
     .form-group input:-webkit-autofill,
     .form-group input:-webkit-autofill:hover,
     .form-group input:-webkit-autofill:focus,
@@ -424,6 +427,7 @@
       const visible = $passInput.type === 'text';
       $passInput.type = visible ? 'password' : 'text';
       $togglePass.classList.toggle('pass-visible', !visible);
+      $togglePass.blur();
     });
 
     const $form = document.getElementById('login-form');
