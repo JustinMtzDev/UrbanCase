@@ -42,6 +42,7 @@ router.post('/', async (req, res) => {
       items,
       sucursalId,
       bloquearStock: true,
+      rolUsuario: req.usuario?.rol,
     });
     const usuarioId = req.usuario?.id != null ? Number(req.usuario.id) : null;
     const venta = await persistirVenta(client, {

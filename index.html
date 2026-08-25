@@ -1234,6 +1234,16 @@
         <h3 id="modal-funda-precio-titulo">Selecciona el precio</h3>
         <p id="modal-funda-precio-subtitulo" class="modal-funda-precio-subtitulo"></p>
         <div id="modal-funda-precio-chips" class="form-chips form-chips-precio-funda-carrito"></div>
+        <div id="modal-funda-precio-libre" class="modal-funda-precio-libre" hidden>
+          <div class="form-row form-row-precio">
+            <label for="modal-funda-precio-libre-input">Precio unitario (solo esta venta)</label>
+            <div class="precio-contador">
+              <span class="precio-simbolo">$</span>
+              <input type="number" id="modal-funda-precio-libre-input" min="1" step="1" inputmode="numeric" placeholder="Ej. 180" aria-label="Precio unitario de esta venta">
+            </div>
+          </div>
+          <button type="button" class="btn btn-cobrar" id="modal-funda-precio-libre-aplicar">Aplicar</button>
+        </div>
         <div class="modal-acciones">
           <button type="button" class="btn btn-vaciar" id="modal-funda-precio-cancelar">Cancelar</button>
         </div>
