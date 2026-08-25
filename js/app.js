@@ -158,7 +158,7 @@ async function resolverSucursalAsignadaVendedor() {
       if (r.ok) {
         const list = await r.json();
         const match = Array.isArray(list)
-          ? list.find((s) => String(s.nombre || '').trim().toLowerCase() === nombre.toLowerCase())
+          ? list.find((s) => esSucursalActiva(s) && String(s.nombre || '').trim().toLowerCase() === nombre.toLowerCase())
           : null;
         if (match) {
           sid = parseSucursalIdUsuario(match);
@@ -313,6 +313,14 @@ function formatFecha(iso) {
 
 const MODULO_KEY = 'uc_modulo';
 const SUCURSAL_KEY = 'uc_sucursal';
+
+function esSucursalActiva(s) {
+  return Boolean(s) && s.activo !== false;
+}
+
+function filtrarSucursalesActivas(lista) {
+  return Array.isArray(lista) ? lista.filter(esSucursalActiva) : [];
+}
 const VENTAS_SUBMODULO_KEY = 'uc_ventas_submodulo';
 
 function guardarSucursalSeleccionada(sidRaw, nombre) {
@@ -481,10 +489,11 @@ async function restaurarSucursalGuardada() {
     if (!r.ok) return;
     const sucursales = await r.json();
     const found = Array.isArray(sucursales) ? sucursales.find((s) => Number(s.id) === sidNum) : null;
-    if (found) {
+    if (found && esSucursalActiva(found)) {
       aplicarSeleccionSucursal(String(sidNum), found.nombre || saved.nombre);
     } else {
       localStorage.removeItem(SUCURSAL_KEY);
+      aplicarSeleccionSucursal('all', 'Todas las sucursales');
     }
   } catch (_) {}
 }
@@ -742,7 +751,7 @@ function initDropdownSucursales() {
       $list.innerHTML = '';
       try {
         const r = await fetch(`${API}/sucursales`, { headers: authHeaders(false) });
-        const sucursales = await r.json();
+        const sucursales = filtrarSucursalesActivas(await r.json());
         $loading.style.display = 'none';
         if (sucursales.length === 0) {
           $list.innerHTML = '<div class="dropdown-sucursales-vacio">No hay sucursales</div>';
@@ -3565,7 +3574,7 @@ function initModalTrasladarInventario() {
     try {
       const r = await fetch(`${API}/sucursales`, { headers: authHeaders(false) });
       if (!r.ok) throw new Error('No se pudieron cargar las sucursales');
-      const sucursales = await r.json();
+      const sucursales = filtrarSucursalesActivas(await r.json());
       if (!Array.isArray(sucursales)) return;
       sucursales.forEach((s) => {
         const sid = Number(s.id);
@@ -8696,7 +8705,7 @@ function poblarSelectSucursales(opcional = true) {
     ? '<option value="">Sin asignar</option>'
     : '<option value="" disabled selected hidden>Seleccionar sucursal</option>';
   $sel.innerHTML = placeholder
-    + todasSucursales.filter(s => s.activo).map(s => `<option value="${s.id}">${s.nombre}</option>`).join('');
+    + todasSucursales.filter(esSucursalActiva).map(s => `<option value="${s.id}">${s.nombre}</option>`).join('');
   $sel.required = !opcional;
   if (val) $sel.value = val;
 }
@@ -8801,6 +8810,9 @@ function initSucursales() {
       if (!r.ok) return alert(data.error || 'Error al guardar');
       cerrarModalSucursal();
       cargarSucursales();
+      if (id && !datos.activo && String(leerDatasetSucursalInventario().raw) === String(id)) {
+        aplicarSeleccionSucursal('all', 'Todas las sucursales');
+      }
     } catch (err) {
       console.error(err);
       alert('Error de conexión. Asegúrate de: 1) Tener el servidor corriendo (npm start en carpeta server), 2) Acceder por http://localhost:3000');
