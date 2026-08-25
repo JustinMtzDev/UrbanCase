@@ -4689,6 +4689,42 @@ body.theme-dark .uc-datepicker-nav:hover {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+.uc-datepicker-day--con-registro:not(.uc-datepicker-day--sel):not(.uc-datepicker-day--disabled) {
+  font-weight: 700;
+  color: var(--accent);
+  position: relative;
+}
+
+.uc-datepicker-day--con-registro:not(.uc-datepicker-day--sel):not(.uc-datepicker-day--disabled)::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+}
+
+body:not(.theme-dark) .uc-datepicker-day--con-registro:not(.uc-datepicker-day--sel):not(.uc-datepicker-day--disabled) {
+  color: #ff3131;
+}
+
+body:not(.theme-dark) .uc-datepicker-day--con-registro:not(.uc-datepicker-day--sel):not(.uc-datepicker-day--disabled)::after {
+  background: #ff3131;
+}
+
+html.theme-dark .uc-datepicker-day--con-registro:not(.uc-datepicker-day--sel):not(.uc-datepicker-day--disabled),
+body.theme-dark .uc-datepicker-day--con-registro:not(.uc-datepicker-day--sel):not(.uc-datepicker-day--disabled) {
+  color: #00d4aa;
+}
+
+html.theme-dark .uc-datepicker-day--con-registro:not(.uc-datepicker-day--sel):not(.uc-datepicker-day--disabled)::after,
+body.theme-dark .uc-datepicker-day--con-registro:not(.uc-datepicker-day--sel):not(.uc-datepicker-day--disabled)::after {
+  background: #00d4aa;
+}
+
 .uc-datepicker-day:hover {
   background: rgba(250, 48, 48, 0.1);
   color: #ff3131;
