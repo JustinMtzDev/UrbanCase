@@ -7124,6 +7124,38 @@ body:not(.theme-dark) .dashboard-comparativa-card {
     width: 100%;
   }
 
+  /* Ventas: chips en una fila + calendario a 100% */
+  #reporte-ventas-filtros {
+    align-items: stretch;
+  }
+
+  #reporte-ventas-filtros .reporte-historial-filtros-label {
+    width: 100%;
+  }
+
+  #reporte-ventas-filtros .reporte-accion-chips {
+    display: flex;
+    flex-wrap: nowrap;
+    width: 100%;
+    gap: 0.35rem;
+  }
+
+  #reporte-ventas-filtros .reporte-accion-chip {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 0.3rem;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  #reporte-ventas-filtros .reporte-ventas-fecha,
+  #reporte-ventas-filtros .reporte-ventas-fecha.uc-datepicker {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
   #subvista-ventas-modulo .modulo-subtoolbar .modulo-acciones {
     margin-left: 0;
     width: 100%;
