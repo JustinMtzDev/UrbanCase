@@ -7041,4 +7041,108 @@ body:not(.theme-dark) .dashboard-comparativa-card {
   .inventario-producto-acciones {
     margin: 0.35rem 0.5rem 0.5rem;
   }
+
+  /* Ventas/Reportes: evitar desborde horizontal en celular */
+  #vista-modulo-ventas,
+  #vista-modulo,
+  #vista-modulo-clientes {
+    overflow-x: hidden;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  #vista-modulo-ventas .modulo-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+  }
+
+  #vista-modulo-ventas .modulo-toolbar .modulo-tabs {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  #vista-modulo-ventas .modulo-tab {
+    flex: 1 1 auto;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+    text-align: center;
+  }
+
+  #vista-modulo-ventas .modulo-toolbar-reportes {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+    width: 100%;
+  }
+
+  #vista-modulo-ventas .modulo-toolbar-reportes .custom-select-wrap {
+    grid-column: auto;
+    justify-self: stretch;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  #vista-modulo-ventas .modulo-toolbar-reportes .modulo-acciones {
+    grid-column: auto;
+    justify-self: stretch;
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  #vista-modulo-ventas .modulo-buscar,
+  #vista-modulo .modulo-buscar,
+  #vista-modulo-clientes .modulo-buscar {
+    min-width: 0;
+    flex: 1 1 140px;
+    width: 100%;
+  }
+
+  #subvista-ventas-modulo .modulo-subtoolbar,
+  #subvista-reportes-modulo .modulo-subtoolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #subvista-ventas-modulo .modulo-subtoolbar .reporte-ventas-filtros,
+  #subvista-reportes-modulo .modulo-subtoolbar .reporte-movimientos-filtros {
+    min-width: 0;
+    width: 100%;
+  }
+
+  #subvista-ventas-modulo .modulo-subtoolbar .modulo-acciones {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  #vista-modulo .modulo-header,
+  #vista-modulo-ventas .modulo-header,
+  #vista-modulo-clientes .modulo-header {
+    flex-wrap: wrap;
+  }
+
+  #vista-modulo .modulo-header .modulo-acciones,
+  #vista-modulo-ventas .modulo-header .modulo-acciones,
+  #vista-modulo-clientes .modulo-header .modulo-acciones {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  #vista-modulo-ventas .reporte-corte-resumen,
+  #reporte-inventario-resumen {
+    grid-template-columns: 1fr;
+  }
+
+  #vista-modulo-ventas .tabla-wrap,
+  #vista-modulo .tabla-wrap,
+  #vista-modulo-clientes .tabla-wrap {
+    max-width: 100%;
+  }
 }
