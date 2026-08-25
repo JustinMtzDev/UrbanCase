@@ -6757,6 +6757,10 @@ function initPOS() {
 
     if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = true;
     if ($btnCobrar) $btnCobrar.disabled = true;
+    const labelConfirmarOriginal = $modalCobroConfirmar?.textContent || 'Confirmar venta';
+    if (metodoPagoCobro === 'tarjeta' && $modalCobroConfirmar) {
+      $modalCobroConfirmar.textContent = 'Esperando pago en Point…';
+    }
     try {
       const r = await fetch(`${API}/ventas`, {
         method: 'POST',
@@ -6769,7 +6773,7 @@ function initPOS() {
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
-        alert(data.error || 'No se pudo registrar la venta');
+        alert(data.error || data.pago_point?.aviso || 'No se pudo registrar la venta');
         return;
       }
       cerrarModalCobro();
@@ -6778,8 +6782,11 @@ function initPOS() {
       if ($modalVentaSub) {
         let extraTicket = '';
         if (data.ticket?.print_en_cola) extraTicket = ' · Ticket en cola (Point en Ingresar monto)';
-        else if (data.ticket?.print) extraTicket = ' · Ticket enviado a la impresora';
-        else if (data.ticket?.print_omitido) extraTicket = '';
+        else if (data.ticket?.print) {
+          extraTicket = metodoPagoCobro === 'tarjeta'
+            ? ' · Boucher y ticket impresos'
+            : ' · Ticket enviado a la impresora';
+        } else if (data.ticket?.print_omitido) extraTicket = '';
         else if (data.ticket && data.ticket.print === false) {
           extraTicket = data.ticket.print_error
             ? ` · ${data.ticket.print_error}`
@@ -6787,6 +6794,8 @@ function initPOS() {
         }
         if (metodoPagoCobro === 'efectivo' && efectivoRecibido != null) {
           $modalVentaSub.textContent = `Efectivo · Recibido ${formatearPrecio(efectivoRecibido)} · Cambio ${formatearPrecio(efectivoCambio)}${extraTicket}`;
+        } else if (metodoPagoCobro === 'tarjeta' && data.pago_point?.ok) {
+          $modalVentaSub.textContent = `Tarjeta aprobada en Point${extraTicket}`;
         } else {
           $modalVentaSub.textContent = `Pago con ${etiquetaMetodoPago(metodoPagoCobro)}${extraTicket}`;
         }
@@ -6800,7 +6809,10 @@ function initPOS() {
     } catch (err) {
       alert(err?.message || 'Error de red al cobrar');
     } finally {
-      if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = false;
+      if ($modalCobroConfirmar) {
+        $modalCobroConfirmar.disabled = false;
+        $modalCobroConfirmar.textContent = labelConfirmarOriginal;
+      }
       if ($btnCobrar) $btnCobrar.disabled = carrito.length === 0;
     }
   }
