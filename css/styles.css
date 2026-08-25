@@ -7048,7 +7048,6 @@ body:not(.theme-dark) .dashboard-comparativa-card {
   #vista-modulo-clientes {
     overflow-x: hidden;
     min-width: 0;
-    max-width: 100%;
   }
 
   #vista-modulo-ventas .modulo-toolbar {
