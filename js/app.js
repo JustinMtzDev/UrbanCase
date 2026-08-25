@@ -5899,6 +5899,8 @@ function initPOS() {
   const $cobroEfectivoCambioWrap = document.getElementById('cobro-efectivo-cambio-wrap');
   const $cobroEfectivoCambio = document.getElementById('cobro-efectivo-cambio');
   const $cobroEfectivoFalta = document.getElementById('cobro-efectivo-falta');
+  const $modalCobroAviso = document.getElementById('modal-cobro-aviso');
+  const MONTO_MINIMO_TARJETA = 5;
   let metodoPagoCobro = '';
   let sucursalCobroId = null;
   let totalCobroActualNum = 0;
@@ -6525,17 +6527,44 @@ function initPOS() {
     if ($cobroEfectivoCambio) $cobroEfectivoCambio.textContent = formatearPrecio(0);
   }
 
+  function ocultarAvisoCobro() {
+    if ($modalCobroAviso) {
+      $modalCobroAviso.hidden = true;
+      $modalCobroAviso.setAttribute('hidden', '');
+      $modalCobroAviso.textContent = '';
+    }
+  }
+
   function actualizarPanelEfectivoCobro() {
     const metodoSeleccionado = metodoPagoCobro === 'efectivo'
       || metodoPagoCobro === 'tarjeta'
       || metodoPagoCobro === 'transferencia';
     const esEfectivo = metodoPagoCobro === 'efectivo';
+    const esTarjeta = metodoPagoCobro === 'tarjeta';
     if ($modalCobroEfectivo) $modalCobroEfectivo.hidden = !esEfectivo;
     if (!metodoSeleccionado) {
       ocultarIndicadoresEfectivoCobro();
+      ocultarAvisoCobro();
       if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = true;
       return;
     }
+    if (esTarjeta) {
+      ocultarIndicadoresEfectivoCobro();
+      const total = totalCobroActualNum;
+      if (total < MONTO_MINIMO_TARJETA) {
+        if ($modalCobroAviso) {
+          $modalCobroAviso.hidden = false;
+          $modalCobroAviso.removeAttribute('hidden');
+          $modalCobroAviso.textContent = `Tarjeta en la Point requiere mínimo ${formatearPrecio(MONTO_MINIMO_TARJETA)} (total actual ${formatearPrecio(total)}).`;
+        }
+        if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = true;
+        return;
+      }
+      ocultarAvisoCobro();
+      if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = false;
+      return;
+    }
+    ocultarAvisoCobro();
     if (!esEfectivo) {
       ocultarIndicadoresEfectivoCobro();
       if ($modalCobroConfirmar) $modalCobroConfirmar.disabled = false;
