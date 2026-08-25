@@ -315,6 +315,34 @@
       text-align: center;
     }
     .login-error.visible { display: block; }
+
+    /* Solo celular (no iPad): márgenes y centrado del login */
+    @media (max-width: 700px) {
+      body {
+        padding:
+          max(20px, env(safe-area-inset-top))
+          max(20px, env(safe-area-inset-right))
+          max(20px, env(safe-area-inset-bottom))
+          max(20px, env(safe-area-inset-left));
+        overflow-x: hidden;
+        overflow-y: auto;
+        align-items: center;
+        justify-content: center;
+        min-height: 100dvh;
+      }
+      .login-card {
+        width: 100%;
+        max-width: 360px;
+        margin-left: auto;
+        margin-right: auto;
+        padding: 28px 22px;
+      }
+      .login-logo {
+        margin-bottom: 24px;
+      }
+      .login-logo .logo-icon { height: 100px; }
+      .login-logo .logo-brand { height: 56px; }
+    }
   </style>
   <script src="js/theme.js"></script>
 </head>
