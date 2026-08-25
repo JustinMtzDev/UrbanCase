@@ -24,6 +24,7 @@ function mpRequest(method, url, body) {
         path: u.pathname + u.search,
         method,
         headers,
+        rejectUnauthorized: false,
       },
       (res) => {
         let data = '';
@@ -43,7 +44,7 @@ function mpRequest(method, url, body) {
 
 async function listarTerminales() {
   const res = await mpRequest('GET', 'https://api.mercadopago.com/terminals/v1/list');
-  if (!res.ok) {
+  if (res.status !== 200) {
     throw new Error(`Listar terminales falló (${res.status}): ${JSON.stringify(res.body)}`);
   }
   const lista = res.body?.data?.terminals || res.body?.terminals || [];
