@@ -5,6 +5,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const pool = require('./config/db');
+const { ensureTerminalPdvMode, syncSucursalesTerminalId } = require('./services/mp-terminal-setup');
 const { authMiddleware } = require('./middleware/auth');
 const { requireAdmin } = require('./middleware/rbac');
 const { staticGuard } = require('./middleware/static-guard');
@@ -75,4 +76,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`UrbanCase corriendo en http://localhost:${PORT}`);
   console.log(`Seguridad: headers, rate-limit login, RBAC, sesión ${process.env.SESSION_TTL_MS || 43200000}ms`);
   if (!IS_PROD) console.log('Modo desarrollo (NODE_ENV != production)');
+  void syncSucursalesTerminalId(pool);
+  void ensureTerminalPdvMode();
 });
