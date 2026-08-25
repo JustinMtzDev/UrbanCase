@@ -46,23 +46,32 @@
           <img src="img/logoDark.svg" alt="" class="logo-icon logo-icon-dark" aria-hidden="true">
         </span>
       </div>
-      <nav class="categorias">
-        <button type="button" class="categoria-btn activo" data-categoria="todos">Home</button>
-        <div class="dropdown-sucursales">
-          <button type="button" class="categoria-btn dropdown-sucursales-trigger" id="dropdown-sucursales-btn"><span id="dropdown-sucursales-label">Todas las sucursales</span> <span class="dropdown-arrow">▼</span></button>
-          <div class="dropdown-sucursales-menu" id="dropdown-sucursales-menu">
-            <div class="dropdown-sucursales-loading" id="dropdown-sucursales-loading">Cargando...</div>
-            <div class="dropdown-sucursales-list" id="dropdown-sucursales-list"></div>
+      <button type="button" class="nav-menu-toggle" id="btn-nav-menu" aria-label="Abrir menú" aria-expanded="false" aria-controls="header-nav-wrap">
+        <i class="fa-solid fa-bars nav-menu-icon-abrir" aria-hidden="true"></i>
+        <i class="fa-solid fa-xmark nav-menu-icon-cerrar" aria-hidden="true"></i>
+      </button>
+      <div class="header-nav-wrap" id="header-nav-wrap">
+        <nav class="categorias">
+          <button type="button" class="categoria-btn activo" data-categoria="todos">Home</button>
+          <div class="dropdown-sucursales">
+            <button type="button" class="categoria-btn dropdown-sucursales-trigger" id="dropdown-sucursales-btn"><span id="dropdown-sucursales-label">Todas las sucursales</span> <span class="dropdown-arrow">▼</span></button>
+            <div class="dropdown-sucursales-menu" id="dropdown-sucursales-menu">
+              <div class="dropdown-sucursales-loading" id="dropdown-sucursales-loading">Cargando...</div>
+              <div class="dropdown-sucursales-list" id="dropdown-sucursales-list"></div>
+            </div>
           </div>
+          <button type="button" class="categoria-btn" data-categoria="inventario">Inventario</button>
+          <button type="button" class="categoria-btn" data-categoria="ventas">Ventas</button>
+          <button type="button" class="categoria-btn" data-categoria="clientes">Clientes y Proveedores</button>
+          <button type="button" class="categoria-btn" data-categoria="usuarios">Gestión</button>
+        </nav>
+        <div class="usuario-header" id="usuario-info" style="display:none">
+          <div class="usuario-header-datos">
+            <span class="usuario-nombre" id="usuario-nombre"></span>
+            <span class="badge usuario-rol-badge" id="usuario-rol-badge"></span>
+          </div>
+          <button type="button" class="btn-logout" id="btn-logout">Salir</button>
         </div>
-        <button type="button" class="categoria-btn" data-categoria="inventario">Inventario</button>
-        <button type="button" class="categoria-btn" data-categoria="ventas">Ventas y Reportes</button>
-        <button type="button" class="categoria-btn" data-categoria="clientes">Clientes y Proveedores</button>
-        <button type="button" class="categoria-btn" data-categoria="usuarios">Gestión</button>
-      </nav>
-      <div class="usuario-header" id="usuario-info" style="display:none">
-        <span class="usuario-nombre" id="usuario-nombre"></span>
-        <button type="button" class="btn-logout" id="btn-logout">Salir</button>
       </div>
     </header>
 
@@ -92,7 +101,68 @@
         <button type="button" class="inventario-vista-btn btn-mostrar-carrito-home" id="btn-mostrar-carrito-home" title="Mostrar carrito" aria-label="Mostrar carrito" hidden>
           <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
         </button>
-        <div id="productos" class="productos-grid contenido-home"></div>
+        <div id="productos" class="contenido-home">
+          <div id="home-dashboards" class="home-dashboards">
+            <h2 class="home-dashboards-titulo">DASHBOARDS</h2>
+            <div class="uc-segmented" id="home-dash-periodo" role="group" aria-label="Periodo del dashboard">
+              <button type="button" class="uc-segmented-btn activo" data-dash-periodo="diario">Hoy</button>
+              <button type="button" class="uc-segmented-btn" data-dash-periodo="semanal">Semanal</button>
+              <button type="button" class="uc-segmented-btn" data-dash-periodo="mensual">Mensual</button>
+              <button type="button" class="uc-segmented-btn" data-dash-periodo="anual">Anual</button>
+            </div>
+            <div class="dashboard-kpi-grid">
+              <article class="dashboard-kpi-card">
+                <span class="dashboard-kpi-label">Ingresos</span>
+                <strong class="dashboard-kpi-valor" id="dash-kpi-ingresos">$0.00</strong>
+                <span class="dashboard-kpi-meta" id="dash-kpi-ingresos-meta"></span>
+              </article>
+              <article class="dashboard-kpi-card">
+                <span class="dashboard-kpi-label">Ingresos por comisión</span>
+                <strong class="dashboard-kpi-valor" id="dash-kpi-comision">$0.00</strong>
+                <span class="dashboard-kpi-meta dashboard-kpi-meta--muted">Ventas consignadas</span>
+              </article>
+              <article class="dashboard-kpi-card">
+                <span class="dashboard-kpi-label">Tickets</span>
+                <strong class="dashboard-kpi-valor" id="dash-kpi-tickets">0</strong>
+                <span class="dashboard-kpi-meta dashboard-kpi-meta--muted">Ventas</span>
+              </article>
+              <article class="dashboard-kpi-card">
+                <span class="dashboard-kpi-label">Ticket promedio</span>
+                <strong class="dashboard-kpi-valor" id="dash-kpi-ticket">$0.00</strong>
+                <span class="dashboard-kpi-meta dashboard-kpi-meta--muted">por venta</span>
+              </article>
+            </div>
+            <article class="dashboard-chart-card">
+              <h3 class="dashboard-chart-titulo">Ventas últimos 7 días</h3>
+              <div class="dashboard-chart-wrap">
+                <canvas id="home-chart-ventas-7d" aria-label="Ventas últimos 7 días"></canvas>
+              </div>
+            </article>
+            <section class="dashboard-top-productos" id="home-top-productos" aria-label="Top 10 productos más vendidos">
+              <div class="dashboard-top-productos-head">
+                <div>
+                  <h3 class="dashboard-chart-titulo dashboard-top-productos-titulo">Top 10 más vendidos</h3>
+                  <p class="dashboard-top-productos-sub" id="home-top-productos-sub">Todas las sucursales</p>
+                </div>
+                <div class="dashboard-top-productos-nav">
+                  <button type="button" class="dashboard-top-nav-btn" data-top-dir="prev" aria-label="Anterior">
+                    <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+                  </button>
+                  <button type="button" class="dashboard-top-nav-btn" data-top-dir="next" aria-label="Siguiente">
+                    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="dashboard-top-track" id="home-top-productos-track" role="list"></div>
+            </section>
+            <section class="dashboard-comparativa" id="home-comparativa-sucursales" hidden>
+              <h3 class="dashboard-chart-titulo dashboard-comparativa-titulo">Comparativa entre sucursales</h3>
+              <p class="dashboard-top-productos-sub" id="home-comparativa-sub">Participación en ingresos del periodo</p>
+              <div class="dashboard-comparativa-bar" id="home-comparativa-bar" aria-hidden="true"></div>
+              <div class="dashboard-comparativa-grid" id="home-comparativa-grid"></div>
+            </section>
+          </div>
+        </div>
         <div id="contenido-inventario" class="inventario-contenido" style="display:none">
           <div class="inventario-header">
             <div class="inventario-buscador-wrap">
@@ -218,8 +288,8 @@
     </div>
 
     <div class="app-glass modulo-panel" id="vista-modulo-ventas" style="display:none">
-      <div class="modulo-toolbar">
-        <div class="modulo-tabs">
+      <div class="modulo-toolbar" id="modulo-ventas-toolbar" hidden>
+        <div class="modulo-tabs" id="modulo-ventas-tabs">
           <button type="button" class="modulo-tab activo" id="tab-ventas-modulo">Ventas</button>
           <button type="button" class="modulo-tab" id="tab-reportes-modulo">Reportes</button>
         </div>
@@ -231,6 +301,91 @@
             <input type="text" class="modulo-buscar" id="buscar-reporte" placeholder="Buscar...">
             <button type="button" class="btn btn-cobrar" id="btn-recargar-reporte">Recargar</button>
           </div>
+        </div>
+      </div>
+      <div id="subvista-ventas-modulo">
+        <div class="modulo-subtoolbar" id="modulo-toolbar-ventas">
+          <div class="reporte-historial-filtros reporte-ventas-filtros" id="reporte-ventas-filtros">
+            <span class="reporte-historial-filtros-label">Ventas:</span>
+            <div class="reporte-accion-chips" id="reporte-ventas-periodo-chips" role="group" aria-label="Filtrar ventas por periodo">
+              <button type="button" class="reporte-accion-chip activo" data-reporte-ventas-periodo="diario">Diario</button>
+              <button type="button" class="reporte-accion-chip" data-reporte-ventas-periodo="semanal">Semanal</button>
+              <button type="button" class="reporte-accion-chip" data-reporte-ventas-periodo="mensual">Mensual</button>
+              <button type="button" class="reporte-accion-chip" data-reporte-ventas-periodo="anual">Anual</button>
+            </div>
+            <input type="date" class="reporte-ventas-fecha" id="reporte-ventas-fecha" aria-label="Filtrar ventas por fecha">
+          </div>
+          <div class="modulo-acciones">
+            <button type="button" class="btn btn-cobrar" id="btn-recargar-ventas">Recargar</button>
+          </div>
+        </div>
+        <div id="ventas-panel-corte-caja" class="ventas-panel">
+          <div class="reporte-corte-resumen-bar">
+            <div class="reporte-corte-resumen" id="reporte-corte-resumen">
+              <div class="reporte-corte-card">
+                <span class="reporte-corte-card-label">Ventas</span>
+                <strong class="reporte-corte-card-valor" id="reporte-corte-ventas">0</strong>
+              </div>
+              <div class="reporte-corte-card">
+                <span class="reporte-corte-card-label">Total</span>
+                <strong class="reporte-corte-card-valor" id="reporte-corte-total">$0.00</strong>
+              </div>
+              <div class="reporte-corte-card">
+                <span class="reporte-corte-card-label">Efectivo</span>
+                <strong class="reporte-corte-card-valor" id="reporte-corte-efectivo">$0.00</strong>
+              </div>
+              <div class="reporte-corte-card">
+                <span class="reporte-corte-card-label">Tarjeta</span>
+                <strong class="reporte-corte-card-valor" id="reporte-corte-tarjeta">$0.00</strong>
+              </div>
+              <div class="reporte-corte-card">
+                <span class="reporte-corte-card-label">Transferencia</span>
+                <strong class="reporte-corte-card-valor" id="reporte-corte-transferencia">$0.00</strong>
+              </div>
+            </div>
+            <button type="button" class="reporte-corte-recargar-btn" id="btn-recargar-ventas-icono" title="Recargar ventas" aria-label="Recargar ventas" hidden>
+              <i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div class="tabla-wrap">
+            <table class="tabla" id="tabla-reporte-corte-caja">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Folio</th>
+                  <th>Método</th>
+                  <th class="tabla-num">Arts.</th>
+                  <th class="tabla-num">Total</th>
+                  <th>Usuario</th>
+                  <th class="tabla-ticket">Ticket</th>
+                  <th>Sucursal</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reporte-corte-caja">
+                <tr><td colspan="8" class="tabla-vacio">Sin datos</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="tabla-wrap reporte-mov-detalle-wrap" id="ventas-detalle-wrap" hidden>
+            <table class="tabla" id="tabla-ventas-detalle">
+              <thead>
+                <tr>
+                  <th class="tabla-num">#</th>
+                  <th>Productos</th>
+                  <th class="tabla-num">Cantidad</th>
+                  <th class="tabla-num">Precio unitario</th>
+                  <th class="tabla-num">Total</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-ventas-detalle">
+                <tr><td colspan="5" class="tabla-vacio">Selecciona una venta para ver el detalle</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="subvista-reportes-modulo" style="display:none">
+        <div class="modulo-subtoolbar" id="modulo-toolbar-reportes-filtros">
           <div class="reporte-historial-filtros reporte-movimientos-filtros" id="reporte-movimientos-filtros">
             <span class="reporte-historial-filtros-label">Movimientos:</span>
             <div class="reporte-accion-chips" id="reporte-movimientos-chips" role="group" aria-label="Filtrar movimientos">
@@ -242,67 +397,20 @@
             </div>
           </div>
         </div>
-      </div>
-      <div id="subvista-ventas-modulo">
-        <div class="modulo-toolbar-ventas" id="modulo-toolbar-ventas">
-          <div class="reporte-historial-filtros reporte-ventas-filtros" id="reporte-ventas-filtros">
-            <span class="reporte-historial-filtros-label">Ventas:</span>
-            <div class="reporte-accion-chips" id="reporte-ventas-periodo-chips" role="group" aria-label="Filtrar ventas por periodo">
-              <button type="button" class="reporte-accion-chip activo" data-reporte-ventas-periodo="diario">Diario</button>
-              <button type="button" class="reporte-accion-chip" data-reporte-ventas-periodo="semanal">Semanal</button>
-              <button type="button" class="reporte-accion-chip" data-reporte-ventas-periodo="mensual">Mensual</button>
-              <button type="button" class="reporte-accion-chip" data-reporte-ventas-periodo="anual">Anual</button>
-            </div>
-            <input type="date" class="modulo-buscar reporte-ventas-fecha" id="reporte-ventas-fecha" aria-label="Filtrar ventas por fecha">
+        <div class="reporte-corte-resumen" id="reporte-inventario-resumen">
+          <div class="reporte-corte-card">
+            <span class="reporte-corte-card-label">Total de productos en inventario</span>
+            <strong class="reporte-corte-card-valor" id="reporte-inventario-total">0</strong>
           </div>
-          <div class="modulo-acciones">
-            <input type="text" class="modulo-buscar" id="buscar-ventas" placeholder="Buscar venta...">
-            <button type="button" class="btn btn-cobrar" id="btn-recargar-ventas">Recargar</button>
+          <div class="reporte-corte-card">
+            <span class="reporte-corte-card-label">Total productos sin stock</span>
+            <strong class="reporte-corte-card-valor" id="reporte-inventario-sin-stock">0</strong>
+          </div>
+          <div class="reporte-corte-card">
+            <span class="reporte-corte-card-label">Stock total de productos</span>
+            <strong class="reporte-corte-card-valor" id="reporte-inventario-stock-total">0</strong>
           </div>
         </div>
-        <div id="ventas-panel-corte-caja" class="ventas-panel">
-          <div class="reporte-corte-resumen" id="reporte-corte-resumen">
-            <div class="reporte-corte-card">
-              <span class="reporte-corte-card-label">Ventas</span>
-              <strong class="reporte-corte-card-valor" id="reporte-corte-ventas">0</strong>
-            </div>
-            <div class="reporte-corte-card">
-              <span class="reporte-corte-card-label">Total</span>
-              <strong class="reporte-corte-card-valor" id="reporte-corte-total">$0.00</strong>
-            </div>
-            <div class="reporte-corte-card">
-              <span class="reporte-corte-card-label">Efectivo</span>
-              <strong class="reporte-corte-card-valor" id="reporte-corte-efectivo">$0.00</strong>
-            </div>
-            <div class="reporte-corte-card">
-              <span class="reporte-corte-card-label">Tarjeta</span>
-              <strong class="reporte-corte-card-valor" id="reporte-corte-tarjeta">$0.00</strong>
-            </div>
-            <div class="reporte-corte-card">
-              <span class="reporte-corte-card-label">Transferencia</span>
-              <strong class="reporte-corte-card-valor" id="reporte-corte-transferencia">$0.00</strong>
-            </div>
-          </div>
-          <div class="tabla-wrap">
-            <table class="tabla" id="tabla-reporte-corte-caja">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Folio</th>
-                  <th>Método</th>
-                  <th class="tabla-num">Total</th>
-                  <th>Usuario</th>
-                  <th>Sucursal</th>
-                </tr>
-              </thead>
-              <tbody id="tbody-reporte-corte-caja">
-                <tr><td colspan="6" class="tabla-vacio">Sin datos</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      <div id="subvista-reportes-modulo" style="display:none">
         <div id="reporte-panel-movimientos-inventario" class="reporte-panel" data-reporte="movimientos-inventario">
           <div class="tabla-wrap">
             <table class="tabla" id="tabla-reporte-movimientos">
@@ -533,8 +641,10 @@
           <div class="form-row">
             <label>Rol</label>
             <select id="mu-rol">
-              <option value="vendedor">Vendedor</option>
+              <option value="dueno">Dueño</option>
+              <option value="developer">Developer</option>
               <option value="admin">Admin</option>
+              <option value="vendedor">Vendedor</option>
             </select>
           </div>
           <div class="form-row">
@@ -1243,6 +1353,9 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+  <script src="js/uc-datepicker.js"></script>
+  <script src="js/home-dashboards.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

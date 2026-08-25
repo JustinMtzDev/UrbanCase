@@ -2,7 +2,8 @@ CREATE TABLE IF NOT EXISTS sucursales (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(200) NOT NULL,
   activo BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMP DEFAULT NOW(),
+  mp_terminal_id VARCHAR(80)
 );
 
 CREATE TABLE IF NOT EXISTS usuarios (
@@ -177,6 +178,8 @@ CREATE TABLE IF NOT EXISTS public.ventas (
   subtotal NUMERIC(12,2) NOT NULL DEFAULT 0,
   total NUMERIC(12,2) NOT NULL DEFAULT 0,
   metodo_pago VARCHAR(30),
+  ticket_pdf_path TEXT,
+  ticket_impreso_at TIMESTAMPTZ,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -200,3 +203,25 @@ CREATE TABLE IF NOT EXISTS public.venta_detalle (
 
 CREATE INDEX IF NOT EXISTS idx_venta_detalle_venta ON public.venta_detalle(venta_id);
 CREATE INDEX IF NOT EXISTS idx_venta_detalle_producto ON public.venta_detalle(producto_id);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'sucursales' AND column_name = 'mp_terminal_id'
+  ) THEN
+    ALTER TABLE public.sucursales ADD COLUMN mp_terminal_id VARCHAR(80);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'ventas' AND column_name = 'ticket_pdf_path'
+  ) THEN
+    ALTER TABLE public.ventas ADD COLUMN ticket_pdf_path TEXT;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'ventas' AND column_name = 'ticket_impreso_at'
+  ) THEN
+    ALTER TABLE public.ventas ADD COLUMN ticket_impreso_at TIMESTAMPTZ;
+  END IF;
+END $$;

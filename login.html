@@ -15,6 +15,18 @@
     html { font-size: 16px; }
     html.texto-grande { font-size: 18px; }
 
+    body,
+    body * {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .form-group input,
+    .form-group input * {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+
     body {
       font-family: 'DM Sans', sans-serif;
       min-height: 100vh;

@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../config/db');
+const { requireAdmin } = require('../middleware/rbac');
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ error: 'El nombre es requerido' });
   try {
@@ -33,7 +34,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   const { nombre, activo } = req.body;
   try {
     const { rows } = await pool.query(
@@ -50,7 +51,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query('DELETE FROM sucursales WHERE id = $1 RETURNING id', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Sucursal no encontrada' });

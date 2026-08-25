@@ -14,7 +14,219 @@ function ucResolveApiBase() {
   return `${origin}/api`;
 }
 const API = ucResolveApiBase();
+if (typeof window !== 'undefined') window.ucResolveApiBase = ucResolveApiBase;
 let token = '';
+
+const ROLES_ACCESO_COMPLETO = new Set(['admin', 'developer', 'dueno', 'dueño']);
+
+function normalizarRolUsuario(rol) {
+  const r = String(rol ?? '').trim().toLowerCase();
+  if (r === 'dueño' || r === 'owner') return 'dueno';
+  return r;
+}
+
+function esUsuarioConAccesoCompleto(rol) {
+  const r = normalizarRolUsuario(rol ?? window.ucUsuarioSesion?.rol);
+  return ROLES_ACCESO_COMPLETO.has(r);
+}
+
+function rolRequiereSucursalAsignada(rol) {
+  const r = normalizarRolUsuario(rol);
+  return r === 'admin' || r === 'vendedor';
+}
+
+function esUsuarioVendedor(rol) {
+  return normalizarRolUsuario(rol ?? window.ucUsuarioSesion?.rol) === 'vendedor';
+}
+
+function esUsuarioAdmin() {
+  return esUsuarioConAccesoCompleto();
+}
+
+function claseBadgeRol(rol) {
+  const r = normalizarRolUsuario(rol);
+  if (r === 'dueno') return 'badge-dueno';
+  if (r === 'developer') return 'badge-developer';
+  if (r === 'admin') return 'badge-admin';
+  return 'badge-vendedor';
+}
+
+function etiquetaRolUsuario(rol) {
+  const r = normalizarRolUsuario(rol);
+  const map = {
+    dueno: 'Dueño',
+    developer: 'Developer',
+    admin: 'Admin',
+    vendedor: 'Vendedor',
+  };
+  return map[r] || String(rol || '');
+}
+
+function puedeGestionarInventario() {
+  return esUsuarioAdmin();
+}
+
+function forzarVentasSoloHoyVendedor() {
+  if (esUsuarioAdmin()) return;
+  reporteVentasPeriodoFiltro = 'diario';
+  reporteVentasFechaFiltro = fechaHoyLocalInput();
+}
+
+function aplicarUiPermisosModuloVentas() {
+  const esAdmin = esUsuarioAdmin();
+  const esVendedor = !esAdmin;
+  document.body.classList.toggle('uc-ventas-solo-hoy', esVendedor);
+  document.body.classList.toggle('uc-modulo-ventas-admin', esAdmin);
+  const $filtros = document.getElementById('reporte-ventas-filtros');
+  const $toolbarVentas = document.getElementById('modulo-toolbar-ventas');
+  const $toolbarModulo = document.getElementById('modulo-ventas-toolbar');
+  const $btnRecargarIcono = document.getElementById('btn-recargar-ventas-icono');
+  if ($filtros) $filtros.hidden = esVendedor;
+  if ($toolbarVentas) $toolbarVentas.hidden = esVendedor;
+  if ($toolbarModulo) $toolbarModulo.hidden = esVendedor;
+  if ($btnRecargarIcono) $btnRecargarIcono.hidden = !esVendedor;
+  if (esVendedor) forzarVentasSoloHoyVendedor();
+}
+
+function aplicarUiPermisosInventarioEscritura() {
+  const puede = puedeGestionarInventario();
+  document.body.classList.toggle('uc-sin-gestion-inventario', !puede);
+  ['btn-agregar-producto', 'btn-agregar-consignado', 'btn-inventario-restock', 'btn-inventario-filtros', 'btn-inventario-vista-tabla'].forEach((id) => {
+    const $el = document.getElementById(id);
+    if ($el) $el.hidden = !puede;
+  });
+  if (!puede) {
+    if (typeof inventarioVistaModo !== 'undefined' && inventarioVistaModo === 'tabla') {
+      inventarioVistaModo = 'cards';
+    }
+    document.getElementById('modal-inventario-filtros')?.classList.remove('visible');
+    document.body.classList.remove('modal-inventario-filtros-abierto');
+    window.ucDesactivarModoRestockRapido?.();
+    window.ucCerrarModalProducto?.();
+  }
+}
+
+const MODULOS_NAV_VENDEDOR = new Set(['inventario', 'ventas']);
+
+function parseSucursalIdUsuario(usuario) {
+  if (!usuario) return null;
+  const raw = usuario.sucursal_id ?? usuario.sucursalId ?? usuario.id_sucursal;
+  if (raw == null || raw === '') return null;
+  const n = parseInt(String(raw), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function mergePerfilDesdeStorage(perfil) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('uc_usuario') || 'null');
+    if (!stored || typeof stored !== 'object') return perfil;
+    const sid = parseSucursalIdUsuario(perfil);
+    const sidStored = parseSucursalIdUsuario(stored);
+    if (sid != null) return perfil;
+    if (sidStored == null) return perfil;
+    return {
+      ...perfil,
+      sucursal_id: sidStored,
+      sucursal_nombre: perfil?.sucursal_nombre || stored.sucursal_nombre || null,
+    };
+  } catch (_) {
+    return perfil;
+  }
+}
+
+async function refrescarPerfilUsuario() {
+  try {
+    const r = await fetch(`${API}/auth/me`, { headers: authHeaders(false) });
+    if (!r.ok) return null;
+    const u = mergePerfilDesdeStorage(await r.json());
+    aplicarPermisosSegunRol(u);
+    try { localStorage.setItem('uc_usuario', JSON.stringify(u)); } catch (_) {}
+    return u;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function resolverSucursalAsignadaVendedor() {
+  await refrescarPerfilUsuario();
+  let sid = parseSucursalIdUsuario(window.ucUsuarioSesion);
+  let nombre = String(window.ucUsuarioSesion?.sucursal_nombre || '').trim();
+
+  if (sid == null && nombre) {
+    try {
+      const r = await fetch(`${API}/sucursales`, { headers: authHeaders(false) });
+      if (r.ok) {
+        const list = await r.json();
+        const match = Array.isArray(list)
+          ? list.find((s) => String(s.nombre || '').trim().toLowerCase() === nombre.toLowerCase())
+          : null;
+        if (match) {
+          sid = parseSucursalIdUsuario(match);
+          nombre = match.nombre || nombre;
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (sid != null) {
+    window.ucUsuarioSesion = {
+      ...window.ucUsuarioSesion,
+      sucursal_id: sid,
+      sucursal_nombre: nombre || window.ucUsuarioSesion?.sucursal_nombre,
+    };
+    try {
+      localStorage.setItem('uc_usuario', JSON.stringify(window.ucUsuarioSesion));
+    } catch (_) {}
+  }
+
+  return { sid, nombre };
+}
+
+function actualizarUsuarioHeader(usuario) {
+  const $info = document.getElementById('usuario-info');
+  const $nombre = document.getElementById('usuario-nombre');
+  const $rol = document.getElementById('usuario-rol-badge');
+  if (!$info || !$nombre) return;
+  $nombre.textContent = usuario?.nombre || '';
+  if ($rol) {
+    const rol = normalizarRolUsuario(usuario?.rol);
+    $rol.textContent = etiquetaRolUsuario(rol);
+    $rol.className = `badge usuario-rol-badge ${claseBadgeRol(rol)}`;
+  }
+  $info.style.display = 'flex';
+}
+
+function aplicarPermisosSegunRol(usuario) {
+  const rol = normalizarRolUsuario(usuario?.rol);
+  const accesoCompleto = esUsuarioConAccesoCompleto(rol);
+  const sucursalId = parseSucursalIdUsuario(usuario);
+  window.ucUsuarioSesion = {
+    id: usuario?.id,
+    usuario: usuario?.usuario,
+    nombre: usuario?.nombre,
+    rol,
+    sucursal_id: sucursalId,
+    sucursal_nombre: usuario?.sucursal_nombre || null,
+  };
+  actualizarUsuarioHeader(window.ucUsuarioSesion);
+  document.body.classList.toggle('uc-rol-admin', accesoCompleto);
+  document.body.classList.toggle('uc-rol-vendedor', rol === 'vendedor');
+  ['todos', 'clientes', 'usuarios'].forEach((cat) => {
+    const $btn = document.querySelector(`.categoria-btn[data-categoria="${cat}"]`);
+    if ($btn) $btn.hidden = !accesoCompleto;
+  });
+  if (!accesoCompleto) {
+    try {
+      const mod = localStorage.getItem(MODULO_KEY);
+      if (!MODULOS_NAV_VENDEDOR.has(mod)) localStorage.removeItem(MODULO_KEY);
+      if (localStorage.getItem(VENTAS_SUBMODULO_KEY) === 'reportes') {
+        localStorage.setItem(VENTAS_SUBMODULO_KEY, 'ventas');
+      }
+    } catch (_) {}
+  }
+  aplicarUiPermisosInventarioEscritura();
+  aplicarUiPermisosModuloVentas();
+}
 
 (async () => {
   token = localStorage.getItem('uc_token');
@@ -22,10 +234,10 @@ let token = '';
   try {
     const r = await fetch(`${API}/auth/me`, { headers: { 'Authorization': 'Bearer ' + token } });
     if (!r.ok) throw 0;
-    const u = await r.json();
-    const $info = document.getElementById('usuario-info');
-    const $nombre = document.getElementById('usuario-nombre');
-    if ($info && $nombre) { $nombre.textContent = u.nombre; $info.style.display = 'flex'; }
+    const u = mergePerfilDesdeStorage(await r.json());
+    aplicarPermisosSegunRol(u);
+    try { localStorage.setItem('uc_usuario', JSON.stringify(u)); } catch (_) {}
+    actualizarUsuarioHeader(u);
   } catch {
     localStorage.removeItem('uc_token');
     localStorage.removeItem('uc_usuario');
@@ -47,13 +259,23 @@ let token = '';
   initModuloClientes();
   initDropdownSucursales();
   try {
-    if (localStorage.getItem(SUCURSAL_KEY)) {
+    if (esUsuarioVendedor()) {
+      await fijarSucursalVendedor();
+    } else if (localStorage.getItem(SUCURSAL_KEY)) {
       await restaurarSucursalGuardada();
+    } else if (normalizarRolUsuario(window.ucUsuarioSesion?.rol) === 'admin') {
+      const sid = parseSucursalIdUsuario(window.ucUsuarioSesion);
+      if (sid != null) {
+        aplicarSeleccionSucursal(String(sid), window.ucUsuarioSesion?.sucursal_nombre || 'Mi sucursal');
+      } else {
+        aplicarSeleccionSucursal('all', 'Todas las sucursales');
+      }
     } else {
       aplicarSeleccionSucursal('all', 'Todas las sucursales');
     }
   } catch (err) { console.error('restaurarSucursalGuardada:', err); }
   initNav();
+  initNavMenu();
   try { initInventarioProductoZoom(); } catch (err) { console.error('initInventarioProductoZoom:', err); }
   try { initInventarioVista(); } catch (err) { console.error('initInventarioVista:', err); }
   try { initModalTrasladarInventario(); } catch (err) { console.error('initModalTrasladarInventario:', err); }
@@ -61,6 +283,9 @@ let token = '';
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       document.body.classList.remove('app-loading');
+      if (document.querySelector('.categoria-btn[data-categoria="todos"].activo')) {
+        window.ucCargarHomeDashboards?.();
+      }
     });
   });
 })();
@@ -100,12 +325,88 @@ function guardarSucursalSeleccionada(sidRaw, nombre) {
   } catch (_) {}
 }
 
+function sucursalDropdownEstaFijada() {
+  return document.body.classList.contains('uc-sucursal-fijada');
+}
+
+function bloquearDropdownSucursalVendedor() {
+  const $wrap = document.querySelector('.dropdown-sucursales');
+  const $btn = document.getElementById('dropdown-sucursales-btn');
+  const $menu = document.getElementById('dropdown-sucursales-menu');
+  document.body.classList.add('uc-sucursal-fijada');
+  if ($wrap) $wrap.classList.add('uc-sucursal-fijada');
+  if ($btn) {
+    $btn.disabled = true;
+    $btn.setAttribute('aria-disabled', 'true');
+    $btn.setAttribute('aria-haspopup', 'false');
+    $btn.title = 'Sucursal asignada a tu cuenta';
+  }
+  $menu?.classList.remove('abierto');
+}
+
+async function fijarSucursalVendedor() {
+  bloquearDropdownSucursalVendedor();
+  const { sid, nombre: nombreSuc } = await resolverSucursalAsignadaVendedor();
+  const $label = document.getElementById('dropdown-sucursales-label');
+  if (sid == null) {
+    if ($label) {
+      $label.textContent = 'Sin sucursal asignada';
+      delete $label.dataset.sucursalId;
+      delete $label.dataset.sucursalSeleccionada;
+    }
+    try { localStorage.removeItem(SUCURSAL_KEY); } catch (_) {}
+    actualizarEstadoBtnAgregarProducto();
+    return;
+  }
+  let nombre = nombreSuc || window.ucUsuarioSesion?.sucursal_nombre || '';
+  if (!nombre) {
+    try {
+      const r = await fetch(`${API}/sucursales`, { headers: authHeaders(false) });
+      if (r.ok) {
+        const sucursales = await r.json();
+        const found = Array.isArray(sucursales)
+          ? sucursales.find((s) => Number(s.id) === sid)
+          : null;
+        if (found) nombre = found.nombre || '';
+      }
+    } catch (_) {}
+  }
+  aplicarSeleccionSucursal(String(sid), nombre || 'Mi sucursal');
+}
+
+function leerSucursalIdDropdownNormalizado() {
+  const $label = document.getElementById('dropdown-sucursales-label');
+  if ($label?.dataset?.sucursalSeleccionada !== '1') return null;
+  const raw = String($label.dataset.sucursalId ?? '').trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  if (lower === 'all' || lower === 'todas') return 'all';
+  const n = Number(raw);
+  return Number.isFinite(n) ? String(n) : null;
+}
+
+function vaciarCarritoSiCambioSucursal(sidAnterior, sidNuevo) {
+  if (sidAnterior != null && sidNuevo != null && sidAnterior !== sidNuevo) {
+    window.ucVaciarCarritoPorCambioSucursal?.();
+  }
+}
+
 /** Aplica la sucursal en el dropdown, persiste y recarga inventario si aplica. */
 function aplicarSeleccionSucursal(sidRaw, nombre, opts = {}) {
   const { cerrarMenu = false, cerrarModal = false } = opts;
   const $label = document.getElementById('dropdown-sucursales-label');
   const $menu = document.getElementById('dropdown-sucursales-menu');
   if (!$label) return false;
+
+  const sidAnterior = leerSucursalIdDropdownNormalizado();
+
+  if (sucursalDropdownEstaFijada()) {
+    const sidFijo = parseSucursalIdUsuario(window.ucUsuarioSesion);
+    if (sidFijo == null) return false;
+    if (sidRaw === 'all' || Number(sidRaw) !== sidFijo) return false;
+    sidRaw = String(sidFijo);
+    nombre = nombre || window.ucUsuarioSesion?.sucursal_nombre || $label.textContent;
+  }
 
   if (sidRaw === 'all') {
     $label.textContent = nombre || 'Todas las sucursales';
@@ -129,10 +430,25 @@ function aplicarSeleccionSucursal(sidRaw, nombre, opts = {}) {
     guardarSucursalSeleccionada(String(sidNum), $label.textContent);
   }
 
+  const sidNuevo = sidRaw === 'all' ? 'all' : String(Number(sidRaw));
+  vaciarCarritoSiCambioSucursal(sidAnterior, sidNuevo);
+
   if (cerrarMenu) $menu?.classList.remove('abierto');
   actualizarEstadoBtnAgregarProducto();
   if (cerrarModal && sidRaw === 'all') window.ucCerrarModalProducto?.();
   window.ucCargarInventarioProductos?.();
+  const enModuloVentas = document.querySelector('.categoria-btn[data-categoria="ventas"]')?.classList.contains('activo');
+  if (enModuloVentas) {
+    if (document.getElementById('tab-reportes-modulo')?.classList.contains('activo')) {
+      window.ucRecargarResumenInventarioReportes?.();
+      window.ucRecargarReporteActivo?.();
+    } else {
+      window.ucRecargarVentasModulo?.();
+    }
+  }
+  if (document.querySelector('.categoria-btn[data-categoria="todos"]')?.classList.contains('activo')) {
+    window.ucCargarHomeDashboards?.();
+  }
   return true;
 }
 
@@ -180,6 +496,15 @@ function leerDatasetSucursalInventario() {
   const lower = raw.toLowerCase();
   const esTodasLasSucursales = lower === 'all' || lower === 'todas';
   return { $label, raw, esTodasLasSucursales };
+}
+
+function anexarSucursalIdParamsReporte(params) {
+  const target = params instanceof URLSearchParams ? params : new URLSearchParams(params);
+  const { raw, esTodasLasSucursales } = leerDatasetSucursalInventario();
+  if (!raw || esTodasLasSucursales) return target;
+  const sid = Number(raw);
+  if (Number.isFinite(sid) && sid > 0) target.set('sucursal_id', String(sid));
+  return target;
 }
 
 /** Habilita botones de agregar según sucursal y chip activo. */
@@ -272,6 +597,35 @@ function moduloPermiteCarritoUI() {
   return cat === 'todos' || cat === 'inventario';
 }
 
+function cerrarNavMenu() {
+  document.body.classList.remove('nav-abierta');
+  const $btn = document.getElementById('btn-nav-menu');
+  if ($btn) {
+    $btn.setAttribute('aria-expanded', 'false');
+    $btn.setAttribute('aria-label', 'Abrir menú');
+  }
+}
+
+function initNavMenu() {
+  if (initNavMenu._done) return;
+  initNavMenu._done = true;
+  const $btn = document.getElementById('btn-nav-menu');
+  $btn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const abierto = document.body.classList.toggle('nav-abierta');
+    $btn.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+    $btn.setAttribute('aria-label', abierto ? 'Cerrar menú' : 'Abrir menú');
+  });
+  document.addEventListener('click', (e) => {
+    if (!document.body.classList.contains('nav-abierta')) return;
+    if (e.target.closest('header')) return;
+    cerrarNavMenu();
+  });
+  window.addEventListener('resize', () => {
+    if (window.matchMedia('(min-width: 1101px)').matches) cerrarNavMenu();
+  });
+}
+
 function initNav() {
   const $vistaPos = document.getElementById('vista-pos');
   const $vistaModulo = document.getElementById('vista-modulo');
@@ -282,9 +636,15 @@ function initNav() {
 
   function irAModulo(btn) {
     const cat = btn.dataset.categoria;
+    if (!esUsuarioAdmin() && !MODULOS_NAV_VENDEDOR.has(cat)) {
+      const $inv = document.querySelector('.categoria-btn[data-categoria="inventario"]');
+      if ($inv) return irAModulo($inv);
+      return;
+    }
     if (cat === 'todos') document.documentElement.classList.remove('uc-restore-modulo');
     document.querySelectorAll('.categoria-btn').forEach(b => b.classList.remove('activo'));
     btn.classList.add('activo');
+    cerrarNavMenu();
     document.body.classList.toggle('modulo-ventas', cat === 'ventas');
     document.body.classList.toggle('sin-carrito-ui', MODULOS_SIN_CARRITO.has(cat));
     if (MODULOS_SIN_CARRITO.has(cat)) window.ucMinimizarCarritoSiAbierto?.();
@@ -293,6 +653,11 @@ function initNav() {
     $vistaModuloClientes.style.display = 'none';
     $vistaPos.style.display = 'none';
     if (cat === 'usuarios') {
+      if (!esUsuarioAdmin()) {
+        const $home = document.querySelector('.categoria-btn[data-categoria="todos"]');
+        if ($home) return irAModulo($home);
+        return;
+      }
       $vistaModulo.style.display = 'flex';
       cargarUsuarios();
       cargarSucursales();
@@ -315,13 +680,17 @@ function initNav() {
       window.actualizarBtnMostrarCarrito?.();
     } else if (cat === 'ventas') {
       $vistaModuloVentas.style.display = 'flex';
-      window.ucVentasIrASubvista?.(localStorage.getItem(VENTAS_SUBMODULO_KEY) || 'ventas');
+      const sub = esUsuarioAdmin()
+        ? (localStorage.getItem(VENTAS_SUBMODULO_KEY) || 'ventas')
+        : 'ventas';
+      window.ucVentasIrASubvista?.(sub === 'reportes' ? 'reportes' : 'ventas');
       window.actualizarBtnMostrarCarrito?.();
       window.ucDesactivarModoRestockRapido?.();
     } else {
       $vistaPos.style.display = 'grid';
-      if ($productos) $productos.style.display = 'grid';
+      if ($productos) $productos.style.display = 'flex';
       if ($contenidoInv) $contenidoInv.style.display = 'none';
+      if (cat === 'todos') window.ucCargarHomeDashboards?.();
       if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
       window.actualizarBtnMostrarCarrito?.();
       window.ucDesactivarModoRestockRapido?.();
@@ -336,7 +705,15 @@ function initNav() {
   });
 
   const $home = document.querySelector('.categoria-btn[data-categoria="todos"]');
+  const $inventario = document.querySelector('.categoria-btn[data-categoria="inventario"]');
   const saved = localStorage.getItem(MODULO_KEY);
+  if (!esUsuarioAdmin()) {
+    const mod = MODULOS_NAV_VENDEDOR.has(saved) ? saved : 'inventario';
+    const $btn = document.querySelector(`.categoria-btn[data-categoria="${mod}"]`);
+    if ($btn) irAModulo($btn);
+    else if ($inventario) irAModulo($inventario);
+    return;
+  }
   if (saved && saved !== 'todos') {
     const mod = saved === 'reportes' ? 'ventas' : saved;
     const $btn = document.querySelector(`.categoria-btn[data-categoria="${mod}"]`);
@@ -357,6 +734,7 @@ function initDropdownSucursales() {
 
   $btn?.addEventListener('click', async (e) => {
     e.stopPropagation();
+    if (sucursalDropdownEstaFijada()) return;
     $menu.classList.toggle('abierto');
     if ($menu.classList.contains('abierto')) {
       $menu.scrollTop = 0;
@@ -1195,6 +1573,38 @@ function detalleSucursalDesdeProducto(p) {
   };
 }
 
+function claveDetalleSucursalInventario(s) {
+  const sid = Number(s.sucursal_id ?? s.id_sucursal);
+  if (Number.isFinite(sid) && sid > 0) return `id:${sid}`;
+  return `nom:${String(s.sucursal_nombre || '').trim().toLowerCase()}`;
+}
+
+function fusionarDetalleSucursalInventario(prev, next) {
+  const stockPrev = Number(prev.stock) || 0;
+  const stockNext = Number(next.stock) || 0;
+  const prevTieneImagen = Boolean(prev.tiene_imagen) || productoTieneImagenInventario(prev);
+  const nextTieneImagen = Boolean(next.tiene_imagen) || productoTieneImagenInventario(next);
+  const usarNext = nextTieneImagen && !prevTieneImagen;
+  const base = usarNext ? { ...prev, ...next } : { ...next, ...prev };
+  return {
+    ...base,
+    stock: stockPrev + stockNext,
+    tiene_imagen: prevTieneImagen || nextTieneImagen,
+    imagen: (prevTieneImagen ? prev.imagen : null) || (nextTieneImagen ? next.imagen : null) || prev.imagen || next.imagen,
+    id: Math.max(Number(prev.id) || 0, Number(next.id) || 0) || prev.id || next.id,
+  };
+}
+
+function deduplicarDetalleSucursalesInventario(detalle) {
+  const porSucursal = new Map();
+  for (const s of detalle) {
+    const key = claveDetalleSucursalInventario(s);
+    const prev = porSucursal.get(key);
+    porSucursal.set(key, prev ? fusionarDetalleSucursalInventario(prev, s) : { ...s });
+  }
+  return Array.from(porSucursal.values());
+}
+
 function consolidarProductosInventarioTodasSucursales(lista) {
   const map = new Map();
   for (const p of lista) {
@@ -1209,6 +1619,7 @@ function consolidarProductosInventarioTodasSucursales(lista) {
     map.get(key).sucursales_detalle.push(detalleSucursalDesdeProducto(p));
   }
   return Array.from(map.values()).map((grupo) => {
+    grupo.sucursales_detalle = deduplicarDetalleSucursalesInventario(grupo.sucursales_detalle);
     grupo.sucursales_detalle.sort((a, b) =>
       String(a.sucursal_nombre || '').localeCompare(String(b.sucursal_nombre || ''), 'es', { sensitivity: 'base' })
     );
@@ -1960,6 +2371,7 @@ function initInventarioFiltrosModal() {
   }
 
   function abrirModalFiltros() {
+    if (!puedeGestionarInventario()) return;
     sincronizarFormularioFiltrosInventario();
     $modal.classList.add('visible');
     $modal.setAttribute('aria-hidden', 'false');
@@ -2464,6 +2876,7 @@ function initInventarioVista() {
 
   const $btnVistaTabla = document.getElementById('btn-inventario-vista-tabla');
   $btnVistaTabla?.addEventListener('click', () => {
+    if (!puedeGestionarInventario()) return;
     inventarioVistaModo = inventarioVistaModo === 'tabla' ? 'cards' : 'tabla';
     paginaInventarioActual = 1;
     const esTabla = inventarioVistaModo === 'tabla';
@@ -2476,6 +2889,7 @@ function initInventarioVista() {
   });
 
   document.getElementById('btn-inventario-restock')?.addEventListener('click', () => {
+    if (!puedeGestionarInventario()) return;
     window.ucToggleModoRestockRapido?.();
   });
 
@@ -2510,13 +2924,13 @@ function initInventarioVista() {
   }
 
   $btnAgregar?.addEventListener('click', () => {
-    if ($btnAgregar.disabled) return;
+    if (!puedeGestionarInventario() || $btnAgregar.disabled) return;
     window.ucAbrirModalAgregarProducto?.();
   });
 
   const $btnAgregarCons = document.getElementById('btn-agregar-consignado');
   $btnAgregarCons?.addEventListener('click', () => {
-    if ($btnAgregarCons.disabled) return;
+    if (!puedeGestionarInventario() || $btnAgregarCons.disabled) return;
     window.ucAbrirModalConsignadaInventario?.();
   });
 
@@ -2617,13 +3031,16 @@ function renderInventarioVistaTabla() {
     const colCostoCompra = esConsignado
       ? formatearPrecio(Number(p.costo_consignacion) || 0)
       : formatearCostoCompraInventario(p);
-    const puedeTrasladar = !agrupado && puedeTrasladarProductoInventario(p);
+    const puedeTrasladar = puedeGestionarInventario() && !agrupado && puedeTrasladarProductoInventario(p);
     const puedeCarrito = !agrupado && inventarioPuedeAgregarAlCarrito(p, esConsignado);
     const tituloCarrito = tituloBotonAgregarInventarioCarrito(p, esConsignado);
-    const accionesHtml = `<div class="inventario-tabla-acciones-fila">
+    const filaGestion = puedeGestionarInventario()
+      ? `<div class="inventario-tabla-acciones-fila">
           <button type="button" class="btn-tabla inventario-tabla-editar" data-id="${p.id}">Editar</button>
           <button type="button" class="btn-tabla btn-tabla-danger inventario-tabla-eliminar" data-id="${p.id}">Eliminar</button>
-        </div>
+        </div>`
+      : '';
+    const accionesHtml = `${filaGestion}
         <div class="inventario-tabla-acciones-fila inventario-tabla-acciones-fila--iconos">
           <button type="button" class="btn-tabla btn-tabla-icono inventario-tabla-carrito" data-id="${p.id}" title="${escHtmlInventario(tituloCarrito)}" aria-label="${escHtmlInventario(tituloCarrito)}"${puedeCarrito ? '' : ' disabled'}><i class="fa-solid ${iconoBotonAgregarInventarioCarrito()}" aria-hidden="true"></i></button>
           ${puedeTrasladar ? `<button type="button" class="btn-tabla btn-tabla-icono inventario-tabla-trasladar" data-id="${p.id}" title="Trasladar a otra sucursal" aria-label="Trasladar a otra sucursal"><i class="fa-solid fa-arrows-turn-to-dots" aria-hidden="true"></i></button>` : ''}
@@ -2784,7 +3201,9 @@ function renderInventarioVistaCards() {
     if (esConsignado) {
       const precioVenta = Number(p.precio_venta ?? p.precio) || 0;
       const costo = Number(p.costo_consignacion) || 0;
-      const btnEditar = `<button type="button" class="inventario-producto-editar" data-id="${p.id}" title="Editar producto consignado" aria-label="Editar producto consignado">${UC_ICONO_EDITAR}</button>`;
+      const btnEditar = puedeGestionarInventario()
+        ? `<button type="button" class="inventario-producto-editar" data-id="${p.id}" title="Editar producto consignado" aria-label="Editar producto consignado">${UC_ICONO_EDITAR}</button>`
+        : '';
       const puedeCarrito = inventarioPuedeAgregarAlCarrito(p, true);
       const tituloCarrito = tituloBotonAgregarInventarioCarrito(p, true);
       return `
@@ -2811,7 +3230,9 @@ function renderInventarioVistaCards() {
     const stockNum = Number(p.stock) || 0;
     const sinStock = stockNum <= 0;
     const cantidadLabel = `Stock: ${stockNum}`;
-    const btnEditar = `<button type="button" class="inventario-producto-editar" data-id="${p.id}" title="Editar producto" aria-label="Editar producto">${UC_ICONO_EDITAR}</button>`;
+    const btnEditar = puedeGestionarInventario()
+      ? `<button type="button" class="inventario-producto-editar" data-id="${p.id}" title="Editar producto" aria-label="Editar producto">${UC_ICONO_EDITAR}</button>`
+      : '';
     const puedeCarrito = inventarioPuedeAgregarAlCarrito(p, false);
     const tituloCarrito = tituloBotonAgregarInventarioCarrito(p, false);
     return `
@@ -3069,7 +3490,9 @@ function abrirInventarioProductoZoom(p) {
   }
   inventarioZoomProducto = p;
   const $btnTrasladar = document.getElementById('inventario-zoom-trasladar');
-  if ($btnTrasladar) $btnTrasladar.hidden = !puedeTrasladarProductoInventario(p);
+  if ($btnTrasladar) {
+    $btnTrasladar.hidden = !puedeGestionarInventario() || !puedeTrasladarProductoInventario(p);
+  }
   $bd.classList.add('visible');
   $panel.classList.add('visible');
   $bd.setAttribute('aria-hidden', 'false');
@@ -3113,12 +3536,14 @@ function initModalTrasladarInventario() {
   const $sucursalDestino = document.getElementById('trasladar-sucursal-destino');
   const $cancelar = document.getElementById('trasladar-cancelar');
   const $confirmar = document.getElementById('trasladar-confirmar');
+  const trasladarSucursalDestinoUi = initCustomSelectBasico($sucursalDestino);
   let productoTrasladoActual = null;
   let guardandoTraslado = false;
 
   function cerrarModalTraslado() {
     $modal?.classList.remove('visible');
     $modal?.setAttribute('aria-hidden', 'true');
+    trasladarSucursalDestinoUi?.cerrarOpciones?.();
     productoTrasladoActual = null;
     guardandoTraslado = false;
     if ($confirmar) {
@@ -3153,6 +3578,8 @@ function initModalTrasladarInventario() {
     } catch (err) {
       console.error(err);
     }
+    $sucursalDestino.selectedIndex = 0;
+    trasladarSucursalDestinoUi?.refresh?.();
   }
 
   function actualizarMaxCantidadTraslado() {
@@ -3166,6 +3593,7 @@ function initModalTrasladarInventario() {
   }
 
   async function abrirModalTrasladarProducto(prod) {
+    if (!puedeGestionarInventario()) return;
     if (!prod || !puedeTrasladarProductoInventario(prod)) {
       alert('Este producto no tiene stock disponible para trasladar');
       return;
@@ -3799,6 +4227,34 @@ function initProductoModal() {
   }
 
   let modalModoConsignada = false;
+  let costoCompraDomPlaceholder = null;
+
+  function ocultarCostoCompraEnModal(ocultar) {
+    if (!$costoCompraWrap) return;
+    if (ocultar) {
+      $costoCompraWrap.hidden = true;
+      $costoCompraWrap.style.display = 'none';
+      $costoCompraWrap.classList.add('uc-modal-oculto');
+      if ($costoCompra) $costoCompra.value = '';
+      if ($costoCompraWrap.isConnected && $costoCompraWrap.parentNode) {
+        if (!costoCompraDomPlaceholder) {
+          costoCompraDomPlaceholder = document.createComment('prod-costo-compra');
+          $costoCompraWrap.parentNode.insertBefore(costoCompraDomPlaceholder, $costoCompraWrap);
+        }
+        $costoCompraWrap.remove();
+      }
+      return;
+    }
+    $costoCompraWrap.classList.remove('uc-modal-oculto');
+    $costoCompraWrap.hidden = false;
+    $costoCompraWrap.style.display = '';
+    if (costoCompraDomPlaceholder?.parentNode && !$costoCompraWrap.isConnected) {
+      costoCompraDomPlaceholder.parentNode.insertBefore(
+        $costoCompraWrap,
+        costoCompraDomPlaceholder.nextSibling
+      );
+    }
+  }
 
   function leerMontoInput($input) {
     const raw = String($input?.value ?? '').trim().replace(',', '.');
@@ -3833,9 +4289,13 @@ function initProductoModal() {
       if (consignada) $form.dataset.modo = 'consignada';
       else delete $form.dataset.modo;
     }
+    if ($modal) {
+      if (consignada) $modal.setAttribute('data-modo-consignada', '1');
+      else $modal.removeAttribute('data-modo-consignada');
+    }
     if ($labelPrecio) $labelPrecio.textContent = consignada ? 'Costo de consignación' : 'Precio de venta';
     if ($precioVentaWrap) $precioVentaWrap.hidden = !consignada;
-    if ($costoCompraWrap) $costoCompraWrap.hidden = consignada;
+    ocultarCostoCompraEnModal(consignada);
     if ($stockWrap) $stockWrap.hidden = consignada;
     if ($imagenWrap) $imagenWrap.hidden = consignada;
     actualizarVisibilidadPrecioFundas();
@@ -3882,9 +4342,16 @@ function initProductoModal() {
   }
 
   function actualizarVisibilidadPrecioFundas() {
-    const esFundas = esCategoriaFundasActiva() && !esModoConsignadaModal();
+    if (esModoConsignadaModal()) {
+      ocultarCostoCompraEnModal(true);
+      if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = true;
+      if ($prodPrecioWrap) $prodPrecioWrap.hidden = false;
+      return;
+    }
+    const esFundas = esCategoriaFundasActiva();
     if ($prodPrecioWrap) $prodPrecioWrap.hidden = esFundas;
     if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = !esFundas;
+    ocultarCostoCompraEnModal(false);
     if (esFundas) {
       initSliderRangoFundasProducto();
       actualizarUiSliderRangoFundas();
@@ -3956,7 +4423,6 @@ function initProductoModal() {
     if ($costoCompra) $costoCompra.value = '';
     resetPrecioFundasForm();
     if ($prodPrecioWrap) $prodPrecioWrap.hidden = false;
-    if ($costoCompraWrap) $costoCompraWrap.hidden = false;
     if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = true;
     if ($stockValor) $stockValor.value = '';
     if ($imagen) $imagen.value = '';
@@ -3970,10 +4436,11 @@ function initProductoModal() {
     imagenPendienteDataUrl = '';
     actualizarPreviewImagenProducto('');
     modalModoConsignada = false;
+    if ($modal) $modal.removeAttribute('data-modo-consignada');
     if ($labelPrecio) $labelPrecio.textContent = 'Precio de venta';
     if ($labelStock) $labelStock.textContent = 'Stock';
     if ($precioVentaWrap) $precioVentaWrap.hidden = true;
-    if ($costoCompraWrap) $costoCompraWrap.hidden = false;
+    ocultarCostoCompraEnModal(false);
     if ($stockWrap) $stockWrap.hidden = false;
     if ($imagenWrap) $imagenWrap.hidden = false;
     if ($precioVenta) $precioVenta.value = '';
@@ -4545,6 +5012,7 @@ function initProductoModal() {
   }
 
   function abrirModalAgregarProducto() {
+    if (!puedeGestionarInventario()) return;
     resetModal();
     if ($modalTitulo) $modalTitulo.textContent = 'Agregar producto';
     if ($modalSubmit) $modalSubmit.textContent = 'Agregar producto';
@@ -4553,6 +5021,7 @@ function initProductoModal() {
   }
 
   function abrirModalConsignadaInventario() {
+    if (!puedeGestionarInventario()) return;
     resetModal();
     aplicarModoModalConsignada(true);
     $modal?.classList.add('visible');
@@ -4583,6 +5052,7 @@ function initProductoModal() {
   }
 
   function abrirModalEditarConsignado(prod) {
+    if (!puedeGestionarInventario()) return;
     if (!prod || prod.id == null || prod.id === '') return;
     resetModal();
     aplicarModoModalConsignada(true);
@@ -4606,11 +5076,12 @@ function initProductoModal() {
   }
 
   function abrirModalEditarProducto(prod) {
+    if (!puedeGestionarInventario()) return;
     if (!prod || prod.id == null || prod.id === '') return;
     resetModal();
     if ($modalTitulo) $modalTitulo.textContent = 'Actualizar producto';
     if ($modalSubmit) $modalSubmit.textContent = 'Actualizar producto';
-    if ($costoCompraWrap) $costoCompraWrap.hidden = true;
+    ocultarCostoCompraEnModal(true);
     if ($form) {
       $form.dataset.editId = String(prod.id);
       const sid = prod.sucursal_id ?? prod.id_sucursal;
@@ -4684,17 +5155,21 @@ function initProductoModal() {
     if ($bocinaModelo) $bocinaModelo.value = '';
     if ($bocinaWatts) $bocinaWatts.value = '0';
     if ($bocinaColor) $bocinaColor.value = '';
-    $precio.value = '';
-    if ($costoCompra) $costoCompra.value = '';
-    resetPrecioFundasForm();
-    if ($prodPrecioWrap) $prodPrecioWrap.hidden = false;
-    if ($costoCompraWrap) $costoCompraWrap.hidden = false;
-    if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = true;
-    if ($stockValor) $stockValor.value = '';
-    if ($imagen) $imagen.value = '';
-    if ($imagenNombre) $imagenNombre.textContent = '';
-    imagenPendienteDataUrl = '';
-    actualizarPreviewImagenProducto(imagenProductoActual);
+    if (!esModoConsignadaModal()) {
+      $precio.value = '';
+      if ($costoCompra) $costoCompra.value = '';
+      resetPrecioFundasForm();
+      if ($prodPrecioWrap) $prodPrecioWrap.hidden = false;
+      ocultarCostoCompraEnModal(false);
+      if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = true;
+      if ($stockValor) $stockValor.value = '';
+      if ($imagen) $imagen.value = '';
+      if ($imagenNombre) $imagenNombre.textContent = '';
+      imagenPendienteDataUrl = '';
+      actualizarPreviewImagenProducto(imagenProductoActual);
+    } else {
+      ocultarCostoCompraEnModal(true);
+    }
     Object.keys(customDropdowns).forEach((id) => {
       if (id === '_closeListener') return;
       customDropdowns[id].refresh?.();
@@ -4725,6 +5200,7 @@ function initProductoModal() {
       $marcaModeloWrap.style.display = 'none';
     }
     actualizarVisibilidadPrecioFundas();
+    if (esModoConsignadaModal()) aplicarModoModalConsignada(true);
   });
 
   $chipCristal?.addEventListener('click', () => {
@@ -5004,6 +5480,7 @@ function initProductoModal() {
     if (prod) window.ucAbrirModalTrasladarProducto?.(prod);
   });
   $eliminar?.addEventListener('click', () => {
+    if (!puedeGestionarInventario()) return;
     const editConsignadoId = $form?.dataset?.editConsignadoId;
     const editId = $form?.dataset?.editId;
     const nombre = productoEditNombre || 'este producto';
@@ -5177,6 +5654,7 @@ function initProductoModal() {
 
   $form?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!puedeGestionarInventario()) return;
     if (guardandoProductoModal) return;
     const validacion = validarFormularioProducto();
     if (!validacion.ok) {
@@ -5528,6 +6006,7 @@ function initPOS() {
   });
 
   function renderProductos() {
+    if (!$productos || document.getElementById('home-dashboards')) return;
     $productos.innerHTML = PRODUCTOS.map(p => `
       <article class="producto-card" data-id="${p.id}">
         <div class="producto-icono">${p.icono}</div>
@@ -5603,6 +6082,7 @@ function initPOS() {
   }
 
   function setModoRestockRapido(activo) {
+    if (activo && !puedeGestionarInventario()) return;
     if (activo) {
       const { esTodasLasSucursales } = leerDatasetSucursalInventario();
       if (esTodasLasSucursales) {
@@ -5849,6 +6329,7 @@ function initPOS() {
   }
 
   async function confirmarRestockRapido() {
+    if (!puedeGestionarInventario()) return;
     if (!modoRestockRapido || carritoRestock.length === 0) return;
     for (const item of carritoRestock) {
       if (!restockItemValido(item)) {
@@ -5928,6 +6409,12 @@ function initPOS() {
     if ($carritoPanel?.classList.contains('carrito-maximizado')) toggleCarritoMaximizado();
   }
   window.ucMinimizarCarritoSiAbierto = minimizarCarritoSiAbierto;
+  window.ucVaciarCarritoPorCambioSucursal = () => {
+    carrito = [];
+    carritoRestock = [];
+    cerrarModalCobro();
+    actualizarCarrito();
+  };
 
   function ocultarCarritoPanel() {
     if ($carritoPanel?.classList.contains('carrito-maximizado')) toggleCarritoMaximizado();
@@ -6280,10 +6767,19 @@ function initPOS() {
       $modalTotal.textContent = formatearPrecio(totalVenta);
       const $modalVentaSub = document.getElementById('modal-venta-sub');
       if ($modalVentaSub) {
+        let extraTicket = '';
+        if (data.ticket?.print_en_cola) extraTicket = ' · Ticket en cola (Point en Ingresar monto)';
+        else if (data.ticket?.print) extraTicket = ' · Ticket enviado a la impresora';
+        else if (data.ticket?.print_omitido) extraTicket = '';
+        else if (data.ticket && data.ticket.print === false) {
+          extraTicket = data.ticket.print_error
+            ? ` · ${data.ticket.print_error}`
+            : ' · No se pudo imprimir el ticket';
+        }
         if (metodoPagoCobro === 'efectivo' && efectivoRecibido != null) {
-          $modalVentaSub.textContent = `Efectivo · Recibido ${formatearPrecio(efectivoRecibido)} · Cambio ${formatearPrecio(efectivoCambio)}`;
+          $modalVentaSub.textContent = `Efectivo · Recibido ${formatearPrecio(efectivoRecibido)} · Cambio ${formatearPrecio(efectivoCambio)}${extraTicket}`;
         } else {
-          $modalVentaSub.textContent = `Pago con ${etiquetaMetodoPago(metodoPagoCobro)}`;
+          $modalVentaSub.textContent = `Pago con ${etiquetaMetodoPago(metodoPagoCobro)}${extraTicket}`;
         }
       }
       minimizarCarritoSiAbierto();
@@ -6291,6 +6787,7 @@ function initPOS() {
       carrito = [];
       actualizarCarrito();
       await window.ucCargarInventarioProductos?.({ forzar: true });
+      window.ucCargarHomeDashboards?.();
     } catch (err) {
       alert(err?.message || 'Error de red al cobrar');
     } finally {
@@ -6639,6 +7136,212 @@ function etiquetaMetodoPagoCorteCaja(metodo) {
   return 'Efectivo';
 }
 
+const ventasDetalleCache = new Map();
+const ventasCorteRegistrosCache = new Map();
+let ventasCorteListaActual = [];
+let ventaCorteSeleccionadaId = null;
+
+function montoVentaReporte(n) {
+  return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function normalizarDetalleVentaDesdeFila(venta) {
+  if (!venta) return [];
+  const raw = venta.detalle;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
+  return [];
+}
+
+function totalProductosVenta(venta) {
+  if (venta?.total_productos != null && Number.isFinite(Number(venta.total_productos))) {
+    return Math.max(0, Math.trunc(Number(venta.total_productos)));
+  }
+  return normalizarDetalleVentaDesdeFila(venta).reduce(
+    (sum, p) => sum + (Number(p.cantidad) || 0),
+    0
+  );
+}
+
+function esLineaVentaConsignada(linea) {
+  if (!linea) return false;
+  if (linea.es_consignado === true || linea.es_consignado === 1 || linea.es_consignado === '1') return true;
+  const consignadoId = Number(linea.producto_consignado_id);
+  if (Number.isFinite(consignadoId) && consignadoId > 0) return true;
+  const det = linea.detalle;
+  if (det && typeof det === 'object') {
+    if (det.es_consignado || det.consignado) return true;
+  }
+  if (typeof det === 'string') {
+    try {
+      const parsed = JSON.parse(det);
+      if (parsed?.es_consignado || parsed?.consignado) return true;
+    } catch (_) { /* ignore */ }
+  }
+  return false;
+}
+
+function leerCostoConsignacionLinea(linea) {
+  const directo = Number(linea?.costo_consignacion);
+  if (Number.isFinite(directo) && directo > 0) return directo;
+  let det = linea?.detalle;
+  if (typeof det === 'string') {
+    try { det = JSON.parse(det); } catch (_) { det = null; }
+  }
+  if (det && typeof det === 'object') {
+    const c = Number(det.costo_consignacion ?? det.costoConsignacion);
+    if (Number.isFinite(c) && c > 0) return c;
+  }
+  return NaN;
+}
+
+function htmlNombreProductoVentaDetalle(linea) {
+  const nombre = escReporteTexto(linea?.producto_nombre || 'Producto');
+  if (!esLineaVentaConsignada(linea)) return nombre;
+  return `<span class="venta-detalle-producto-nombre">${nombre}</span> <span class="venta-detalle-consignado-badge">Consignado</span>`;
+}
+
+function htmlPrecioUnitarioVentaDetalle(linea) {
+  const precioVenta = Number(linea?.precio_unitario) || 0;
+  if (!esLineaVentaConsignada(linea)) return escReporteTexto(montoVentaReporte(precioVenta));
+  const costoConsignacion = leerCostoConsignacionLinea(linea);
+  if (!Number.isFinite(costoConsignacion) || costoConsignacion <= 0) {
+    return escReporteTexto(montoVentaReporte(precioVenta));
+  }
+  const costoTxt = montoVentaReporte(costoConsignacion);
+  const ventaTxt = montoVentaReporte(precioVenta);
+  return `<span class="venta-detalle-precio-consignado"><span class="venta-detalle-precio-costo">${escReporteTexto(costoTxt)}</span><span class="venta-detalle-precio-sep">=</span><span class="venta-detalle-precio-venta">${escReporteTexto(ventaTxt)}</span></span>`;
+}
+
+function pintarDetalleVentaSeleccionada(productos) {
+  const $wrap = document.getElementById('ventas-detalle-wrap');
+  const $tbody = document.getElementById('tbody-ventas-detalle');
+  if (!$wrap || !$tbody) return;
+  const lista = Array.isArray(productos) ? productos : [];
+  if (!lista.length) {
+    $wrap.hidden = false;
+    $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">Esta venta no tiene productos registrados</td></tr>';
+    return;
+  }
+  $wrap.hidden = false;
+  $tbody.innerHTML = lista.map((p, i) => {
+    const cantidad = Number(p.cantidad) || 0;
+    const totalLinea = montoVentaReporte(p.subtotal);
+    return `
+      <tr>
+        <td class="tabla-num">${i + 1}</td>
+        <td>${htmlNombreProductoVentaDetalle(p)}</td>
+        <td class="tabla-num">${escReporteTexto(String(cantidad))}</td>
+        <td class="tabla-num">${htmlPrecioUnitarioVentaDetalle(p)}</td>
+        <td class="tabla-num">${escReporteTexto(totalLinea)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function renderDetalleVentaSeleccionada(ventaId) {
+  const $wrap = document.getElementById('ventas-detalle-wrap');
+  const $tbody = document.getElementById('tbody-ventas-detalle');
+  if (!$wrap || !$tbody) return;
+  if (ventaId == null || !Number.isFinite(Number(ventaId))) {
+    $wrap.hidden = true;
+    $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">Selecciona una venta para ver el detalle</td></tr>';
+    return;
+  }
+  const id = Number(ventaId);
+  if (ventasDetalleCache.has(id)) {
+    pintarDetalleVentaSeleccionada(ventasDetalleCache.get(id));
+    return;
+  }
+  const venta = ventasCorteRegistrosCache.get(id);
+  const detalleLocal = normalizarDetalleVentaDesdeFila(venta);
+  if (detalleLocal.length) {
+    ventasDetalleCache.set(id, detalleLocal);
+    pintarDetalleVentaSeleccionada(detalleLocal);
+    return;
+  }
+  $wrap.hidden = false;
+  $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">Cargando productos...</td></tr>';
+  try {
+    const r = await fetch(`${API}/reportes/corte-caja/${id}/detalle`, { headers: authHeaders(false) });
+    if (r.status === 401) {
+      window.location.href = '/login.html';
+      return;
+    }
+    if (!r.ok) {
+      let msg = 'No se pudo cargar el detalle';
+      if (r.status === 404) {
+        msg = 'Detalle no disponible. Reinicia el servidor (npm start en server/).';
+      }
+      $tbody.innerHTML = `<tr><td colspan="5" class="tabla-vacio">${escReporteTexto(msg)}</td></tr>`;
+      return;
+    }
+    const data = await r.json();
+    const productos = Array.isArray(data) ? data : [];
+    ventasDetalleCache.set(id, productos);
+    if (Number(ventaCorteSeleccionadaId) === id) pintarDetalleVentaSeleccionada(productos);
+  } catch (err) {
+    console.error(err);
+    if (Number(ventaCorteSeleccionadaId) === id) {
+      $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">Error al cargar el detalle</td></tr>';
+    }
+  }
+}
+
+async function cargarResumenInventarioReportes() {
+  const $total = document.getElementById('reporte-inventario-total');
+  const $sinStock = document.getElementById('reporte-inventario-sin-stock');
+  const $stockTotal = document.getElementById('reporte-inventario-stock-total');
+  if (!$total || !$sinStock || !$stockTotal) return;
+  const params = anexarSucursalIdParamsReporte(new URLSearchParams());
+  try {
+    const r = await fetch(`${API}/reportes/resumen-inventario?${params.toString()}`, {
+      headers: authHeaders(false),
+    });
+    if (r.status === 401) {
+      window.location.href = '/login.html';
+      return;
+    }
+    if (!r.ok) {
+      $total.textContent = '—';
+      $sinStock.textContent = '—';
+      $stockTotal.textContent = '—';
+      return;
+    }
+    const data = await r.json();
+    $total.textContent = String(Number(data.total_productos) || 0);
+    $sinStock.textContent = String(Number(data.total_sin_stock) || 0);
+    $stockTotal.textContent = String(Number(data.stock_total) || 0);
+  } catch (err) {
+    console.error(err);
+    $total.textContent = '—';
+    $sinStock.textContent = '—';
+    $stockTotal.textContent = '—';
+  }
+}
+
+function initVentasCorteDetalleUI() {
+  if (initVentasCorteDetalleUI._done) return;
+  initVentasCorteDetalleUI._done = true;
+  const $tbody = document.getElementById('tbody-reporte-corte-caja');
+  $tbody?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-abrir-ticket]')) return;
+    const $row = e.target.closest('tr[data-venta-id]');
+    if (!$row) return;
+    const id = Number($row.dataset.ventaId);
+    if (!ventasCorteRegistrosCache.has(id)) return;
+    ventaCorteSeleccionadaId = ventaCorteSeleccionadaId === id ? null : id;
+    renderTablaCorteCajaReporte(ventasCorteListaActual);
+  });
+}
+
 function renderTablaCorteCajaReporte(lista) {
   const $tbody = document.getElementById('tbody-reporte-corte-caja');
   const $ventas = document.getElementById('reporte-corte-ventas');
@@ -6649,7 +7352,19 @@ function renderTablaCorteCajaReporte(lista) {
   if (!$tbody) return;
 
   const rows = Array.isArray(lista) ? lista : [];
-  const monto = (n) => '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  ventasCorteListaActual = [...rows];
+  ventasCorteRegistrosCache.clear();
+  ventasDetalleCache.clear();
+  rows.forEach((v) => {
+    if (v?.id == null) return;
+    const id = Number(v.id);
+    ventasCorteRegistrosCache.set(id, v);
+    ventasDetalleCache.set(id, normalizarDetalleVentaDesdeFila(v));
+  });
+  if (ventaCorteSeleccionadaId != null && !ventasCorteRegistrosCache.has(Number(ventaCorteSeleccionadaId))) {
+    ventaCorteSeleccionadaId = null;
+  }
+  const monto = montoVentaReporte;
   let sumaTotal = 0;
   let sumaEfectivo = 0;
   let sumaTarjeta = 0;
@@ -6669,24 +7384,37 @@ function renderTablaCorteCajaReporte(lista) {
   if ($transferencia) $transferencia.textContent = monto(sumaTransferencia);
 
   if (rows.length === 0) {
-    $tbody.innerHTML = '<tr><td colspan="6" class="tabla-vacio">No hay ventas registradas</td></tr>';
+    ventaCorteSeleccionadaId = null;
+    renderDetalleVentaSeleccionada(null);
+    $tbody.innerHTML = '<tr><td colspan="8" class="tabla-vacio">No hay ventas registradas</td></tr>';
     return;
   }
-  $tbody.innerHTML = rows.map((v) => {
+  const listaVisible = ventaCorteSeleccionadaId == null
+    ? rows
+    : rows.filter((v) => Number(v?.id) === Number(ventaCorteSeleccionadaId));
+  $tbody.innerHTML = listaVisible.map((v) => {
     const fecha = formatFecha(v.created_at);
     const folio = Number(v.id) || 0;
     const totalTxt = monto(v.total);
+    const filaSeleccionada = Number(v.id) === Number(ventaCorteSeleccionadaId);
+    const tienePdf = v.ticket_pdf === true || v.ticket_pdf === 't' || v.ticket_pdf === 'true';
+    const ticketCelda = tienePdf
+      ? `<td class="tabla-ticket"><a class="btn-ticket-pdf" href="/ticket.html?venta=${folio}" target="_blank" rel="noopener noreferrer" data-abrir-ticket="1" title="Ver ticket" aria-label="Ver ticket #${folio}"><i class="fa-solid fa-file-lines" aria-hidden="true"></i></a></td>`
+      : '<td class="tabla-ticket"><span class="btn-ticket-pdf esta-vacio" title="Sin ticket digital">—</span></td>';
     return `
-      <tr>
+      <tr data-venta-id="${folio}" class="${filaSeleccionada ? 'reporte-mov-row-seleccionada' : ''}">
         <td>${escReporteTexto(fecha)}</td>
         <td>#${escReporteTexto(String(folio))}</td>
         <td>${escReporteTexto(etiquetaMetodoPagoCorteCaja(v.metodo_pago))}</td>
+        <td class="tabla-num">${escReporteTexto(String(totalProductosVenta(v)))}</td>
         <td class="tabla-num">${escReporteTexto(totalTxt)}</td>
         <td>${escReporteTexto(v.usuario_nombre || 'Sistema')}</td>
+        ${ticketCelda}
         <td>${escReporteTexto(v.sucursal_nombre || 'Sin sucursal')}</td>
       </tr>
     `;
   }).join('');
+  void renderDetalleVentaSeleccionada(ventaCorteSeleccionadaId);
 }
 
 function etiquetaAccionHistorialProductoReporte(accion) {
@@ -6956,6 +7684,9 @@ let reporteHistorialAccionFiltro = '';
 let reporteHistorialEdicionSeleccionadoId = null;
 let reporteVentasPeriodoFiltro = 'diario';
 let reporteVentasFechaFiltro = '';
+let reporteVentasFechasActivas = new Set();
+let reporteVentasDatepickerApi = null;
+let reporteVentasSincronizandoFecha = false;
 
 function fechaHoyLocalInput() {
   const d = new Date();
@@ -6965,6 +7696,93 @@ function fechaHoyLocalInput() {
   return `${y}-${m}-${day}`;
 }
 
+function deseleccionarChipsPeriodoVentas() {
+  document.querySelectorAll('#reporte-ventas-periodo-chips .reporte-accion-chip[data-reporte-ventas-periodo]')
+    .forEach((c) => c.classList.remove('activo'));
+}
+
+function onFechaVentasElegidaManualmente(val, recargarFn) {
+  reporteVentasFechaFiltro = val || '';
+  reporteVentasPeriodoFiltro = 'diario';
+  deseleccionarChipsPeriodoVentas();
+  if (typeof recargarFn === 'function') void recargarFn();
+}
+
+function sincronizarFechaVentasUI(val, recargarFn) {
+  const $fecha = document.getElementById('reporte-ventas-fecha');
+  const fecha = val || fechaHoyLocalInput();
+  reporteVentasFechaFiltro = fecha;
+  if ($fecha) $fecha.value = fecha;
+  reporteVentasSincronizandoFecha = true;
+  try {
+    reporteVentasDatepickerApi?.setValue?.(fecha);
+  } finally {
+    reporteVentasSincronizandoFecha = false;
+  }
+  if (typeof recargarFn === 'function') void recargarFn();
+}
+
+function ajustarFechaVentasActiva(recargarFn) {
+  if (!esUsuarioAdmin()) {
+    forzarVentasSoloHoyVendedor();
+    return false;
+  }
+  const $fecha = document.getElementById('reporte-ventas-fecha');
+  if (!$fecha) return false;
+
+  // Diario = el día elegido (por defecto hoy). No saltar al último día con ventas.
+  if (reporteVentasPeriodoFiltro === 'diario') {
+    const hoy = fechaHoyLocalInput();
+    if (!$fecha.value) {
+      sincronizarFechaVentasUI(hoy, recargarFn);
+      return true;
+    }
+    reporteVentasFechaFiltro = $fecha.value;
+    return false;
+  }
+
+  if (!reporteVentasFechasActivas.size) return false;
+  const hoy = fechaHoyLocalInput();
+  let val = $fecha.value || hoy;
+  if (!reporteVentasFechasActivas.has(val)) {
+    const candidatas = [...reporteVentasFechasActivas].filter((f) => f <= hoy).sort();
+    val = candidatas.pop() || [...reporteVentasFechasActivas].sort().pop();
+  }
+  if (val && val !== $fecha.value) {
+    sincronizarFechaVentasUI(val, recargarFn);
+    return true;
+  }
+  reporteVentasFechaFiltro = $fecha.value || '';
+  return false;
+}
+
+async function cargarFechasActivasVentas(recargarFn) {
+  try {
+    const params = anexarSucursalIdParamsReporte(new URLSearchParams());
+    const r = await fetch(`${API}/reportes/corte-caja/fechas?${params.toString()}`, { headers: authHeaders(false) });
+    if (r.status === 401) {
+      window.location.href = '/login.html';
+      return;
+    }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || 'No se pudieron cargar las fechas');
+    reporteVentasFechasActivas = new Set(
+      Array.isArray(data.fechas) ? data.fechas.map((f) => String(f).slice(0, 10)) : []
+    );
+    reporteVentasSincronizandoFecha = true;
+    try {
+      reporteVentasDatepickerApi?.setFechasActivas?.(reporteVentasFechasActivas);
+      ajustarFechaVentasActiva(recargarFn);
+    } finally {
+      reporteVentasSincronizandoFecha = false;
+    }
+  } catch (err) {
+    console.error('fechas ventas:', err);
+    reporteVentasFechasActivas = new Set();
+    reporteVentasDatepickerApi?.setFechasActivas?.(reporteVentasFechasActivas);
+  }
+}
+
 function initReporteVentasFiltros(recargarFn) {
   const $chips = document.getElementById('reporte-ventas-periodo-chips');
   const $fecha = document.getElementById('reporte-ventas-fecha');
@@ -6972,9 +7790,20 @@ function initReporteVentasFiltros(recargarFn) {
   initReporteVentasFiltros._done = true;
   if (!$fecha.value) $fecha.value = fechaHoyLocalInput();
   reporteVentasFechaFiltro = $fecha.value || '';
+  reporteVentasDatepickerApi = window.initUcDatepicker?.($fecha, {
+    soloFechasConRegistros: true,
+    fechasActivas: reporteVentasFechasActivas,
+    maxHoy: true,
+    onChange: (val) => {
+      if (!esUsuarioAdmin() || reporteVentasSincronizandoFecha) return;
+      onFechaVentasElegidaManualmente(val, recargarFn);
+    },
+  }) || null;
+  void cargarFechasActivasVentas(recargarFn);
 
   $chips.querySelectorAll('.reporte-accion-chip[data-reporte-ventas-periodo]').forEach((chip) => {
     chip.addEventListener('click', () => {
+      if (!esUsuarioAdmin()) return;
       const periodo = String(chip.getAttribute('data-reporte-ventas-periodo') || '').trim().toLowerCase();
       if (!periodo) return;
       reporteVentasPeriodoFiltro = periodo;
@@ -6984,13 +7813,12 @@ function initReporteVentasFiltros(recargarFn) {
           String(c.getAttribute('data-reporte-ventas-periodo') || '').trim().toLowerCase() === periodo
         );
       });
+      if (periodo === 'diario') {
+        sincronizarFechaVentasUI(fechaHoyLocalInput(), recargarFn);
+        return;
+      }
       if (typeof recargarFn === 'function') void recargarFn();
     });
-  });
-
-  $fecha.addEventListener('change', () => {
-    reporteVentasFechaFiltro = $fecha.value || '';
-    if (typeof recargarFn === 'function') void recargarFn();
   });
 }
 
@@ -7505,10 +8333,9 @@ const REPORTES_CONFIG = {
 };
 
 const VENTAS_MODULO_CONFIG = {
-  placeholder: 'Buscar venta...',
   endpoint: '/reportes/corte-caja',
   tbodyId: 'tbody-reporte-corte-caja',
-  cols: 6,
+  cols: 7,
   vacio: 'No hay ventas en el periodo',
   cargando: 'Cargando ventas...',
   error: 'Error al cargar ventas',
@@ -7526,20 +8353,20 @@ function initModuloVentas() {
   const $chipsMovimientos = document.getElementById('reporte-movimientos-chips');
   const $buscar = document.getElementById('buscar-reporte');
   const $btnRecargar = document.getElementById('btn-recargar-reporte');
-  const $buscarVentas = document.getElementById('buscar-ventas');
   const $btnRecargarVentas = document.getElementById('btn-recargar-ventas');
+  const $btnRecargarVentasIcono = document.getElementById('btn-recargar-ventas-icono');
   const $panelesReporte = document.querySelectorAll('#subvista-reportes-modulo .reporte-panel');
-  if (!$tabVentas || !$tabReportes || !$svVentas || !$svReportes) return;
+  if (!$tabVentas || !$svVentas) return;
 
   initCustomSelectBasico($tipoReporte);
   initHistorialProductosReporteUI();
   initMovimientosInventarioReporteUI();
+  initVentasCorteDetalleUI();
   initReporteVentasFiltros(() => cargarVentasModulo());
 
   let reporteReqId = 0;
   let ventasReqId = 0;
   let debounceBuscar = null;
-  let debounceBuscarVentas = null;
   let reporteActivo = REPORTES_CHIPS_CONFIG[REPORTE_CHIP_DEFAULT]?.tipo || REPORTE_TIPO_DEFAULT;
   let reporteChipActivo = REPORTE_CHIP_DEFAULT;
 
@@ -7598,13 +8425,13 @@ function initModuloVentas() {
   async function cargarVentasModulo() {
     const cfg = VENTAS_MODULO_CONFIG;
     const $tbody = document.getElementById(cfg.tbodyId);
+    ventaCorteSeleccionadaId = null;
+    forzarVentasSoloHoyVendedor();
     const reqId = ++ventasReqId;
     if ($tbody) {
       $tbody.innerHTML = `<tr><td colspan="${cfg.cols}" class="tabla-vacio">${escReporteTexto(cfg.cargando)}</td></tr>`;
     }
-    const params = new URLSearchParams({ limit: '300' });
-    const q = ($buscarVentas?.value || '').trim();
-    if (q) params.set('q', q);
+    const params = anexarSucursalIdParamsReporte(new URLSearchParams({ limit: '300' }));
     params.set('periodo', reporteVentasPeriodoFiltro || 'diario');
     if (reporteVentasFechaFiltro) params.set('fecha', reporteVentasFechaFiltro);
     try {
@@ -7653,7 +8480,7 @@ function initModuloVentas() {
     if ($tbody) {
       $tbody.innerHTML = `<tr><td colspan="${cols}" class="tabla-vacio">${escReporteTexto(cfg.cargando)}</td></tr>`;
     }
-    const params = new URLSearchParams({ limit: '300' });
+    const params = anexarSucursalIdParamsReporte(new URLSearchParams({ limit: '300' }));
     const q = ($buscar?.value || '').trim();
     if (q) params.set('q', q);
     if (reporteActivo === 'historial-productos' && reporteHistorialAccionFiltro) {
@@ -7699,22 +8526,24 @@ function initModuloVentas() {
   }
 
   function irASubvista(sub = 'ventas') {
-    const modo = sub === 'reportes' ? 'reportes' : 'ventas';
+    const modo = (!esUsuarioAdmin() || sub !== 'reportes') ? 'ventas' : 'reportes';
     $tabVentas.classList.toggle('activo', modo === 'ventas');
-    $tabReportes.classList.toggle('activo', modo === 'reportes');
+    $tabReportes?.classList.toggle('activo', modo === 'reportes');
     $svVentas.style.display = modo === 'ventas' ? '' : 'none';
-    $svReportes.style.display = modo === 'reportes' ? '' : 'none';
+    if ($svReportes) $svReportes.style.display = modo === 'reportes' ? '' : 'none';
     if ($toolbarReportes) $toolbarReportes.hidden = modo !== 'reportes';
     try { localStorage.setItem(VENTAS_SUBMODULO_KEY, modo); } catch (_) {}
     if (modo === 'reportes') {
+      void cargarResumenInventarioReportes();
       activarChipReporte(reporteChipActivo, { limpiarBusqueda: false, recargar: true });
     } else {
+      void cargarFechasActivasVentas(() => cargarVentasModulo());
       void cargarVentasModulo();
     }
   }
 
   $tabVentas.addEventListener('click', () => irASubvista('ventas'));
-  $tabReportes.addEventListener('click', () => irASubvista('reportes'));
+  $tabReportes?.addEventListener('click', () => irASubvista('reportes'));
   $chipsMovimientos?.querySelectorAll('.reporte-accion-chip[data-reporte-chip]').forEach((chip) => {
     chip.addEventListener('click', () => {
       const id = String(chip.dataset.reporteChip || '').trim().toLowerCase();
@@ -7722,24 +8551,36 @@ function initModuloVentas() {
       activarChipReporte(id, { limpiarBusqueda: true, recargar: true });
     });
   });
-  $btnRecargar?.addEventListener('click', () => { void cargarReporteActivo(); });
+  $btnRecargar?.addEventListener('click', () => {
+    void cargarResumenInventarioReportes();
+    void cargarReporteActivo();
+  });
   $buscar?.addEventListener('input', () => {
     if (!REPORTES_CONFIG[reporteActivo]) return;
     clearTimeout(debounceBuscar);
     debounceBuscar = setTimeout(() => { void cargarReporteActivo(); }, 250);
   });
-  $btnRecargarVentas?.addEventListener('click', () => { void cargarVentasModulo(); });
-  $buscarVentas?.addEventListener('input', () => {
-    clearTimeout(debounceBuscarVentas);
-    debounceBuscarVentas = setTimeout(() => { void cargarVentasModulo(); }, 250);
-  });
+  function recargarVentasModuloUI() {
+    if (esUsuarioAdmin()) {
+      void cargarFechasActivasVentas(() => cargarVentasModulo());
+    } else {
+      forzarVentasSoloHoyVendedor();
+      void cargarVentasModulo();
+    }
+  }
+  $btnRecargarVentas?.addEventListener('click', recargarVentasModuloUI);
+  $btnRecargarVentasIcono?.addEventListener('click', recargarVentasModuloUI);
 
   window.ucVentasIrASubvista = irASubvista;
   window.ucRecargarReporteActivo = () => { void cargarReporteActivo(); };
-  window.ucRecargarVentasModulo = () => { void cargarVentasModulo(); };
+  window.ucRecargarVentasModulo = () => { recargarVentasModuloUI(); };
+  window.ucRecargarResumenInventarioReportes = () => { void cargarResumenInventarioReportes(); };
   activarChipReporte(REPORTE_CHIP_DEFAULT, { limpiarBusqueda: false, recargar: false });
   actualizarControlesReporteToolbar();
-  irASubvista(localStorage.getItem(VENTAS_SUBMODULO_KEY) || 'ventas');
+  aplicarUiPermisosModuloVentas();
+  const subGuardado = localStorage.getItem(VENTAS_SUBMODULO_KEY);
+  const subInicial = esUsuarioAdmin() && subGuardado === 'reportes' ? 'reportes' : 'ventas';
+  irASubvista(subInicial);
 }
 
 function initModulo() {
@@ -7788,7 +8629,7 @@ function renderTablaUsuarios(lista) {
       <td class="tabla-num">${u.id}</td>
       <td>${u.usuario}</td>
       <td>${u.nombre}</td>
-      <td><span class="badge ${u.rol === 'admin' ? 'badge-admin' : 'badge-vendedor'}">${u.rol}</span></td>
+      <td><span class="badge ${claseBadgeRol(u.rol)}">${escHtmlInventario(etiquetaRolUsuario(u.rol))}</span></td>
       <td>${u.sucursal_nombre || '<span style="opacity:.4">—</span>'}</td>
       <td><span class="badge ${u.activo ? 'badge-activo' : 'badge-inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
       <td>
@@ -7809,6 +8650,7 @@ function initUsuarios() {
   });
 
   document.getElementById('btn-nuevo-usuario').addEventListener('click', () => abrirModalUsuario());
+  document.getElementById('mu-rol')?.addEventListener('change', actualizarRequeridoSucursalModalUsuario);
   document.getElementById('modal-usuario-cancelar').addEventListener('click', cerrarModalUsuario);
   document.getElementById('modal-usuario').addEventListener('click', e => { if (e.target.id === 'modal-usuario') cerrarModalUsuario(); });
 
@@ -7825,6 +8667,9 @@ function initUsuarios() {
     const pass = document.getElementById('mu-password').value;
     if (pass) datos.password = pass;
     if (!id && !pass) return alert('La contraseña es requerida para usuarios nuevos');
+    if (rolRequiereSucursalAsignada(datos.rol) && !datos.sucursal_id) {
+      return alert('Admin y vendedor deben tener una sucursal asignada');
+    }
 
     try {
       let r;
@@ -7844,32 +8689,42 @@ function initUsuarios() {
   });
 }
 
-function poblarSelectSucursales() {
+function poblarSelectSucursales(opcional = true) {
   const $sel = document.getElementById('mu-sucursal');
   const val = $sel.value;
-  $sel.innerHTML = '<option value="">Sin asignar</option>' +
-    todasSucursales.filter(s => s.activo).map(s => `<option value="${s.id}">${s.nombre}</option>`).join('');
-  $sel.value = val;
+  const placeholder = opcional
+    ? '<option value="">Sin asignar</option>'
+    : '<option value="" disabled selected hidden>Seleccionar sucursal</option>';
+  $sel.innerHTML = placeholder
+    + todasSucursales.filter(s => s.activo).map(s => `<option value="${s.id}">${s.nombre}</option>`).join('');
+  $sel.required = !opcional;
+  if (val) $sel.value = val;
+}
+
+function actualizarRequeridoSucursalModalUsuario() {
+  const requiere = rolRequiereSucursalAsignada(document.getElementById('mu-rol')?.value);
+  poblarSelectSucursales(!requiere);
 }
 
 function abrirModalUsuario(usuario = null) {
   const $modal = document.getElementById('modal-usuario');
   const $form = document.getElementById('form-usuario');
   const $pass = document.getElementById('mu-password');
-  poblarSelectSucursales();
   $form.reset();
   if (usuario) {
     document.getElementById('modal-usuario-titulo').textContent = 'Editar usuario';
     $form.dataset.editId = usuario.id;
     document.getElementById('mu-usuario').value = usuario.usuario;
     document.getElementById('mu-nombre').value = usuario.nombre;
-    document.getElementById('mu-rol').value = usuario.rol;
+    document.getElementById('mu-rol').value = normalizarRolUsuario(usuario.rol);
+    actualizarRequeridoSucursalModalUsuario();
     document.getElementById('mu-sucursal').value = usuario.sucursal_id || '';
     document.getElementById('mu-activo').value = String(usuario.activo);
     $pass.placeholder = 'Dejar vacío para no cambiar'; $pass.required = false;
   } else {
     document.getElementById('modal-usuario-titulo').textContent = 'Nuevo usuario';
     delete $form.dataset.editId;
+    actualizarRequeridoSucursalModalUsuario();
     $pass.placeholder = 'Contraseña'; $pass.required = true;
   }
   $modal.classList.add('visible');
@@ -8247,6 +9102,7 @@ function initConfirmar() {
 }
 
 function eliminarProductoDesdeInventario(id, nombre, esConsignado = false) {
+  if (!puedeGestionarInventario()) return;
   const tipo = esConsignado ? 'producto consignado' : 'producto';
   abrirConfirmar(`¿Eliminar el ${tipo} "${nombre}"?`, async () => {
     const url = esConsignado
