@@ -76,6 +76,7 @@ async function emitirTicketUrbanCaseSincrono(pool, {
 
 async function procesarVentaTarjeta(req, res, { items, sucursalId, metodoPago }) {
   const usuarioId = req.usuario?.id != null ? Number(req.usuario.id) : null;
+  const rolUsuario = req.usuario?.rol;
   const token = String(process.env.MP_ACCESS_TOKEN || '').trim();
 
   let sucursal;
@@ -90,6 +91,7 @@ async function procesarVentaTarjeta(req, res, { items, sucursalId, metodoPago })
       items,
       sucursalId,
       bloquearStock: false,
+      rolUsuario,
     });
     subtotal = prep.subtotal;
     lineasPreview = prep.lineas;
@@ -147,6 +149,7 @@ async function procesarVentaTarjeta(req, res, { items, sucursalId, metodoPago })
       items,
       sucursalId,
       bloquearStock: true,
+      rolUsuario,
     });
     if (prep.subtotal !== subtotal) {
       throw new Error('El total cambió mientras se cobraba. Revisá inventario y reintenta.');

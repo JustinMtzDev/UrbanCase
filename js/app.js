@@ -43,6 +43,10 @@ function esUsuarioAdmin() {
   return esUsuarioConAccesoCompleto();
 }
 
+function esUsuarioDueno(rol) {
+  return normalizarRolUsuario(rol ?? window.ucUsuarioSesion?.rol) === 'dueno';
+}
+
 function claseBadgeRol(rol) {
   const r = normalizarRolUsuario(rol);
   if (r === 'dueno') return 'badge-dueno';
@@ -210,6 +214,7 @@ function aplicarPermisosSegunRol(usuario) {
   };
   actualizarUsuarioHeader(window.ucUsuarioSesion);
   document.body.classList.toggle('uc-rol-admin', accesoCompleto);
+  document.body.classList.toggle('uc-rol-dueno', esUsuarioDueno(rol));
   document.body.classList.toggle('uc-rol-vendedor', rol === 'vendedor');
   ['todos', 'clientes', 'usuarios'].forEach((cat) => {
     const $btn = document.querySelector(`.categoria-btn[data-categoria="${cat}"]`);
@@ -5972,48 +5977,185 @@ function initPOS() {
   const $modalFundaPrecio = document.getElementById('modal-funda-precio-carrito');
   const $fundaPrecioChipsCarrito = document.getElementById('modal-funda-precio-chips');
   const $fundaPrecioSubtitulo = document.getElementById('modal-funda-precio-subtitulo');
-  let fundaCarritoPendiente = null;
+  const $fundaPrecioTitulo = document.getElementById('modal-funda-precio-titulo');
+  const $fundaPrecioLibre = document.getElementById('modal-funda-precio-libre');
+  const $fundaPrecioLibreInput = document.getElementById('modal-funda-precio-libre-input');
+  let precioCarritoModalCtx = null;
 
-  function cerrarModalPrecioFundaCarrito() {
-    $modalFundaPrecio?.classList.remove('visible');
-    $modalFundaPrecio?.setAttribute('aria-hidden', 'true');
-    fundaCarritoPendiente = null;
+  function productoCarritoTieneRangoPrecio(prod) {
+    return getPrecioMaxProducto(prod) > getPrecioMinProducto(prod);
   }
 
-  function abrirModalPrecioFundaCarrito(prod) {
-    if (!modoRestockRapido && (Number(prod?.stock) || 0) <= 0) return;
-    if (!$modalFundaPrecio || !$fundaPrecioChipsCarrito) {
-      agregarProductoAlCarritoDirecto(prod);
-      return;
+  function obtenerProductoLiveCarritoItem(item) {
+    if (!item) return null;
+    if (item.consignado) {
+      return productosConsignadosInventario.find((p) => Number(p.id) === Number(item.id)) || item;
     }
-    fundaCarritoPendiente = prod;
-    const min = getPrecioMinProducto(prod);
-    const max = getPrecioMaxProducto(prod);
-    const opts = opcionesPrecioEnRangoFundas(min, max);
-    if ($fundaPrecioSubtitulo) {
-      const nom = typeof nombreProductoInventarioDisplay === 'function'
-        ? nombreProductoInventarioDisplay(prod)
-        : (prod.nombre || 'Funda');
-      $fundaPrecioSubtitulo.textContent = `${nom} · ${formatearPrecioRangoSimple(min)} - ${formatearPrecioRangoSimple(max)}`;
+    return productosInventario.find((p) => Number(p.id) === Number(item.id)) || item;
+  }
+
+  function mostrarPanelPrecioLibreCarrito(mostrar, precioInicial = '') {
+    if ($fundaPrecioLibre) $fundaPrecioLibre.hidden = !mostrar;
+    if ($fundaPrecioChipsCarrito) {
+      $fundaPrecioChipsCarrito.hidden = mostrar;
+      $fundaPrecioChipsCarrito.style.display = mostrar ? 'none' : '';
+      if (mostrar) $fundaPrecioChipsCarrito.innerHTML = '';
     }
-    $fundaPrecioChipsCarrito.innerHTML = opts.map((v) =>
-      `<button type="button" class="form-chip" data-precio-funda-carrito="${v}">${formatearPrecioRangoSimple(v)}</button>`
-    ).join('');
+    if ($fundaPrecioLibreInput && mostrar) {
+      const n = Number(precioInicial);
+      $fundaPrecioLibreInput.value = Number.isFinite(n) && n > 0 ? String(Math.round(n)) : '';
+      requestAnimationFrame(() => {
+        $fundaPrecioLibreInput.focus();
+        $fundaPrecioLibreInput.select();
+      });
+    }
+  }
+
+  function cerrarModalPrecioCarrito() {
+    $modalFundaPrecio?.classList.remove('visible');
+    $modalFundaPrecio?.setAttribute('aria-hidden', 'true');
+    precioCarritoModalCtx = null;
+    mostrarPanelPrecioLibreCarrito(false);
+  }
+
+  function aplicarPrecioUnitarioCarrito(clave, nuevoPrecio) {
+    const precioNum = Number(nuevoPrecio);
+    if (!Number.isFinite(precioNum) || precioNum <= 0) return;
+    const item = carrito.find((i) => claveCarritoItem(i) === clave);
+    if (!item) return;
+    if (Math.round(Number(item.precio) * 100) === Math.round(precioNum * 100)) return;
+
+    const existente = carrito.find((i) => claveCarritoItem(i) !== clave
+      && Number(i.id) === Number(item.id)
+      && Boolean(i.consignado) === Boolean(item.consignado)
+      && Math.round(Number(i.precio) * 100) === Math.round(precioNum * 100));
+    if (existente) {
+      existente.cantidad += item.cantidad;
+      carrito = carrito.filter((i) => claveCarritoItem(i) !== clave);
+    } else {
+      item.precio = precioNum;
+    }
+    actualizarCarrito();
+  }
+
+  function renderChipsPrecioCarrito(opts, precioActual, onSelect) {
+    if (!$fundaPrecioChipsCarrito) return;
+    $fundaPrecioChipsCarrito.innerHTML = opts.map((v) => {
+      const activo = Math.round(Number(v) * 100) === Math.round(Number(precioActual) * 100);
+      return `<button type="button" class="form-chip${activo ? ' activo' : ''}" data-precio-funda-carrito="${v}">${formatearPrecioRangoSimple(v)}</button>`;
+    }).join('');
     $fundaPrecioChipsCarrito.querySelectorAll('.form-chip').forEach((chip) => {
       chip.addEventListener('click', () => {
         const precio = Number(chip.dataset.precioFundaCarrito);
-        if (!fundaCarritoPendiente || !Number.isFinite(precio)) return;
-        agregarProductoAlCarritoDirecto({ ...fundaCarritoPendiente, precio });
-        cerrarModalPrecioFundaCarrito();
+        if (!Number.isFinite(precio)) return;
+        onSelect(precio);
       });
     });
+  }
+
+  function abrirModalPrecioCarrito({ prod, modo, clave = null, precioActual = null }) {
+    if (!$modalFundaPrecio) {
+      if (modo === 'agregar') agregarProductoAlCarritoDirecto(prod);
+      return;
+    }
+    precioCarritoModalCtx = { prod, modo, clave, precioActual };
+    const nom = typeof nombreProductoInventarioDisplay === 'function'
+      ? nombreProductoInventarioDisplay(prod)
+      : (prod.nombre || 'Producto');
+    const tieneRango = productoCarritoTieneRangoPrecio(prod);
+    if ($fundaPrecioTitulo) {
+      $fundaPrecioTitulo.textContent = modo === 'editar' ? 'Precio de esta venta' : 'Selecciona el precio';
+    }
+
+    const onAplicar = (precio) => {
+      if (modo === 'agregar') {
+        agregarProductoAlCarritoDirecto({ ...prod, precio });
+      } else {
+        aplicarPrecioUnitarioCarrito(clave, precio);
+      }
+      cerrarModalPrecioCarrito();
+    };
+
+    // Dueño: al editar en carrito, cualquier precio (solo afecta la venta, no el inventario).
+    if (modo === 'editar' && esUsuarioDueno()) {
+      const min = getPrecioMinProducto(prod);
+      const max = getPrecioMaxProducto(prod);
+      if ($fundaPrecioSubtitulo) {
+        if (tieneRango) {
+          $fundaPrecioSubtitulo.textContent = `${nom} · catálogo ${formatearPrecioRangoSimple(min)} – ${formatearPrecioRangoSimple(max)}`;
+        } else {
+          $fundaPrecioSubtitulo.textContent = `${nom} · catálogo ${formatearPrecio(min)}`;
+        }
+      }
+      mostrarPanelPrecioLibreCarrito(true, precioActual ?? min);
+      $modalFundaPrecio.classList.add('visible');
+      $modalFundaPrecio.setAttribute('aria-hidden', 'false');
+      return;
+    }
+
+    if (tieneRango) {
+      mostrarPanelPrecioLibreCarrito(false);
+      const min = getPrecioMinProducto(prod);
+      const max = getPrecioMaxProducto(prod);
+      if ($fundaPrecioSubtitulo) {
+        $fundaPrecioSubtitulo.textContent = `${nom} · ${formatearPrecioRangoSimple(min)} - ${formatearPrecioRangoSimple(max)}`;
+      }
+      renderChipsPrecioCarrito(
+        opcionesPrecioEnRangoFundas(min, max),
+        precioActual ?? min,
+        onAplicar
+      );
+    } else {
+      agregarProductoAlCarritoDirecto(prod);
+      return;
+    }
+
     $modalFundaPrecio.classList.add('visible');
     $modalFundaPrecio.setAttribute('aria-hidden', 'false');
   }
 
-  document.getElementById('modal-funda-precio-cancelar')?.addEventListener('click', cerrarModalPrecioFundaCarrito);
+  function abrirModalPrecioFundaCarrito(prod) {
+    if (!modoRestockRapido && (Number(prod?.stock) || 0) <= 0) return;
+    abrirModalPrecioCarrito({ prod, modo: 'agregar' });
+  }
+
+  function abrirEditarPrecioCarritoDesdeItem(item) {
+    if (!esUsuarioDueno()) return;
+    const live = obtenerProductoLiveCarritoItem(item);
+    const prod = live ? { ...live } : { ...item };
+    if (item.consignado) {
+      prod.es_consignado = true;
+      prod.precio = item.precio;
+      prod.precio_venta = item.precio;
+    }
+    abrirModalPrecioCarrito({
+      prod,
+      modo: 'editar',
+      clave: claveCarritoItem(item),
+      precioActual: item.precio,
+    });
+  }
+
+  document.getElementById('modal-funda-precio-cancelar')?.addEventListener('click', cerrarModalPrecioCarrito);
   $modalFundaPrecio?.addEventListener('click', (e) => {
-    if (e.target === $modalFundaPrecio) cerrarModalPrecioFundaCarrito();
+    if (e.target === $modalFundaPrecio) cerrarModalPrecioCarrito();
+  });
+  document.getElementById('modal-funda-precio-libre-aplicar')?.addEventListener('click', () => {
+    const ctx = precioCarritoModalCtx;
+    if (!ctx || ctx.modo !== 'editar') return;
+    const precio = Number(String($fundaPrecioLibreInput?.value ?? '').replace(',', '.'));
+    if (!Number.isFinite(precio) || precio <= 0) {
+      alert('Ingresa un precio válido');
+      return;
+    }
+    aplicarPrecioUnitarioCarrito(ctx.clave, precio);
+    cerrarModalPrecioCarrito();
+  });
+  $fundaPrecioLibreInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('modal-funda-precio-libre-aplicar')?.click();
+    }
   });
 
   function renderProductos() {
@@ -6300,6 +6442,10 @@ function initPOS() {
         const clave = claveCarritoItem(i);
         const maxQty = stockMaxCarritoVentaItem(i, clave);
         const enTope = (Number(i.cantidad) || 0) >= maxQty;
+        const precioLinea = formatearPrecio(i.precio * i.cantidad);
+        const precioCelda = esUsuarioDueno()
+          ? `<button type="button" class="carrito-item-precio carrito-item-precio-editable" title="Clic para cambiar precio unitario (${formatearPrecio(i.precio)})">${precioLinea}</button>`
+          : `<span class="carrito-item-precio">${precioLinea}</span>`;
         return `
         <div class="carrito-item" data-clave="${clave}">
           <span class="carrito-item-nombre">${i.nombre}</span>
@@ -6308,7 +6454,7 @@ function initPOS() {
             <span>${i.cantidad}</span>
             <button type="button" aria-label="Más"${enTope ? ' disabled title="Stock máximo"' : ''}>+</button>
           </div>
-          <span class="carrito-item-precio">${formatearPrecio(i.precio * i.cantidad)}</span>
+          ${precioCelda}
           <button type="button" class="carrito-item-quitar" aria-label="Quitar">×</button>
         </div>`;
       }).join('');
@@ -6330,6 +6476,10 @@ function initPOS() {
           carrito = carrito.filter(i => claveCarritoItem(i) !== clave);
           actualizarCarrito();
         };
+        row.querySelector('.carrito-item-precio-editable')?.addEventListener('click', () => {
+          const it = carrito.find((i) => claveCarritoItem(i) === clave);
+          if (it) abrirEditarPrecioCarritoDesdeItem(it);
+        });
       });
     }
   }

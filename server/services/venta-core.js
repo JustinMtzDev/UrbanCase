@@ -1,12 +1,19 @@
 const { registrarMovimientoInventario } = require('./inventario-movimientos');
 
+const { normalizarRol } = require('../middleware/roles');
+
 function redondearMoneda(n) {
   return Math.round(Number(n) * 100) / 100;
 }
 
-function precioVentaValido(producto, precioUnitario) {
+function esDuenoUsuario(rol) {
+  return normalizarRol(rol) === 'dueno';
+}
+
+function precioVentaValido(producto, precioUnitario, { precioLibreDueno = false } = {}) {
   const precio = Number(precioUnitario);
   if (!Number.isFinite(precio) || precio <= 0) return false;
+  if (precioLibreDueno) return true;
   const min = Number(producto.precio);
   const max = producto.precio_max != null ? Number(producto.precio_max) : min;
   if (!Number.isFinite(min)) return false;
@@ -27,11 +34,12 @@ async function obtenerSucursalVenta(client, sucursalId) {
   return sucCheck.rows[0];
 }
 
-async function prepararLineasVenta(client, { items, sucursalId, bloquearStock = true }) {
+async function prepararLineasVenta(client, { items, sucursalId, bloquearStock = true, rolUsuario = null } = {}) {
   const lock = bloquearStock ? ' FOR UPDATE' : '';
   const lineas = [];
   const cantidadPorProducto = new Map();
   const consignadoIds = new Set();
+  const precioLibreDueno = esDuenoUsuario(rolUsuario);
 
   for (const raw of items) {
     const esConsignado = Boolean(raw?.es_consignado ?? raw?.consignado);
@@ -69,7 +77,7 @@ async function prepararLineasVenta(client, { items, sucursalId, bloquearStock = 
       if (Number(cons.sucursal_id) !== sucursalId) {
         throw new Error(`«${cons.nombre}» no pertenece a la sucursal seleccionada`);
       }
-      if (Math.round(precioUnitario * 100) !== Math.round(Number(cons.precio_venta) * 100)) {
+      if (!precioLibreDueno && Math.round(precioUnitario * 100) !== Math.round(Number(cons.precio_venta) * 100)) {
         throw new Error(`Precio inválido para «${cons.nombre}»`);
       }
       if (cantidad !== 1) {
@@ -141,7 +149,7 @@ async function prepararLineasVenta(client, { items, sucursalId, bloquearStock = 
     if (linea.es_consignado || !linea._pendiente_producto) continue;
     const prod = productosCache.get(linea.producto_id);
     if (!prod) continue;
-    if (!precioVentaValido(prod, linea.precio_unitario)) {
+    if (!precioVentaValido(prod, linea.precio_unitario, { precioLibreDueno })) {
       throw new Error(`Precio inválido para «${prod.nombre}»`);
     }
     linea.producto_nombre = prod.nombre;
