@@ -6934,3 +6934,50 @@ body:not(.theme-dark) .dashboard-comparativa-card {
     margin-left: auto;
   }
 }
+
+/* Solo celular (no iPad): módulos a 100% width y altura de viewport */
+@media (max-width: 700px) {
+  .app {
+    max-width: none;
+    min-height: 100dvh;
+    padding: 1.5rem 1.5rem 0;
+    gap: 1.5rem;
+    box-sizing: border-box;
+  }
+
+  /* Contenedor de módulos a full bleed; navbar sin cambios */
+  .app > .app-glass {
+    width: calc(100% + 3rem);
+    max-width: none;
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+    flex: 1 1 auto;
+    min-height: calc(100dvh - 72px - 1.5rem - 1.5rem);
+    border-radius: 20px 20px 0 0;
+    box-sizing: border-box;
+  }
+
+  /* KPIs en grilla 2x2 */
+  .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .dashboard-kpi-card {
+    min-height: 96px;
+    padding: 0.85rem 0.65rem;
+  }
+
+  .dashboard-kpi-label {
+    font-size: 0.68rem;
+    line-height: 1.2;
+  }
+
+  .dashboard-kpi-valor {
+    font-size: 1.2rem;
+  }
+
+  .dashboard-kpi-meta {
+    font-size: 0.72rem;
+  }
+}
