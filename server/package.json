@@ -13,6 +13,7 @@
     "migrate-productos-historial": "node migrate-productos-historial.js",
     "migrate-ventas": "node migrate-ventas.js",
     "migrate-tickets": "node migrate-tickets.js",
+    "migrate-ventas-mp": "node migrate-ventas-mp.js",
     "setup-mp-terminal": "node setup-mp-terminal.js"
   },
   "keywords": [],

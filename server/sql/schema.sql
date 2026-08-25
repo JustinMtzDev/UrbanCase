@@ -224,4 +224,16 @@ BEGIN
   ) THEN
     ALTER TABLE public.ventas ADD COLUMN ticket_impreso_at TIMESTAMPTZ;
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'ventas' AND column_name = 'mp_order_id'
+  ) THEN
+    ALTER TABLE public.ventas ADD COLUMN mp_order_id VARCHAR(80);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'ventas' AND column_name = 'mp_payment_id'
+  ) THEN
+    ALTER TABLE public.ventas ADD COLUMN mp_payment_id VARCHAR(80);
+  END IF;
 END $$;
