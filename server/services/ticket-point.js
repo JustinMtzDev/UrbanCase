@@ -6,6 +6,8 @@ const { armarContenidoPoint } = require('./ticket-contenido');
 
 const MP_ACTIONS_URL = 'https://api.mercadopago.com/terminals/v1/actions';
 const LAST_ACTION_PATH = path.join(__dirname, '..', 'tickets', 'last-mp-action.json');
+const ESPERA_IMPRESION_MS = 120000;
+const MAX_REINTENTOS_409 = 24;
 
 const colaImpresion = [];
 let drenandoCola = false;
@@ -124,11 +126,16 @@ async function crearImpresion(token, terminal, datos) {
 }
 
 async function esperarProcesada(token, actionId) {
+  const inicio = Date.now();
   let n = 0;
   for (;;) {
     const estado = await estadoAccion(token, actionId);
     if (estado === 'processed' || estado === 'failed' || estado === 'canceled') {
       return estado;
+    }
+    if (Date.now() - inicio >= ESPERA_IMPRESION_MS) {
+      console.warn('Ticket Point: tiempo de espera agotado', actionId, estado || 'created');
+      return 'timeout';
     }
     n += 1;
     if (n === 1 || n % 8 === 0) {
@@ -139,10 +146,21 @@ async function esperarProcesada(token, actionId) {
 }
 
 async function enviarHastaAceptar(token, terminal, datos) {
+  let reintentos409 = 0;
   for (;;) {
     const res = await crearImpresion(token, terminal, datos);
     if (res.ok) return res;
     if (res.status === 409) {
+      reintentos409 += 1;
+      if (reintentos409 > MAX_REINTENTOS_409) {
+        return {
+          ok: false,
+          status: 409,
+          body: {
+            message: 'La Point sigue con un ticket en cola. Entrá a Ingresar monto y pulsá Actualizar.',
+          },
+        };
+      }
       const previa = leerUltimaAccion();
       const estado = await estadoAccion(token, previa);
       if (estado === 'processed' || estado === 'failed' || estado === 'canceled' || !previa) {
@@ -152,6 +170,7 @@ async function enviarHastaAceptar(token, terminal, datos) {
       await sleep(2500);
       continue;
     }
+    console.error('Ticket Point MP:', res.status, JSON.stringify(res.body));
     return res;
   }
 }
@@ -174,9 +193,13 @@ async function drenarColaImpresion() {
       guardarUltimaAccion(actionId);
       const estado = await esperarProcesada(token, actionId);
       if (estado === 'processed') {
+        console.log('Ticket Point: impreso venta', job.datos?.folio, actionId);
         if (job.onOk) await job.onOk(actionId);
       } else if (job.onFail) {
-        await job.onFail(`Impresión ${estado}`);
+        const msg = estado === 'timeout'
+          ? 'La Point no respondió a tiempo. Revisá que esté en Ingresar monto y pulsá Actualizar.'
+          : `Impresión ${estado}`;
+        await job.onFail(msg);
       }
     } catch (err) {
       console.error('Ticket Point:', err.message);

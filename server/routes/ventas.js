@@ -3,6 +3,8 @@ const { Router } = require('express');
 const pool = require('../config/db');
 const { registrarMovimientoInventario } = require('../services/inventario-movimientos');
 const { emitirTicketVenta } = require('../services/ticket-emision');
+const { armarDatosTicket } = require('../services/ticket-contenido');
+const { reimprimirTicketAhora, terminalParaSucursal } = require('../services/ticket-point');
 const { rutaAbsolutaTicket } = require('../services/ticket-pdf');
 
 const METODOS_PAGO = new Set(['efectivo', 'tarjeta', 'transferencia']);
@@ -279,6 +281,51 @@ router.post('/', async (req, res) => {
     res.status(400).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+router.post('/:id/reimprimir-ticket', async (req, res) => {
+  const ventaId = Number(req.params.id);
+  if (!Number.isFinite(ventaId) || ventaId <= 0) {
+    return res.status(400).json({ error: 'id de venta inválido' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT v.*, s.nombre AS sucursal_nombre, s.mp_terminal_id
+       FROM ventas v
+       JOIN sucursales s ON s.id = v.sucursal_id
+       WHERE v.id = $1`,
+      [ventaId]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Venta no encontrada' });
+    }
+    const venta = rows[0];
+    const { rows: lineas } = await pool.query(
+      `SELECT producto_nombre, cantidad, precio_unitario, subtotal
+       FROM venta_detalle WHERE venta_id = $1 ORDER BY id`,
+      [ventaId]
+    );
+    const datos = armarDatosTicket({
+      venta,
+      sucursalNombre: venta.sucursal_nombre,
+      usuarioNombre: req.usuario?.nombre,
+      lineas,
+    });
+    const terminal = terminalParaSucursal({ mp_terminal_id: venta.mp_terminal_id });
+    const printRes = await reimprimirTicketAhora({ datos, terminalId: terminal });
+    if (printRes.ok) {
+      await pool.query('UPDATE ventas SET ticket_impreso_at = NOW() WHERE id = $1', [ventaId]);
+    }
+    res.json({
+      ok: printRes.ok,
+      venta_id: ventaId,
+      action_id: printRes.id || null,
+      estado: printRes.estado || null,
+      error: printRes.error || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
