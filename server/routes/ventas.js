@@ -1,6 +1,9 @@
+const fs = require('fs');
 const { Router } = require('express');
 const pool = require('../config/db');
 const { registrarMovimientoInventario } = require('../services/inventario-movimientos');
+const { emitirTicketVenta } = require('../services/ticket-emision');
+const { rutaAbsolutaTicket } = require('../services/ticket-pdf');
 
 const METODOS_PAGO = new Set(['efectivo', 'tarjeta', 'transferencia']);
 
@@ -40,7 +43,7 @@ router.post('/', async (req, res) => {
     await client.query('BEGIN');
 
     const sucCheck = await client.query(
-      'SELECT id FROM sucursales WHERE id = $1 AND activo IS NOT FALSE',
+      'SELECT id, nombre, mp_terminal_id FROM sucursales WHERE id = $1 AND activo IS NOT FALSE',
       [sucursalId]
     );
     if (sucCheck.rows.length === 0) {
@@ -250,19 +253,57 @@ router.post('/', async (req, res) => {
     }
 
     await client.query('COMMIT');
+    let ticket = { pdf: false, print: false, print_omitido: true, print_error: null };
+    try {
+      ticket = await emitirTicketVenta(pool, {
+        venta,
+        sucursal: sucCheck.rows[0],
+        usuarioNombre: req.usuario?.nombre,
+        lineas,
+      });
+    } catch (emitErr) {
+      console.error('Ticket venta:', emitErr.message);
+    }
     res.status(201).json({
       ok: true,
       venta: {
         ...venta,
         subtotal: Number(venta.subtotal),
         total: Number(venta.total),
+        ticket_pdf: Boolean(ticket.pdf),
       },
+      ticket,
     });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     res.status(400).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+router.get('/:id/ticket', async (req, res) => {
+  const ventaId = Number(req.params.id);
+  if (!Number.isFinite(ventaId) || ventaId <= 0) {
+    return res.status(400).json({ error: 'id de venta inválido' });
+  }
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, ticket_pdf_path FROM ventas WHERE id = $1',
+      [ventaId]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Venta no encontrada' });
+    }
+    const abs = rutaAbsolutaTicket(rows[0].ticket_pdf_path);
+    if (!abs || !fs.existsSync(abs)) {
+      return res.status(404).json({ error: 'Este ticket no tiene PDF' });
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="ticket-${ventaId}.pdf"`);
+    fs.createReadStream(abs).pipe(res);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

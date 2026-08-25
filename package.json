@@ -3,9 +3,13 @@
   "private": true,
   "version": "1.0.0",
   "description": "POS para accesorios de celulares",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
+    "postinstall": "npm install --omit=dev --prefix server",
     "dev": "npm run server",
-    "server": "cd server && npm start",
-    "start": "cd server && npm start"
+    "server": "npm --prefix server start",
+    "start": "node server/index.js"
   }
 }

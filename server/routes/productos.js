@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../config/db');
+const { requireAdmin } = require('../middleware/rbac');
 const { registrarMovimientoInventario } = require('../services/inventario-movimientos');
 const {
   registrarHistorialProductoAlta,
@@ -96,7 +97,7 @@ function calcularPromedioCostoCompra(stockActual, costoActual, cantidadEntrada, 
   return Math.round(promedio * 100) / 100;
 }
 
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   let { nombre, precio, precio_max, costo_compra, stock, categoria, imagen, sucursal_id, id_sucursal } = req.body || {};
   const sid = sucursal_id != null ? sucursal_id : id_sucursal;
   if (!nombre || typeof nombre !== 'string' || nombre.trim().length === 0) {
@@ -172,7 +173,7 @@ router.get('/:id/imagen', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'ID inválido' });
   const { nombre, precio, precio_max, costo_compra, stock, categoria, imagen } = req.body || {};
@@ -289,7 +290,7 @@ function normalizarImagenProducto(imagen) {
   return imagen;
 }
 
-router.post('/restock-rapido', async (req, res) => {
+router.post('/restock-rapido', requireAdmin, async (req, res) => {
   const items = req.body?.items;
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Se requiere al menos un producto para restock' });
@@ -388,7 +389,7 @@ router.post('/restock-rapido', async (req, res) => {
   }
 });
 
-router.post('/trasladar', async (req, res) => {
+router.post('/trasladar', requireAdmin, async (req, res) => {
   const productoId = Number(req.body?.producto_id);
   const cantidad = parseInt(req.body?.cantidad, 10);
   const sucursalDestinoId = Number(req.body?.sucursal_destino_id ?? req.body?.sucursalDestinoId);
@@ -533,7 +534,7 @@ router.post('/trasladar', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'ID inválido' });
   try {

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UrbanCase — Ticket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #111114;
+      color: #e8e8ed;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 12px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    #estado {
+      padding: 24px 18px;
+      color: #c9c9d4;
+    }
+    #visor {
+      flex: 1;
+      border: 0;
+      width: 100%;
+      background: #0b0b0d;
+    }
+  </style>
+</head>
+<body>
+  <header id="titulo">UrbanCase · Ticket</header>
+  <p id="estado">Cargando ticket…</p>
+  <iframe id="visor" title="Ticket PDF" hidden></iframe>
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const ventaId = Number(params.get('venta') || '');
+      const token = localStorage.getItem('uc_token');
+      const $estado = document.getElementById('estado');
+      const $titulo = document.getElementById('titulo');
+      const $visor = document.getElementById('visor');
+
+      if (!token) {
+        window.location.href = '/login.html';
+        return;
+      }
+      if (!Number.isFinite(ventaId) || ventaId <= 0) {
+        $estado.textContent = 'Folio de venta inválido.';
+        return;
+      }
+
+      $titulo.textContent = 'UrbanCase · Ticket #' + ventaId;
+      document.title = 'Ticket #' + ventaId + ' — UrbanCase';
+
+      fetch('/api/ventas/' + ventaId + '/ticket', {
+        headers: { Authorization: 'Bearer ' + token },
+      }).then(async (r) => {
+        if (r.status === 401) {
+          window.location.href = '/login.html';
+          return;
+        }
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({}));
+          $estado.textContent = data.error || 'No se pudo abrir el ticket.';
+          return;
+        }
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        $visor.src = url;
+        $visor.hidden = false;
+        $estado.hidden = true;
+      }).catch(() => {
+        $estado.textContent = 'Error de red al cargar el ticket.';
+      });
+    })();
+  </script>
+</body>
+</html>

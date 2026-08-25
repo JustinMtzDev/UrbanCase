@@ -5,6 +5,10 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env*.bak
+server/.env*
+!server/.env.example
+
 
 # Logs
 *.log
@@ -20,5 +24,6 @@ Thumbs.db
 *.swp
 *.swo
 
-# Carpeta client (React) eliminada
-client/
+# PDFs de tickets de venta
+server/tickets/*
+!server/tickets/.gitkeep
