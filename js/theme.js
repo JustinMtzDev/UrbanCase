@@ -28,7 +28,13 @@
   function aplicarClaseTema(oscuro) {
     if (typeof document === 'undefined') return;
     document.documentElement.classList.toggle('theme-dark', oscuro);
-    if (document.body) document.body.classList.toggle('theme-dark', oscuro);
+    if (document.body) {
+      document.body.classList.toggle('theme-dark', oscuro);
+    } else {
+      document.addEventListener('DOMContentLoaded', () => {
+        document.body?.classList.toggle('theme-dark', oscuro);
+      }, { once: true });
+    }
   }
 
   function guardarPreferenciaTema(pref) {
@@ -42,7 +48,9 @@
   }
 
   function alternarTemaManual() {
-    const nuevoOscuro = !document.body?.classList.contains('theme-dark');
+    const actualOscuro = document.body?.classList.contains('theme-dark')
+      ?? document.documentElement.classList.contains('theme-dark');
+    const nuevoOscuro = !actualOscuro;
     aplicarClaseTema(nuevoOscuro);
     guardarPreferenciaTema(nuevoOscuro ? 'dark' : 'light');
     return nuevoOscuro;

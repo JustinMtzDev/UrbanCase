@@ -7070,11 +7070,19 @@ function initPOS() {
   }
   if (T) {
     actualizarEtiquetaTema(T.aplicarTemaDesdePreferencia());
-    T.iniciarTemaAutomatico(actualizarEtiquetaTema);
-    const toggleManual = () => actualizarEtiquetaTema(T.alternarTemaManual());
+    T.iniciarTemaAutomatico((oscuro) => {
+      actualizarEtiquetaTema(oscuro);
+      window.ucRefrescarTemaChart7d?.();
+    });
+    const toggleManual = () => {
+      actualizarEtiquetaTema(T.alternarTemaManual());
+      window.ucRefrescarTemaChart7d?.();
+    };
     if ($themeToggle) $themeToggle.addEventListener('click', toggleManual);
     const $logo = document.querySelector('.logo');
     if ($logo) $logo.addEventListener('click', toggleManual);
+    // Por si la gráfica cargó antes de sincronizar body/html.
+    requestAnimationFrame(() => window.ucRefrescarTemaChart7d?.());
   }
 }
 
