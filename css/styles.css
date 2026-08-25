@@ -6980,4 +6980,65 @@ body:not(.theme-dark) .dashboard-comparativa-card {
   .dashboard-kpi-meta {
     font-size: 0.72rem;
   }
+
+  /* Inventario: 2 columnas + tarjeta más compacta */
+  .inventario-grid,
+  #vista-pos.carrito-oculto .inventario-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+    padding: 6px;
+  }
+
+  .inventario-producto-card:hover {
+    transform: none;
+  }
+
+  .inventario-producto-img-wrap {
+    aspect-ratio: 4 / 3;
+  }
+
+  .inventario-producto-img {
+    padding: 8%;
+  }
+
+  .inventario-producto-favorito {
+    top: 6px;
+    right: 6px;
+    width: 28px;
+    height: 28px;
+    font-size: 0.95rem;
+  }
+
+  .inventario-producto-sin-stock-etiqueta {
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    padding: 0.28rem 0.5rem;
+  }
+
+  .inventario-producto-nombre {
+    padding: 0.4rem 0.5rem 0;
+    font-size: 0.78rem;
+    min-height: calc(0.4rem + 0.78rem * 1.2 * 2);
+  }
+
+  .inventario-producto-meta {
+    padding: 0.35rem 0.5rem 0;
+  }
+
+  .inventario-producto-precio {
+    font-size: 0.88rem;
+  }
+
+  .inventario-producto-stock {
+    font-size: 0.72rem;
+    padding: 0.15rem 0 0.2rem;
+  }
+
+  .inventario-producto-sucursal {
+    font-size: 0.62rem;
+  }
+
+  .inventario-producto-acciones {
+    margin: 0.35rem 0.5rem 0.5rem;
+  }
 }
