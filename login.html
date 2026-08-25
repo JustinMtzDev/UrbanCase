@@ -105,12 +105,15 @@
     }
     .login-logo-btn .logo-icon-light { display: block; }
     .login-logo-btn .logo-icon-dark { display: none; }
-    .login-logo-btn:hover .logo-icon-light { display: none; }
-    .login-logo-btn:hover .logo-icon-dark { display: block; }
     body.theme-dark .login-logo-btn .logo-icon-light { display: none; }
     body.theme-dark .login-logo-btn .logo-icon-dark { display: block; }
-    body.theme-dark .login-logo-btn:hover .logo-icon-light { display: block; }
-    body.theme-dark .login-logo-btn:hover .logo-icon-dark { display: none; }
+    /* Hover solo en mouse: en touch :hover se pega y deja el logo invertido */
+    @media (hover: hover) and (pointer: fine) {
+      .login-logo-btn:hover .logo-icon-light { display: none; }
+      .login-logo-btn:hover .logo-icon-dark { display: block; }
+      body.theme-dark .login-logo-btn:hover .logo-icon-light { display: block; }
+      body.theme-dark .login-logo-btn:hover .logo-icon-dark { display: none; }
+    }
 
     .login-title {
       text-align: center;
@@ -397,6 +400,7 @@
       $logoBtn.addEventListener('click', () => {
         T?.alternarTemaManual();
         actualizarIconosOjo();
+        $logoBtn.blur();
       });
     }
 

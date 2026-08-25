@@ -556,21 +556,6 @@ body .logo-icon-dark {
   pointer-events: none;
 }
 
-/* Claro: hover muestra logoDark (mascota oscura) */
-body:not(.theme-dark) .logo:hover .logo-icon-light {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  z-index: 1;
-}
-
-body:not(.theme-dark) .logo:hover .logo-icon-dark {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  z-index: 2;
-}
-
 body.theme-dark .logo-icon-light {
   opacity: 0;
   visibility: hidden;
@@ -584,18 +569,35 @@ body.theme-dark .logo-icon-dark {
   z-index: 2;
 }
 
-body.theme-dark .logo:hover .logo-icon-light {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  z-index: 2;
-}
+/* Hover solo en mouse: en touch :hover se pega y deja el logo invertido */
+@media (hover: hover) and (pointer: fine) {
+  body:not(.theme-dark) .logo:hover .logo-icon-light {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 1;
+  }
 
-body.theme-dark .logo:hover .logo-icon-dark {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  z-index: 1;
+  body:not(.theme-dark) .logo:hover .logo-icon-dark {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    z-index: 2;
+  }
+
+  body.theme-dark .logo:hover .logo-icon-light {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    z-index: 2;
+  }
+
+  body.theme-dark .logo:hover .logo-icon-dark {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 1;
+  }
 }
 
 .categorias {
