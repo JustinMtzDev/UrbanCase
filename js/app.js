@@ -66,6 +66,65 @@ function etiquetaRolUsuario(rol) {
   return map[r] || String(rol || '');
 }
 
+/** Orden de tabla: Dueño → Developer → Admin → Vendedor. */
+function ordenPrioridadRolUsuario(rol) {
+  const r = normalizarRolUsuario(rol);
+  if (r === 'dueno') return 0;
+  if (r === 'developer') return 1;
+  if (r === 'admin') return 2;
+  if (r === 'vendedor') return 3;
+  return 9;
+}
+
+function ordenarUsuariosPorRol(lista) {
+  return [...(Array.isArray(lista) ? lista : [])].sort((a, b) => {
+    const diff = ordenPrioridadRolUsuario(a?.rol) - ordenPrioridadRolUsuario(b?.rol);
+    if (diff !== 0) return diff;
+    return (Number(a?.id) || 0) - (Number(b?.id) || 0);
+  });
+}
+
+function idUsuarioConRolExistente(rolBuscado, exceptoId = null) {
+  const rolNorm = normalizarRolUsuario(rolBuscado);
+  const except = exceptoId != null ? Number(exceptoId) : null;
+  const encontrado = (Array.isArray(todosUsuarios) ? todosUsuarios : []).find((u) => {
+    if (normalizarRolUsuario(u?.rol) !== rolNorm) return false;
+    if (except != null && Number(u.id) === except) return false;
+    return true;
+  });
+  return encontrado?.id ?? null;
+}
+
+function idUsuarioDuenoExistente(exceptoId = null) {
+  return idUsuarioConRolExistente('dueno', exceptoId);
+}
+
+function idUsuarioDeveloperExistente(exceptoId = null) {
+  return idUsuarioConRolExistente('developer', exceptoId);
+}
+
+function actualizarOpcionRolUnicoModalUsuario(valorOpcion, existeOtro, editId = null) {
+  const $rol = document.getElementById('mu-rol');
+  const $opt = $rol?.querySelector(`option[value="${valorOpcion}"]`);
+  if (!$opt) return;
+  const bloquear = existeOtro != null;
+  $opt.disabled = bloquear;
+  $opt.hidden = bloquear;
+  if (bloquear && normalizarRolUsuario($rol.value) === valorOpcion) {
+    $rol.value = 'vendedor';
+  }
+}
+
+function actualizarOpcionesRolUnicosModalUsuario(editId = null) {
+  actualizarOpcionRolUnicoModalUsuario('dueno', idUsuarioDuenoExistente(editId), editId);
+  actualizarOpcionRolUnicoModalUsuario('developer', idUsuarioDeveloperExistente(editId), editId);
+}
+
+function rolGeneraComisionUsuario(rol) {
+  const r = normalizarRolUsuario(rol);
+  return r === 'admin' || r === 'vendedor';
+}
+
 function puedeGestionarInventario() {
   return esUsuarioAdmin();
 }
@@ -110,7 +169,7 @@ function aplicarUiPermisosInventarioEscritura() {
   }
 }
 
-const MODULOS_NAV_VENDEDOR = new Set(['inventario', 'ventas']);
+const MODULOS_NAV_VENDEDOR = new Set(['inventario']);
 
 function parseSucursalIdUsuario(usuario) {
   if (!usuario) return null;
@@ -216,17 +275,15 @@ function aplicarPermisosSegunRol(usuario) {
   document.body.classList.toggle('uc-rol-admin', accesoCompleto);
   document.body.classList.toggle('uc-rol-dueno', esUsuarioDueno(rol));
   document.body.classList.toggle('uc-rol-vendedor', rol === 'vendedor');
-  ['todos', 'clientes', 'usuarios'].forEach((cat) => {
+  ['todos', 'clientes', 'usuarios', 'ventas'].forEach((cat) => {
     const $btn = document.querySelector(`.categoria-btn[data-categoria="${cat}"]`);
     if ($btn) $btn.hidden = !accesoCompleto;
   });
   if (!accesoCompleto) {
     try {
       const mod = localStorage.getItem(MODULO_KEY);
-      if (!MODULOS_NAV_VENDEDOR.has(mod)) localStorage.removeItem(MODULO_KEY);
-      if (localStorage.getItem(VENTAS_SUBMODULO_KEY) === 'reportes') {
-        localStorage.setItem(VENTAS_SUBMODULO_KEY, 'ventas');
-      }
+      if (!MODULOS_NAV_VENDEDOR.has(mod)) localStorage.setItem(MODULO_KEY, 'inventario');
+      localStorage.removeItem(VENTAS_SUBMODULO_KEY);
     } catch (_) {}
   }
   aplicarUiPermisosInventarioEscritura();
@@ -693,10 +750,13 @@ function initNav() {
       if (window.actualizarCarritoVacioParaVista) window.actualizarCarritoVacioParaVista();
       window.actualizarBtnMostrarCarrito?.();
     } else if (cat === 'ventas') {
+      if (!esUsuarioAdmin()) {
+        const $inv = document.querySelector('.categoria-btn[data-categoria="inventario"]');
+        if ($inv) return irAModulo($inv);
+        return;
+      }
       $vistaModuloVentas.style.display = 'flex';
-      const sub = esUsuarioAdmin()
-        ? (localStorage.getItem(VENTAS_SUBMODULO_KEY) || 'ventas')
-        : 'ventas';
+      const sub = localStorage.getItem(VENTAS_SUBMODULO_KEY) || 'ventas';
       window.ucVentasIrASubvista?.(sub === 'reportes' ? 'reportes' : 'ventas');
       window.actualizarBtnMostrarCarrito?.();
       window.ucDesactivarModoRestockRapido?.();
@@ -1496,8 +1556,8 @@ function getPrecioMaxProducto(p) {
 }
 
 function productoFundaTieneRangoPrecio(p) {
-  return String(p?.categoria || '').toLowerCase() === 'fundas'
-    && getPrecioMaxProducto(p) > getPrecioMinProducto(p);
+  // Las fundas ya no usan rango: siempre precio fijo.
+  return false;
 }
 
 function formatearPrecioRangoSimple(n) {
@@ -1506,9 +1566,6 @@ function formatearPrecioRangoSimple(n) {
 
 function formatearPrecioProductoInventario(p) {
   const fmt = window.formatearPrecioPOS || ((n) => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 }));
-  if (productoFundaTieneRangoPrecio(p)) {
-    return `${formatearPrecioRangoSimple(getPrecioMinProducto(p))} - ${formatearPrecioRangoSimple(getPrecioMaxProducto(p))}`;
-  }
   return fmt(Number(p?.precio));
 }
 
@@ -2582,6 +2639,18 @@ function enlazarLazyImagenesInventario($root) {
   pendientes.forEach((img) => inventarioLazyImagenObserver.observe(img));
 }
 
+async function recargarImagenesInventarioTarjetas() {
+  if (inventarioVistaModo === 'tabla') return;
+
+  inventarioImagenCache.clear();
+  if (inventarioLazyImagenObserver) {
+    inventarioLazyImagenObserver.disconnect();
+    inventarioLazyImagenObserver = null;
+  }
+  // Re-renderiza tarjetas y vuelve a pedir las imágenes (base64) sin alterar la URL.
+  renderInventarioProductos();
+}
+
 function mostrarInventarioCargando() {
   const $grid = document.getElementById('inventario-productos');
   const $tbody = document.getElementById('tbody-inventario-productos');
@@ -2946,6 +3015,19 @@ function initInventarioVista() {
   $btnAgregarCons?.addEventListener('click', () => {
     if (!puedeGestionarInventario() || $btnAgregarCons.disabled) return;
     window.ucAbrirModalConsignadaInventario?.();
+  });
+
+  const $btnRecargarImgs = document.getElementById('btn-inventario-recargar-imagenes');
+  $btnRecargarImgs?.addEventListener('click', async () => {
+    if ($btnRecargarImgs.disabled) return;
+    $btnRecargarImgs.disabled = true;
+    $btnRecargarImgs.classList.add('cargando');
+    try {
+      await recargarImagenesInventarioTarjetas();
+    } finally {
+      $btnRecargarImgs.disabled = false;
+      $btnRecargarImgs.classList.remove('cargando');
+    }
   });
 
   actualizarEstadoBtnAgregarProducto();
@@ -3744,6 +3826,8 @@ function initProductoModal() {
   const $camposAudifonos = document.getElementById('prod-campos-audifonos');
   const $camposPowerbanks = document.getElementById('prod-campos-powerbanks');
   const $camposBocinas = document.getElementById('prod-campos-bocinas');
+  const $camposOtros = document.getElementById('prod-campos-otros');
+  const $otrosNombre = document.getElementById('prod-otros-nombre');
   const $chipCristal = document.querySelector('.form-chip[data-tipo="cristal"]');
   const $chipHidrogel = document.querySelector('.form-chip[data-tipo="hidrogel"]');
   const $tipoCristalWrap = document.getElementById('prod-mica-cristal-opciones');
@@ -3771,7 +3855,7 @@ function initProductoModal() {
   const $fundaPrecioFijo = document.getElementById('prod-funda-precio-fijo');
   const $fundaPrecioFijoMenos = document.getElementById('prod-funda-precio-fijo-menos');
   const $fundaPrecioFijoMas = document.getElementById('prod-funda-precio-fijo-mas');
-  let fundaModoPrecioFijo = false;
+  let fundaModoPrecioFijo = true;
   const $labelPrecio = document.getElementById('prod-label-precio');
   const $precioVentaWrap = document.getElementById('prod-precio-venta-wrap');
   const $precioVenta = document.getElementById('prod-precio-venta');
@@ -4331,45 +4415,23 @@ function initProductoModal() {
   }
 
   function esFundaPrecioFijoActivo() {
-    return fundaModoPrecioFijo;
+    return true;
   }
 
   function aplicarModoPrecioFunda(fijo) {
-    fundaModoPrecioFijo = fijo;
-    $fundaPrecioRangoTab?.classList.toggle('activo', !fijo);
-    $fundaPrecioFijoTab?.classList.toggle('activo', fijo);
-    $fundaPrecioRangoTab?.setAttribute('aria-selected', fijo ? 'false' : 'true');
-    $fundaPrecioFijoTab?.setAttribute('aria-selected', fijo ? 'true' : 'false');
-    if ($fundaPrecioRangoPanel) $fundaPrecioRangoPanel.hidden = fijo;
-    if ($fundaPrecioFijoPanel) $fundaPrecioFijoPanel.hidden = !fijo;
-    if (fijo) {
-      initSliderRangoFundasProducto();
-    } else {
-      actualizarUiSliderRangoFundas();
-    }
+    fundaModoPrecioFijo = true;
   }
 
   function resetPrecioFundasForm() {
-    aplicarModoPrecioFunda(false);
-    resetRangoPrecioFundasForm();
+    fundaModoPrecioFijo = true;
     if ($fundaPrecioFijo) $fundaPrecioFijo.value = '';
   }
 
   function actualizarVisibilidadPrecioFundas() {
-    if (esModoConsignadaModal()) {
-      ocultarCostoCompraEnModal(true);
-      if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = true;
-      if ($prodPrecioWrap) $prodPrecioWrap.hidden = false;
-      return;
-    }
-    const esFundas = esCategoriaFundasActiva();
-    if ($prodPrecioWrap) $prodPrecioWrap.hidden = esFundas;
-    if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = !esFundas;
-    ocultarCostoCompraEnModal(false);
-    if (esFundas) {
-      initSliderRangoFundasProducto();
-      actualizarUiSliderRangoFundas();
-    }
+    // Fundas usan el mismo precio fijo que el resto de categorías.
+    if ($prodPrecioWrap) $prodPrecioWrap.hidden = false;
+    if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = true;
+    ocultarCostoCompraEnModal(esModoConsignadaModal());
   }
 
   function salirModoInputCustomDropdownsModal() {
@@ -4398,6 +4460,8 @@ function initProductoModal() {
     if ($camposAudifonos) $camposAudifonos.style.display = 'none';
     if ($camposPowerbanks) $camposPowerbanks.style.display = 'none';
     if ($camposBocinas) $camposBocinas.style.display = 'none';
+    if ($camposOtros) $camposOtros.style.display = 'none';
+    if ($otrosNombre) $otrosNombre.value = '';
     $chipCristal?.classList.remove('activo');
     $chipHidrogel?.classList.remove('activo');
     $tipoCristalWrap.style.display = 'none';
@@ -4740,14 +4804,14 @@ function initProductoModal() {
       connText = conMatch[1].trim();
       s = s.slice(0, conMatch.index).trim();
     }
-    const specsMatch = s.match(/\s+de\s+(\d+)\s*mAh\s+y\s+(\d+)W\s*$/i);
+    const specsMatch = s.match(/\s+de\s+(\d+)\s*mAh\s+y\s+(\d+(?:\.\d+)?)W\s*$/i);
     if (specsMatch) {
       if ($powerbankMah) $powerbankMah.value = specsMatch[1];
       if ($powerbankWatts) $powerbankWatts.value = specsMatch[2];
       s = s.slice(0, specsMatch.index).trim();
     } else {
       const mahM = s.match(/\s+(\d+)\s*mAh\s+/i);
-      const wattsM = s.match(/\s+(\d+)W\s*$/i);
+      const wattsM = s.match(/\s+(\d+(?:\.\d+)?)W\s*$/i);
       if (mahM && wattsM && $powerbankMah && $powerbankWatts) {
         $powerbankMah.value = mahM[1];
         $powerbankWatts.value = wattsM[1];
@@ -4969,24 +5033,16 @@ function initProductoModal() {
     if (cat === 'bocinas') {
       parsearBocinaDesdeNombre(nombre);
     }
+
+    if (cat === 'otros') {
+      if ($otrosNombre) $otrosNombre.value = limpiarNombreProducto(nombre);
+    }
   }
 
   function cargarProductoEnFormulario(prod) {
     if (!prod) return;
     cargandoEdicionProducto = true;
     if ($precio) $precio.value = String(prod.precio ?? '');
-    if (prod.categoria === 'fundas') {
-      if (productoFundaTieneRangoPrecio(prod)) {
-        aplicarModoPrecioFunda(false);
-        establecerRangoPrecioFundasForm(getPrecioMinProducto(prod), getPrecioMaxProducto(prod));
-      } else {
-        aplicarModoPrecioFunda(true);
-        if ($fundaPrecioFijo) {
-          const precioFijo = getPrecioMinProducto(prod);
-          $fundaPrecioFijo.value = precioFijo > 0 ? String(precioFijo) : '';
-        }
-      }
-    }
     if ($stockValor) {
       const stock = Number(prod.stock) || 0;
       $stockValor.value = stock > 0 ? String(stock) : '';
@@ -5000,16 +5056,6 @@ function initProductoModal() {
     requestAnimationFrame(() => {
       refrescarDropdownsModalProducto();
       if (prod.categoria === 'fundas') {
-        if (productoFundaTieneRangoPrecio(prod)) {
-          aplicarModoPrecioFunda(false);
-          establecerRangoPrecioFundasForm(getPrecioMinProducto(prod), getPrecioMaxProducto(prod));
-        } else {
-          aplicarModoPrecioFunda(true);
-          if ($fundaPrecioFijo) {
-            const precioFijo = getPrecioMinProducto(prod);
-            $fundaPrecioFijo.value = precioFijo > 0 ? String(precioFijo) : '';
-          }
-        }
         customDropdowns['prod-funda-marca-cel']?.syncDisplay?.();
         customDropdowns['prod-funda-modelo-cel']?.syncDisplay?.();
       }
@@ -5169,6 +5215,7 @@ function initProductoModal() {
     if ($bocinaModelo) $bocinaModelo.value = '';
     if ($bocinaWatts) $bocinaWatts.value = '0';
     if ($bocinaColor) $bocinaColor.value = '';
+    if ($otrosNombre) $otrosNombre.value = '';
     if (!esModoConsignadaModal()) {
       $precio.value = '';
       if ($costoCompra) $costoCompra.value = '';
@@ -5203,6 +5250,7 @@ function initProductoModal() {
     if ($camposAudifonos) $camposAudifonos.style.display = cat === 'audifonos' ? 'block' : 'none';
     if ($camposPowerbanks) $camposPowerbanks.style.display = cat === 'powerbanks' ? 'block' : 'none';
     if ($camposBocinas) $camposBocinas.style.display = cat === 'bocinas' ? 'block' : 'none';
+    if ($camposOtros) $camposOtros.style.display = cat === 'otros' ? 'block' : 'none';
     if (cat === 'fundas') {
       poblarSelectMarcasCel($fundaMarcaCel, $fundaModeloCel, $fundaSerieWrap, $fundaSerieCel);
     }
@@ -5271,29 +5319,14 @@ function initProductoModal() {
   });
 
   function activarModoRangoPrecioFunda() {
-    if (!fundaModoPrecioFijo) return;
-    const precioFijo = parseFloat($fundaPrecioFijo?.value || 0);
-    if (Number.isFinite(precioFijo) && precioFijo > 0) {
-      establecerRangoPrecioFundasForm(precioFijo, Math.min(precioFijo + 100, FUNDAS_RANGO_PRECIO_MAX));
-    } else {
-      resetRangoPrecioFundasForm();
-    }
-    aplicarModoPrecioFunda(false);
+    // Rango deshabilitado: las fundas solo usan precio fijo.
   }
 
   function activarModoPrecioFijoFunda() {
-    if (fundaModoPrecioFijo) return;
-    const rango = leerRangoPrecioFundasForm();
-    if (rango.ok && $fundaPrecioFijo) {
-      $fundaPrecioFijo.value = String(rango.min);
-    }
-    aplicarModoPrecioFunda(true);
+    fundaModoPrecioFijo = true;
   }
 
-  initSliderRangoFundasProducto();
-
-  $fundaPrecioRangoTab?.addEventListener('click', activarModoRangoPrecioFunda);
-  $fundaPrecioFijoTab?.addEventListener('click', activarModoPrecioFijoFunda);
+  // initSliderRangoFundasProducto / tabs de rango: ya no aplican.
 
   $imagen?.addEventListener('change', async () => {
     const file = $imagen.files?.[0];
@@ -5462,8 +5495,8 @@ function initProductoModal() {
   setupHoldRepeat($stockMas, $stockValor, 1);
   setupHoldRepeat($powerbankMahMenos, $powerbankMah, -500, { interval: 200, minInterval: 45 });
   setupHoldRepeat($powerbankMahMas, $powerbankMah, 500, { interval: 200, minInterval: 45 });
-  setupHoldRepeat($powerbankWattsMenos, $powerbankWatts, -1);
-  setupHoldRepeat($powerbankWattsMas, $powerbankWatts, 1);
+  setupHoldRepeat($powerbankWattsMenos, $powerbankWatts, -0.01, { decimal: true, precision: 2 });
+  setupHoldRepeat($powerbankWattsMas, $powerbankWatts, 0.01, { decimal: true, precision: 2 });
   setupHoldRepeat($cargadorWattsMenos, $cargadorWatts, -1);
   setupHoldRepeat($cargadorWattsMas, $cargadorWatts, 1);
   setupHoldRepeat($cargadorMetrosMenos, $cargadorMetros, -0.5, { decimal: true });
@@ -5558,8 +5591,7 @@ function initProductoModal() {
         return { ok: false, msg: 'Selecciona la serie Samsung' };
       }
       if (!esModoConsignadaModal()) {
-        const precioFunda = leerPrecioFundasParaGuardar(esFundaPrecioFijoActivo());
-        if (!precioFunda.ok) return precioFunda;
+        // Las fundas usan el precio fijo del campo general.
       }
     }
     if (cat === 'cargadores') {
@@ -5583,6 +5615,10 @@ function initProductoModal() {
       if (!modelo) return { ok: false, msg: 'Ingresa el modelo de la bocina' };
       const color = textoOpcionSeleccionada($bocinaColor);
       if (!color) return { ok: false, msg: 'Selecciona un color' };
+    }
+    if (cat === 'otros') {
+      const nombreOtros = limpiarNombreProducto($otrosNombre?.value);
+      if (!nombreOtros) return { ok: false, msg: 'Ingresa el nombre del producto' };
     }
     if (esModoConsignadaModal()) {
       const montos = validarMontosConsignada(
@@ -5659,7 +5695,7 @@ function initProductoModal() {
     } else if (cat === 'accesorios') {
       nombreProducto = 'Accesorio';
     } else if (cat === 'otros') {
-      nombreProducto = 'Otro — producto';
+      nombreProducto = limpiarNombreProducto($otrosNombre?.value);
     } else {
       nombreProducto = `Producto (${cat})`;
     }
@@ -5756,16 +5792,7 @@ function initProductoModal() {
     }
 
     let precio = parseFloat($precio?.value || 0);
-    let precioMax = null;
-    if (cat === 'fundas' && !esModoConsignadaModal()) {
-      const precioFunda = leerPrecioFundasParaGuardar(esFundaPrecioFijoActivo());
-      if (!precioFunda.ok) {
-        alert(precioFunda.msg);
-        return;
-      }
-      precio = precioFunda.precio;
-      precioMax = precioFunda.precioMax;
-    } else if (precio <= 0) {
+    if (precio <= 0) {
       alert('Ingresa un precio válido');
       return;
     }
@@ -5813,7 +5840,8 @@ function initProductoModal() {
         payload.costo_compra = Number.isFinite(costoCompraRaw) && costoCompraRaw > 0 ? costoCompraRaw : null;
       }
       if (cat === 'fundas' && !esModoConsignadaModal()) {
-        payload.precio_max = precioMax != null ? precioMax : null;
+        // Siempre precio fijo: limpia cualquier rango anterior.
+        payload.precio_max = null;
       }
       if (hayImagenNueva) {
         payload.imagen = imagenRes.data;
@@ -5983,7 +6011,8 @@ function initPOS() {
   let precioCarritoModalCtx = null;
 
   function productoCarritoTieneRangoPrecio(prod) {
-    return getPrecioMaxProducto(prod) > getPrecioMinProducto(prod);
+    // Ya no hay rangos de precio en catálogo; el dueño edita precio libre en venta.
+    return false;
   }
 
   function obtenerProductoLiveCarritoItem(item) {
@@ -7009,10 +7038,6 @@ function initPOS() {
       return;
     }
     if ((Number(prod?.stock) || 0) <= 0) return;
-    if (productoFundaTieneRangoPrecio(prod)) {
-      abrirModalPrecioFundaCarrito(prod);
-      return;
-    }
     agregarProductoAlCarritoDirecto(prod);
   };
 
@@ -7410,6 +7435,44 @@ function leerCostoConsignacionLinea(linea) {
   return NaN;
 }
 
+/** Costo unitario de compra (o consignación) capturado en la línea de venta. */
+function leerCostoUnitarioCompraLinea(linea) {
+  if (esLineaVentaConsignada(linea)) {
+    const consignacion = leerCostoConsignacionLinea(linea);
+    if (Number.isFinite(consignacion) && consignacion > 0) return consignacion;
+  }
+  const directo = Number(linea?.costo_compra ?? linea?.costoCompra);
+  if (Number.isFinite(directo) && directo >= 0) return directo;
+  let det = linea?.detalle;
+  if (typeof det === 'string') {
+    try { det = JSON.parse(det); } catch (_) { det = null; }
+  }
+  if (det && typeof det === 'object') {
+    const c = Number(det.costo_compra ?? det.costoCompra);
+    if (Number.isFinite(c) && c >= 0) return c;
+  }
+  return 0;
+}
+
+function utilidadLineaVentaDetalle(linea) {
+  if (!linea) return 0;
+  const cantidad = Number(linea.cantidad) || 0;
+  const precioUnitario = Number(linea.precio_unitario) || 0;
+  const totalLineaNum = Number(linea.subtotal);
+  const totalLinea = Number.isFinite(totalLineaNum)
+    ? totalLineaNum
+    : precioUnitario * cantidad;
+  const costoCompra = leerCostoUnitarioCompraLinea(linea) * cantidad;
+  return totalLinea - costoCompra;
+}
+
+function utilidadTotalVentaDesdeDetalle(venta) {
+  return normalizarDetalleVentaDesdeFila(venta).reduce(
+    (sum, linea) => sum + utilidadLineaVentaDetalle(linea),
+    0
+  );
+}
+
 function htmlNombreProductoVentaDetalle(linea) {
   const nombre = escReporteTexto(linea?.producto_nombre || 'Producto');
   if (!esLineaVentaConsignada(linea)) return nombre;
@@ -7435,20 +7498,28 @@ function pintarDetalleVentaSeleccionada(productos) {
   const lista = Array.isArray(productos) ? productos : [];
   if (!lista.length) {
     $wrap.hidden = false;
-    $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">Esta venta no tiene productos registrados</td></tr>';
+    $tbody.innerHTML = '<tr><td colspan="7" class="tabla-vacio">Esta venta no tiene productos registrados</td></tr>';
     return;
   }
   $wrap.hidden = false;
   $tbody.innerHTML = lista.map((p, i) => {
     const cantidad = Number(p.cantidad) || 0;
-    const totalLinea = montoVentaReporte(p.subtotal);
+    const precioUnitario = Number(p.precio_unitario) || 0;
+    const totalLineaNum = Number(p.subtotal);
+    const totalLinea = Number.isFinite(totalLineaNum)
+      ? totalLineaNum
+      : precioUnitario * cantidad;
+    const costoCompra = leerCostoUnitarioCompraLinea(p) * cantidad;
+    const utilidad = utilidadLineaVentaDetalle(p);
     return `
       <tr>
         <td class="tabla-num">${i + 1}</td>
         <td>${htmlNombreProductoVentaDetalle(p)}</td>
         <td class="tabla-num">${escReporteTexto(String(cantidad))}</td>
         <td class="tabla-num">${htmlPrecioUnitarioVentaDetalle(p)}</td>
-        <td class="tabla-num">${escReporteTexto(totalLinea)}</td>
+        <td class="tabla-num">${escReporteTexto(montoVentaReporte(costoCompra))}</td>
+        <td class="tabla-num">${escReporteTexto(montoVentaReporte(utilidad))}</td>
+        <td class="tabla-num">${escReporteTexto(montoVentaReporte(totalLinea))}</td>
       </tr>
     `;
   }).join('');
@@ -7460,7 +7531,7 @@ async function renderDetalleVentaSeleccionada(ventaId) {
   if (!$wrap || !$tbody) return;
   if (ventaId == null || !Number.isFinite(Number(ventaId))) {
     $wrap.hidden = true;
-    $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">Selecciona una venta para ver el detalle</td></tr>';
+    $tbody.innerHTML = '<tr><td colspan="7" class="tabla-vacio">Selecciona una venta para ver el detalle</td></tr>';
     return;
   }
   const id = Number(ventaId);
@@ -7476,7 +7547,7 @@ async function renderDetalleVentaSeleccionada(ventaId) {
     return;
   }
   $wrap.hidden = false;
-  $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">Cargando productos...</td></tr>';
+  $tbody.innerHTML = '<tr><td colspan="7" class="tabla-vacio">Cargando productos...</td></tr>';
   try {
     const r = await fetch(`${API}/reportes/corte-caja/${id}/detalle`, { headers: authHeaders(false) });
     if (r.status === 401) {
@@ -7488,7 +7559,7 @@ async function renderDetalleVentaSeleccionada(ventaId) {
       if (r.status === 404) {
         msg = 'Detalle no disponible. Reinicia el servidor (npm start en server/).';
       }
-      $tbody.innerHTML = `<tr><td colspan="5" class="tabla-vacio">${escReporteTexto(msg)}</td></tr>`;
+      $tbody.innerHTML = `<tr><td colspan="7" class="tabla-vacio">${escReporteTexto(msg)}</td></tr>`;
       return;
     }
     const data = await r.json();
@@ -7498,7 +7569,7 @@ async function renderDetalleVentaSeleccionada(ventaId) {
   } catch (err) {
     console.error(err);
     if (Number(ventaCorteSeleccionadaId) === id) {
-      $tbody.innerHTML = '<tr><td colspan="5" class="tabla-vacio">Error al cargar el detalle</td></tr>';
+      $tbody.innerHTML = '<tr><td colspan="7" class="tabla-vacio">Error al cargar el detalle</td></tr>';
     }
   }
 }
@@ -7554,6 +7625,7 @@ function renderTablaCorteCajaReporte(lista) {
   const $tbody = document.getElementById('tbody-reporte-corte-caja');
   const $ventas = document.getElementById('reporte-corte-ventas');
   const $total = document.getElementById('reporte-corte-total');
+  const $utilidad = document.getElementById('reporte-corte-utilidad');
   const $efectivo = document.getElementById('reporte-corte-efectivo');
   const $tarjeta = document.getElementById('reporte-corte-tarjeta');
   const $transferencia = document.getElementById('reporte-corte-transferencia');
@@ -7574,12 +7646,14 @@ function renderTablaCorteCajaReporte(lista) {
   }
   const monto = montoVentaReporte;
   let sumaTotal = 0;
+  let sumaUtilidad = 0;
   let sumaEfectivo = 0;
   let sumaTarjeta = 0;
   let sumaTransferencia = 0;
   rows.forEach((v) => {
     const totalVenta = Number(v.total) || 0;
     sumaTotal += totalVenta;
+    sumaUtilidad += utilidadTotalVentaDesdeDetalle(v);
     const metodo = String(v.metodo_pago || '').toLowerCase();
     if (metodo === 'tarjeta') sumaTarjeta += totalVenta;
     else if (metodo === 'transferencia') sumaTransferencia += totalVenta;
@@ -7587,6 +7661,7 @@ function renderTablaCorteCajaReporte(lista) {
   });
   if ($ventas) $ventas.textContent = String(rows.length);
   if ($total) $total.textContent = monto(sumaTotal);
+  if ($utilidad) $utilidad.textContent = monto(sumaUtilidad);
   if ($efectivo) $efectivo.textContent = monto(sumaEfectivo);
   if ($tarjeta) $tarjeta.textContent = monto(sumaTarjeta);
   if ($transferencia) $transferencia.textContent = monto(sumaTransferencia);
@@ -7594,7 +7669,7 @@ function renderTablaCorteCajaReporte(lista) {
   if (rows.length === 0) {
     ventaCorteSeleccionadaId = null;
     renderDetalleVentaSeleccionada(null);
-    $tbody.innerHTML = '<tr><td colspan="8" class="tabla-vacio">No hay ventas registradas</td></tr>';
+    $tbody.innerHTML = '<tr><td colspan="9" class="tabla-vacio">No hay ventas registradas</td></tr>';
     return;
   }
   const listaVisible = ventaCorteSeleccionadaId == null
@@ -7603,6 +7678,7 @@ function renderTablaCorteCajaReporte(lista) {
   $tbody.innerHTML = listaVisible.map((v) => {
     const fecha = formatFecha(v.created_at);
     const folio = Number(v.id) || 0;
+    const utilidadTxt = monto(utilidadTotalVentaDesdeDetalle(v));
     const totalTxt = monto(v.total);
     const filaSeleccionada = Number(v.id) === Number(ventaCorteSeleccionadaId);
     const tienePdf = v.ticket_pdf === true || v.ticket_pdf === 't' || v.ticket_pdf === 'true';
@@ -7615,6 +7691,7 @@ function renderTablaCorteCajaReporte(lista) {
         <td>#${escReporteTexto(String(folio))}</td>
         <td>${escReporteTexto(etiquetaMetodoPagoCorteCaja(v.metodo_pago))}</td>
         <td class="tabla-num">${escReporteTexto(String(totalProductosVenta(v)))}</td>
+        <td class="tabla-num">${escReporteTexto(utilidadTxt)}</td>
         <td class="tabla-num">${escReporteTexto(totalTxt)}</td>
         <td>${escReporteTexto(v.usuario_nombre || 'Sistema')}</td>
         ${ticketCelda}
@@ -8810,55 +8887,207 @@ function initModulo() {
   initUsuarios();
   initSucursales();
   initConfirmar();
+  initConfirmarDueno();
 }
 
 // ===================== USUARIOS =====================
 
 let todosUsuarios = [];
 let todasSucursales = [];
+let usuarioComisionSeleccionadoId = null;
+const usuariosComisionesCache = new Map();
+
+function formatFechaComisionDia(isoDia) {
+  if (!isoDia) return '—';
+  const d = new Date(`${String(isoDia).slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return String(isoDia);
+  return d.toLocaleDateString('es-MX', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
 
 async function cargarUsuarios() {
   try {
     const r = await fetch(`${API}/usuarios`, { headers: authHeaders(false) });
     if (r.status === 401) return window.location.href = '/login.html';
     todosUsuarios = await r.json();
+    usuariosComisionesCache.clear();
+    if (usuarioComisionSeleccionadoId != null
+      && !todosUsuarios.some((u) => Number(u.id) === Number(usuarioComisionSeleccionadoId))) {
+      usuarioComisionSeleccionadoId = null;
+    }
     renderTablaUsuarios(todosUsuarios);
   } catch (err) { console.error(err); }
 }
 
 function renderTablaUsuarios(lista) {
   const $tbody = document.getElementById('tbody-usuarios');
-  if (lista.length === 0) {
+  const ordenada = ordenarUsuariosPorRol(lista);
+  if (ordenada.length === 0) {
+    usuarioComisionSeleccionadoId = null;
+    renderDetalleComisionUsuario(null);
     $tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;opacity:.5;padding:2rem">No se encontraron usuarios</td></tr>';
     return;
   }
-  $tbody.innerHTML = lista.map(u => `
-    <tr>
-      <td class="tabla-num">${u.id}</td>
+  $tbody.innerHTML = ordenada.map(u => {
+    const esDueno = normalizarRolUsuario(u.rol) === 'dueno';
+    const comisionable = rolGeneraComisionUsuario(u.rol);
+    const filaSeleccionada = comisionable && Number(u.id) === Number(usuarioComisionSeleccionadoId);
+    const btnEliminar = esDueno
+      ? ''
+      : `<button class="btn-tabla btn-tabla-danger" onclick="eliminarUsuario(${u.id}, '${String(u.usuario || '').replace(/'/g, "\\'")}')">Eliminar</button>`;
+    const comisionTotalTxt = comisionable
+      ? escReporteTexto(montoVentaReporte(u.comision_total_acumulada))
+      : '<span style="opacity:.4">—</span>';
+    return `
+    <tr data-usuario-id="${u.id}" data-comisionable="${comisionable ? '1' : '0'}" class="${filaSeleccionada ? 'reporte-mov-row-seleccionada' : ''}${comisionable ? ' usuario-row-comisionable' : ''}">
       <td>${u.usuario}</td>
       <td>${u.nombre}</td>
       <td><span class="badge ${claseBadgeRol(u.rol)}">${escHtmlInventario(etiquetaRolUsuario(u.rol))}</span></td>
       <td>${u.sucursal_nombre || '<span style="opacity:.4">—</span>'}</td>
       <td><span class="badge ${u.activo ? 'badge-activo' : 'badge-inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td class="tabla-num">${comisionTotalTxt}</td>
       <td>
         <button class="btn-tabla" onclick="editarUsuario(${u.id})">Editar</button>
-        <button class="btn-tabla btn-tabla-danger" onclick="eliminarUsuario(${u.id}, '${u.usuario}')">Eliminar</button>
+        ${btnEliminar}
       </td>
       <td style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--text-muted)">${formatFecha(u.created_at)}</td>
+    </tr>
+  `;
+  }).join('');
+  void renderDetalleComisionUsuario(usuarioComisionSeleccionadoId);
+}
+
+function pintarDetalleComisionUsuario(data, nombreUsuario) {
+  const $wrap = document.getElementById('usuarios-comisiones-wrap');
+  const $resumen = document.getElementById('usuarios-comisiones-resumen');
+  const $tbody = document.getElementById('tbody-usuarios-comisiones');
+  if (!$wrap || !$tbody) return;
+
+  if (!data || !data.elegible) {
+    $wrap.hidden = true;
+    if ($resumen) $resumen.innerHTML = '';
+    $tbody.innerHTML = '<tr><td colspan="4" class="tabla-vacio">Selecciona un vendedor o admin para ver comisiones</td></tr>';
+    return;
+  }
+
+  $wrap.hidden = false;
+  const totalTxt = montoVentaReporte(data.comision_total_acumulada);
+  const nombre = escReporteTexto(nombreUsuario || 'Usuario');
+  if ($resumen) {
+    $resumen.innerHTML = `
+      <span class="usuarios-comisiones-resumen-nombre">${nombre}</span>
+      <strong class="usuarios-comisiones-resumen-total">Total acumulado: ${escReporteTexto(totalTxt)}</strong>
+      <span class="usuarios-comisiones-resumen-nota">Desde $1,000 · $50 por cada $500 vendidos al día · últimos 7 días</span>
+    `;
+  }
+
+  const registros = Array.isArray(data.registros) ? data.registros : [];
+  if (!registros.length) {
+    $tbody.innerHTML = '<tr><td colspan="4" class="tabla-vacio">Sin ventas comisionables en los últimos 7 días</td></tr>';
+    return;
+  }
+
+  $tbody.innerHTML = registros.map((r) => `
+    <tr>
+      <td>${escReporteTexto(formatFechaComisionDia(r.dia))}</td>
+      <td class="tabla-num">${escReporteTexto(montoVentaReporte(r.ventas_total))}</td>
+      <td class="tabla-num">${escReporteTexto(montoVentaReporte(r.comision))}</td>
+      <td class="tabla-num">${escReporteTexto(String(Number(r.tickets) || 0))}</td>
     </tr>
   `).join('');
 }
 
+async function renderDetalleComisionUsuario(usuarioId) {
+  const $wrap = document.getElementById('usuarios-comisiones-wrap');
+  const $tbody = document.getElementById('tbody-usuarios-comisiones');
+  if (!$wrap || !$tbody) return;
+
+  if (usuarioId == null || !Number.isFinite(Number(usuarioId))) {
+    pintarDetalleComisionUsuario(null);
+    return;
+  }
+
+  const id = Number(usuarioId);
+  const usuario = todosUsuarios.find((u) => Number(u.id) === id);
+  if (!usuario || !rolGeneraComisionUsuario(usuario.rol)) {
+    pintarDetalleComisionUsuario(null);
+    return;
+  }
+
+  if (usuariosComisionesCache.has(id)) {
+    pintarDetalleComisionUsuario(usuariosComisionesCache.get(id), usuario.nombre);
+    return;
+  }
+
+  $wrap.hidden = false;
+  $tbody.innerHTML = '<tr><td colspan="4" class="tabla-vacio">Cargando comisiones...</td></tr>';
+  try {
+    const r = await fetch(`${API}/usuarios/${id}/comisiones`, { headers: authHeaders(false) });
+    if (r.status === 401) {
+      window.location.href = '/login.html';
+      return;
+    }
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      $tbody.innerHTML = `<tr><td colspan="4" class="tabla-vacio">${escReporteTexto(err.error || 'No se pudieron cargar las comisiones')}</td></tr>`;
+      return;
+    }
+    const data = await r.json();
+    usuariosComisionesCache.set(id, data);
+    if (usuario.comision_total_acumulada == null) {
+      usuario.comision_total_acumulada = data.comision_total_acumulada;
+    }
+    if (Number(usuarioComisionSeleccionadoId) === id) {
+      pintarDetalleComisionUsuario(data, usuario.nombre);
+    }
+  } catch (err) {
+    console.error(err);
+    if (Number(usuarioComisionSeleccionadoId) === id) {
+      $tbody.innerHTML = '<tr><td colspan="4" class="tabla-vacio">Error al cargar comisiones</td></tr>';
+    }
+  }
+}
+
+function usuariosVisiblesBusqueda() {
+  const q = document.getElementById('buscar-usuario')?.value?.toLowerCase().trim() || '';
+  if (!q) return todosUsuarios;
+  return todosUsuarios.filter((u) =>
+    u.usuario.toLowerCase().includes(q)
+    || u.nombre.toLowerCase().includes(q)
+    || String(u.rol || '').includes(q)
+  );
+}
+
 function initUsuarios() {
   document.getElementById('buscar-usuario').addEventListener('input', function () {
-    const q = this.value.toLowerCase().trim();
-    renderTablaUsuarios(todosUsuarios.filter(u =>
-      u.usuario.toLowerCase().includes(q) || u.nombre.toLowerCase().includes(q) || u.rol.includes(q)
-    ));
+    renderTablaUsuarios(usuariosVisiblesBusqueda());
+  });
+
+  document.getElementById('tbody-usuarios')?.addEventListener('click', (e) => {
+    if (e.target.closest('button') || e.target.closest('a')) return;
+    const $row = e.target.closest('tr[data-usuario-id]');
+    if (!$row || $row.dataset.comisionable !== '1') return;
+    const id = Number($row.dataset.usuarioId);
+    if (!Number.isFinite(id)) return;
+    usuarioComisionSeleccionadoId = usuarioComisionSeleccionadoId === id ? null : id;
+    renderTablaUsuarios(usuariosVisiblesBusqueda());
   });
 
   document.getElementById('btn-nuevo-usuario').addEventListener('click', () => abrirModalUsuario());
   document.getElementById('mu-rol')?.addEventListener('change', actualizarRequeridoSucursalModalUsuario);
+  document.getElementById('mu-usuario')?.addEventListener('input', (e) => {
+    const el = e.target;
+    const pos = el.selectionStart;
+    const v = String(el.value || '').toLowerCase();
+    if (el.value !== v) {
+      el.value = v;
+      try { el.setSelectionRange(pos, pos); } catch (_) {}
+    }
+  });
   document.getElementById('modal-usuario-cancelar').addEventListener('click', cerrarModalUsuario);
   document.getElementById('modal-usuario').addEventListener('click', e => { if (e.target.id === 'modal-usuario') cerrarModalUsuario(); });
 
@@ -8866,7 +9095,7 @@ function initUsuarios() {
     e.preventDefault();
     const id = e.target.dataset.editId;
     const datos = {
-      usuario: document.getElementById('mu-usuario').value.trim(),
+      usuario: document.getElementById('mu-usuario').value.trim().toLowerCase(),
       nombre: document.getElementById('mu-nombre').value.trim(),
       rol: document.getElementById('mu-rol').value,
       activo: document.getElementById('mu-activo').value === 'true',
@@ -8877,6 +9106,12 @@ function initUsuarios() {
     if (!id && !pass) return alert('La contraseña es requerida para usuarios nuevos');
     if (rolRequiereSucursalAsignada(datos.rol) && !datos.sucursal_id) {
       return alert('Admin y vendedor deben tener una sucursal asignada');
+    }
+    if (normalizarRolUsuario(datos.rol) === 'dueno' && idUsuarioDuenoExistente(id || null) != null) {
+      return alert('Solo puede existir un usuario con rol Dueño');
+    }
+    if (normalizarRolUsuario(datos.rol) === 'developer' && idUsuarioDeveloperExistente(id || null) != null) {
+      return alert('Solo puede existir un usuario con rol Developer');
     }
 
     try {
@@ -8914,6 +9149,14 @@ function actualizarRequeridoSucursalModalUsuario() {
   poblarSelectSucursales(!requiere);
 }
 
+function actualizarVisibilidadCamposEdicionDueno(ocultar) {
+  const display = ocultar ? 'none' : '';
+  for (const id of ['mu-row-rol', 'mu-row-sucursal', 'mu-row-activo']) {
+    const $row = document.getElementById(id);
+    if ($row) $row.style.display = display;
+  }
+}
+
 function abrirModalUsuario(usuario = null) {
   const $modal = document.getElementById('modal-usuario');
   const $form = document.getElementById('form-usuario');
@@ -8924,15 +9167,19 @@ function abrirModalUsuario(usuario = null) {
     $form.dataset.editId = usuario.id;
     document.getElementById('mu-usuario').value = usuario.usuario;
     document.getElementById('mu-nombre').value = usuario.nombre;
+    actualizarOpcionesRolUnicosModalUsuario(usuario.id);
     document.getElementById('mu-rol').value = normalizarRolUsuario(usuario.rol);
     actualizarRequeridoSucursalModalUsuario();
     document.getElementById('mu-sucursal').value = usuario.sucursal_id || '';
     document.getElementById('mu-activo').value = String(usuario.activo);
+    actualizarVisibilidadCamposEdicionDueno(normalizarRolUsuario(usuario.rol) === 'dueno');
     $pass.placeholder = 'Dejar vacío para no cambiar'; $pass.required = false;
   } else {
     document.getElementById('modal-usuario-titulo').textContent = 'Nuevo usuario';
     delete $form.dataset.editId;
+    actualizarOpcionesRolUnicosModalUsuario(null);
     actualizarRequeridoSucursalModalUsuario();
+    actualizarVisibilidadCamposEdicionDueno(false);
     $pass.placeholder = 'Contraseña'; $pass.required = true;
   }
   $modal.classList.add('visible');
@@ -8962,12 +9209,11 @@ async function cargarSucursales() {
 function renderTablaSucursales(lista) {
   const $tbody = document.getElementById('tbody-sucursales');
   if (lista.length === 0) {
-    $tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;opacity:.5;padding:2rem">No se encontraron sucursales</td></tr>';
+    $tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;opacity:.5;padding:2rem">No se encontraron sucursales</td></tr>';
     return;
   }
   $tbody.innerHTML = lista.map(s => `
     <tr>
-      <td class="tabla-num">${s.id}</td>
       <td>${s.nombre}</td>
       <td class="tabla-num">${s.empleados || '<span style="opacity:.4">Sin empleados</span>'}</td>
       <td><span class="badge ${s.activo ? 'badge-activo' : 'badge-inactivo'}">${s.activo ? 'Activa' : 'Inactiva'}</span></td>
@@ -9039,9 +9285,16 @@ function cerrarModalSucursal() { document.getElementById('modal-sucursal').class
 function editarSucursal(id) { const s = todasSucursales.find(x => x.id === id); if (s) abrirModalSucursal(s); }
 
 function eliminarSucursal(id, nombre) {
-  abrirConfirmar(`¿Eliminar la sucursal "${nombre}"?`, async () => {
-    const r = await fetch(`${API}/sucursales/${id}`, { method: 'DELETE', headers: authHeaders(false) });
-    if (!r.ok) { const d = await r.json(); alert(d.error); }
+  abrirConfirmarDueno(`¿Eliminar la sucursal "${nombre}"?`, async (passwordDueno) => {
+    const r = await fetch(`${API}/sucursales/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+      body: JSON.stringify({ password_dueno: passwordDueno }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(d.error || 'No se pudo eliminar la sucursal');
+    }
     cargarSucursales();
   });
 }
@@ -9338,4 +9591,79 @@ function abrirConfirmar(texto, cb) {
 function cerrarConfirmar() {
   document.getElementById('modal-confirmar').classList.remove('visible');
   confirmarCallback = null;
+}
+
+let confirmarDuenoCallback = null;
+
+function initConfirmarDueno() {
+  const $modal = document.getElementById('modal-confirmar-dueno');
+  const $pass = document.getElementById('confirmar-dueno-password');
+  const $err = document.getElementById('confirmar-dueno-error');
+  const $ok = document.getElementById('confirmar-dueno-ok');
+
+  document.getElementById('confirmar-dueno-cancelar')?.addEventListener('click', cerrarConfirmarDueno);
+  $modal?.addEventListener('click', (e) => { if (e.target.id === 'modal-confirmar-dueno') cerrarConfirmarDueno(); });
+  $pass?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      $ok?.click();
+    }
+  });
+
+  $ok?.addEventListener('click', async () => {
+    if (!$pass || !confirmarDuenoCallback) return;
+    const passwordDueno = $pass.value;
+    if (!passwordDueno) {
+      if ($err) {
+        $err.hidden = false;
+        $err.textContent = 'Ingresa la contraseña';
+      }
+      $pass.focus();
+      return;
+    }
+    if ($ok) {
+      $ok.disabled = true;
+      $ok.textContent = 'Verificando…';
+    }
+    if ($err) $err.hidden = true;
+    try {
+      await confirmarDuenoCallback(passwordDueno);
+      cerrarConfirmarDueno();
+    } catch (err) {
+      if ($err) {
+        $err.hidden = false;
+        $err.textContent = err?.message || 'No se pudo completar la acción';
+      }
+      $pass.focus();
+      $pass.select();
+    } finally {
+      if ($ok) {
+        $ok.disabled = false;
+        $ok.textContent = 'Eliminar';
+      }
+    }
+  });
+}
+
+function abrirConfirmarDueno(texto, cb) {
+  confirmarDuenoCallback = cb;
+  const $texto = document.getElementById('confirmar-dueno-texto');
+  const $pass = document.getElementById('confirmar-dueno-password');
+  const $err = document.getElementById('confirmar-dueno-error');
+  if ($texto) $texto.textContent = texto;
+  if ($pass) {
+    $pass.value = '';
+  }
+  if ($err) $err.hidden = true;
+  document.getElementById('modal-confirmar-dueno')?.classList.add('visible');
+  requestAnimationFrame(() => $pass?.focus());
+}
+
+function cerrarConfirmarDueno() {
+  document.getElementById('modal-confirmar-dueno')?.classList.remove('visible');
+  confirmarDuenoCallback = null;
+  const $pass = document.getElementById('confirmar-dueno-password');
+  const $err = document.getElementById('confirmar-dueno-error');
+  if ($pass) $pass.value = '';
+  if ($err) $err.hidden = true;
 }

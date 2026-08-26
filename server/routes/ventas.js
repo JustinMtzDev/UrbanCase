@@ -11,6 +11,7 @@ const {
   prepararLineasVenta,
   persistirVenta,
 } = require('../services/venta-core');
+const { actualizarComisionTrasVenta } = require('../services/comisiones');
 
 const METODOS_PAGO = new Set(['efectivo', 'tarjeta', 'transferencia']);
 
@@ -53,6 +54,7 @@ router.post('/', async (req, res) => {
       metodoPago,
       productosCache: prep.productosCache,
     });
+    await actualizarComisionTrasVenta(client, usuarioId);
 
     await client.query('COMMIT');
     let ticket = { pdf: false, print: false, print_omitido: true, print_error: null };

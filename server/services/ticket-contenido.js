@@ -80,6 +80,12 @@ function armarContenidoPoint(datos) {
   lineas.push('{br}--------------------------------');
   lineas.push(`{br}{center}{b}TOTAL ${formatoMoneda(datos.total)}{/b}{/center}`);
   lineas.push('{br}{center}{s}Gracias por su compra{/s}{/center}');
+  lineas.push('{br}{center}{s}Salida la mercancia no hay{/s}{/center}');
+  lineas.push('{br}{center}{s}devoluciones{/s}{/center}');
+  lineas.push('{br}{center}{s}No hay garantia en micas{/s}{/center}');
+  lineas.push('{br}{center}{s}15 dias de garantia por{/s}{/center}');
+  lineas.push('{br}{center}{s}defectos de fabrica{/s}{/center}');
+  lineas.push('{br}{center}{s}con este ticket{/s}{/center}');
   lineas.push('{br}--------------------------------{br}');
   let content = lineas.join('');
   while (content.length < 100) content += '{br}';
