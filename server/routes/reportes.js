@@ -57,7 +57,7 @@ function rangoKpi(periodo) {
 
 async function metricasPeriodo(pool, whereSql, vals) {
   const where = whereSql ? `WHERE ${whereSql}` : '';
-  const [ingRes, comRes] = await Promise.all([
+  const [ingRes, comRes, utilRes, prodRes] = await Promise.all([
     pool.query(
       `SELECT
          COALESCE(SUM(v.total), 0)::float8 AS ingresos,
@@ -77,14 +77,46 @@ async function metricasPeriodo(pool, whereSql, vals) {
        AND d.es_consignado = TRUE`,
       vals
     ),
+    pool.query(
+      `SELECT COALESCE(SUM(
+         d.subtotal - (
+           CASE
+             WHEN COALESCE(d.es_consignado, FALSE) THEN
+               COALESCE(NULLIF(d.detalle->>'costo_consignacion', ''), '0')::numeric
+             ELSE
+               COALESCE(
+                 NULLIF(d.detalle->>'costo_compra', '')::numeric,
+                 p.costo_compra,
+                 0
+               )
+           END * d.cantidad
+         )
+       ), 0)::float8 AS utilidad
+       FROM venta_detalle d
+       INNER JOIN ventas v ON v.id = d.venta_id
+       LEFT JOIN productos p ON p.id = d.producto_id
+       ${where}`,
+      vals
+    ),
+    pool.query(
+      `SELECT COALESCE(SUM(d.cantidad), 0)::int AS productos_vendidos
+       FROM venta_detalle d
+       INNER JOIN ventas v ON v.id = d.venta_id
+       ${where}`,
+      vals
+    ),
   ]);
   const ing = ingRes.rows[0] || {};
   const com = comRes.rows[0] || {};
+  const util = utilRes.rows[0] || {};
+  const prod = prodRes.rows[0] || {};
   return {
     ingresos: Number(ing.ingresos) || 0,
     tickets: Number(ing.tickets) || 0,
     ticket_promedio: Number(ing.ticket_promedio) || 0,
     ingresos_comision: Math.max(0, Number(com.ingresos_comision) || 0),
+    utilidad: Number(util.utilidad) || 0,
+    productos_vendidos: Math.max(0, Number(prod.productos_vendidos) || 0),
   };
 }
 
@@ -122,7 +154,9 @@ router.get('/dashboard-kpis', async (req, res) => {
     res.json({
       periodo,
       ingresos: act.ingresos,
+      utilidad: act.utilidad,
       ingresos_comision: act.ingresos_comision,
+      productos_vendidos: act.productos_vendidos,
       tickets: act.tickets,
       ticket_promedio: act.ticket_promedio,
       variacion_pct: variacionPct,
@@ -303,17 +337,55 @@ router.get('/dashboard-ventas-7d', async (req, res) => {
            ((NOW() AT TIME ZONE '${TZ}')::date)::date,
            INTERVAL '1 day'
          )::date AS dia
+       ),
+       ventas_dia AS (
+         SELECT
+           (${TS})::date AS dia,
+           COALESCE(SUM(v.total), 0)::float8 AS ingresos,
+           COUNT(v.id)::int AS tickets,
+           COALESCE(AVG(v.total), 0)::float8 AS ticket_promedio
+         FROM ventas v
+         WHERE (${TS})::date >= ((NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '6 days')::date
+           AND (${TS})::date <= ((NOW() AT TIME ZONE '${TZ}')::date)::date
+           ${joinSuc}
+         GROUP BY 1
+       ),
+       detalle_dia AS (
+         SELECT
+           (${TS})::date AS dia,
+           COALESCE(SUM(d.cantidad), 0)::int AS productos_vendidos,
+           COALESCE(SUM(
+             d.subtotal - (
+               CASE
+                 WHEN COALESCE(d.es_consignado, FALSE) THEN
+                   COALESCE(NULLIF(d.detalle->>'costo_consignacion', ''), '0')::numeric
+                 ELSE
+                   COALESCE(
+                     NULLIF(d.detalle->>'costo_compra', '')::numeric,
+                     p.costo_compra,
+                     0
+                   )
+               END * d.cantidad
+             )
+           ), 0)::float8 AS utilidad
+         FROM venta_detalle d
+         INNER JOIN ventas v ON v.id = d.venta_id
+         LEFT JOIN productos p ON p.id = d.producto_id
+         WHERE (${TS})::date >= ((NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '6 days')::date
+           AND (${TS})::date <= ((NOW() AT TIME ZONE '${TZ}')::date)::date
+           ${joinSuc}
+         GROUP BY 1
        )
        SELECT
          r.dia,
-         COALESCE(SUM(v.total), 0)::float8 AS ingresos,
-         COUNT(v.id)::int AS tickets,
-         COALESCE(AVG(v.total), 0)::float8 AS ticket_promedio
+         COALESCE(vd.ingresos, 0)::float8 AS ingresos,
+         COALESCE(vd.tickets, 0)::int AS tickets,
+         COALESCE(vd.ticket_promedio, 0)::float8 AS ticket_promedio,
+         COALESCE(dd.utilidad, 0)::float8 AS utilidad,
+         COALESCE(dd.productos_vendidos, 0)::int AS productos_vendidos
        FROM rango r
-       LEFT JOIN ventas v
-         ON (${TS})::date = r.dia
-         ${joinSuc}
-       GROUP BY r.dia
+       LEFT JOIN ventas_dia vd ON vd.dia = r.dia
+       LEFT JOIN detalle_dia dd ON dd.dia = r.dia
        ORDER BY r.dia ASC`,
       vals
     );
@@ -331,6 +403,8 @@ router.get('/dashboard-ventas-7d', async (req, res) => {
         ingresos: Number(row.ingresos) || 0,
         tickets: Number(row.tickets) || 0,
         ticket_promedio: Number(row.ticket_promedio) || 0,
+        utilidad: Number(row.utilidad) || 0,
+        productos_vendidos: Math.max(0, Number(row.productos_vendidos) || 0),
       };
     });
 
@@ -617,8 +691,13 @@ router.get('/corte-caja/:id/detalle', async (req, res) => {
          d.subtotal::float8 AS subtotal,
          d.es_consignado,
          NULLIF(d.detalle->>'costo_consignacion', '')::float8 AS costo_consignacion,
+         COALESCE(
+           NULLIF(d.detalle->>'costo_compra', '')::float8,
+           p.costo_compra::float8
+         ) AS costo_compra,
          d.detalle
        FROM venta_detalle d
+       LEFT JOIN productos p ON p.id = d.producto_id
        WHERE d.venta_id = $1
        ORDER BY d.id ASC`,
       [ventaId]
@@ -722,6 +801,10 @@ router.get('/corte-caja', async (req, res) => {
                  'subtotal', d.subtotal::float8,
                  'es_consignado', d.es_consignado,
                  'costo_consignacion', NULLIF(d.detalle->>'costo_consignacion', '')::float8,
+                 'costo_compra', COALESCE(
+                   NULLIF(d.detalle->>'costo_compra', '')::float8,
+                   (SELECT p.costo_compra::float8 FROM productos p WHERE p.id = d.producto_id)
+                 ),
                  'detalle', d.detalle
                )
                ORDER BY d.id

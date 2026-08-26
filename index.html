@@ -119,9 +119,19 @@
                 <span class="dashboard-kpi-meta" id="dash-kpi-ingresos-meta"></span>
               </article>
               <article class="dashboard-kpi-card">
+                <span class="dashboard-kpi-label">Utilidad</span>
+                <strong class="dashboard-kpi-valor" id="dash-kpi-utilidad">$0.00</strong>
+                <span class="dashboard-kpi-meta dashboard-kpi-meta--muted">Ganancia</span>
+              </article>
+              <article class="dashboard-kpi-card">
                 <span class="dashboard-kpi-label">Ingresos por comisión</span>
                 <strong class="dashboard-kpi-valor" id="dash-kpi-comision">$0.00</strong>
                 <span class="dashboard-kpi-meta dashboard-kpi-meta--muted">Ventas consignadas</span>
+              </article>
+              <article class="dashboard-kpi-card">
+                <span class="dashboard-kpi-label">Productos vendidos</span>
+                <strong class="dashboard-kpi-valor" id="dash-kpi-productos">0</strong>
+                <span class="dashboard-kpi-meta dashboard-kpi-meta--muted">Unidades</span>
               </article>
               <article class="dashboard-kpi-card">
                 <span class="dashboard-kpi-label">Tickets</span>
@@ -178,6 +188,9 @@
                   </svg>
                 </button>
               </div>
+              <button type="button" class="inventario-vista-btn" id="btn-inventario-recargar-imagenes" title="Recargar imágenes" aria-label="Recargar imágenes">
+                <i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i>
+              </button>
               <button type="button" class="inventario-vista-btn" id="btn-inventario-filtros" title="Filtros de búsqueda" aria-label="Filtros de búsqueda" aria-haspopup="dialog">
                 <i class="fa-solid fa-sliders" aria-hidden="true"></i>
               </button>
@@ -333,6 +346,10 @@
                 <strong class="reporte-corte-card-valor" id="reporte-corte-total">$0.00</strong>
               </div>
               <div class="reporte-corte-card">
+                <span class="reporte-corte-card-label">Utilidad</span>
+                <strong class="reporte-corte-card-valor" id="reporte-corte-utilidad">$0.00</strong>
+              </div>
+              <div class="reporte-corte-card">
                 <span class="reporte-corte-card-label">Efectivo</span>
                 <strong class="reporte-corte-card-valor" id="reporte-corte-efectivo">$0.00</strong>
               </div>
@@ -357,6 +374,7 @@
                   <th>Folio</th>
                   <th>Método</th>
                   <th class="tabla-num">Arts.</th>
+                  <th class="tabla-num">Utilidad</th>
                   <th class="tabla-num">Total</th>
                   <th>Usuario</th>
                   <th class="tabla-ticket">Ticket</th>
@@ -364,7 +382,7 @@
                 </tr>
               </thead>
               <tbody id="tbody-reporte-corte-caja">
-                <tr><td colspan="8" class="tabla-vacio">Sin datos</td></tr>
+                <tr><td colspan="9" class="tabla-vacio">Sin datos</td></tr>
               </tbody>
             </table>
           </div>
@@ -376,11 +394,13 @@
                   <th>Productos</th>
                   <th class="tabla-num">Cantidad</th>
                   <th class="tabla-num">Precio unitario</th>
-                  <th class="tabla-num">Total</th>
+                  <th class="tabla-num">Costo de compra</th>
+                  <th class="tabla-num">Utilidad</th>
+                  <th class="tabla-num">Costo de venta</th>
                 </tr>
               </thead>
               <tbody id="tbody-ventas-detalle">
-                <tr><td colspan="5" class="tabla-vacio">Selecciona una venta para ver el detalle</td></tr>
+                <tr><td colspan="7" class="tabla-vacio">Selecciona una venta para ver el detalle</td></tr>
               </tbody>
             </table>
           </div>
@@ -524,17 +544,33 @@
           <table class="tabla">
             <thead>
               <tr>
-                <th class="tabla-num">ID</th>
                 <th>Usuario</th>
                 <th>Nombre</th>
                 <th>Rol</th>
                 <th>Sucursal</th>
                 <th>Estado</th>
+                <th class="tabla-num">Comisión total</th>
                 <th>Acciones</th>
                 <th>Creado</th>
               </tr>
             </thead>
             <tbody id="tbody-usuarios"></tbody>
+          </table>
+        </div>
+        <div class="tabla-wrap reporte-mov-detalle-wrap" id="usuarios-comisiones-wrap" hidden>
+          <div class="usuarios-comisiones-resumen" id="usuarios-comisiones-resumen"></div>
+          <table class="tabla" id="tabla-usuarios-comisiones">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th class="tabla-num">Ventas</th>
+                <th class="tabla-num">Comisión</th>
+                <th class="tabla-num">Tickets</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-usuarios-comisiones">
+              <tr><td colspan="4" class="tabla-vacio">Selecciona un vendedor o admin para ver comisiones</td></tr>
+            </tbody>
           </table>
         </div>
       </div>
@@ -552,7 +588,6 @@
           <table class="tabla">
             <thead>
               <tr>
-                <th class="tabla-num">ID</th>
                 <th>Nombre</th>
                 <th class="tabla-num">Empleados asignados</th>
                 <th>Estado</th>
@@ -630,7 +665,7 @@
         <form id="form-usuario">
           <div class="form-row">
             <label>Usuario</label>
-            <input type="text" id="mu-usuario" required>
+            <input type="text" id="mu-usuario" required autocomplete="username" autocapitalize="none" spellcheck="false">
           </div>
           <div class="form-row">
             <label>Nombre</label>
@@ -638,9 +673,9 @@
           </div>
           <div class="form-row">
             <label>Contraseña</label>
-            <input type="password" id="mu-password" placeholder="Dejar vacío para no cambiar">
+            <input type="password" id="mu-password" placeholder="Dejar vacío para no cambiar" autocomplete="new-password">
           </div>
-          <div class="form-row">
+          <div class="form-row" id="mu-row-rol">
             <label>Rol</label>
             <select id="mu-rol">
               <option value="dueno">Dueño</option>
@@ -649,13 +684,13 @@
               <option value="vendedor">Vendedor</option>
             </select>
           </div>
-          <div class="form-row">
+          <div class="form-row" id="mu-row-sucursal">
             <label>Sucursal</label>
             <select id="mu-sucursal">
               <option value="">Sin asignar</option>
             </select>
           </div>
-          <div class="form-row">
+          <div class="form-row" id="mu-row-activo">
             <label>Activo</label>
             <select id="mu-activo">
               <option value="true">Sí</option>
@@ -918,52 +953,6 @@
                 <option value="">Seleccionar modelo</option>
               </select>
             </div>
-            <div class="form-row form-row-precio-rango" id="prod-funda-rango-precio-wrap">
-              <div class="prod-funda-precio-secciones" role="tablist" aria-label="Tipo de precio">
-                <button type="button" class="prod-funda-precio-seccion activo" id="prod-funda-precio-rango-tab" role="tab" aria-selected="true">Rango de precio</button>
-                <button type="button" class="prod-funda-precio-seccion" id="prod-funda-precio-fijo-tab" role="tab" aria-selected="false">Precio fijo</button>
-              </div>
-              <div id="prod-funda-precio-rango-panel" class="prod-funda-precio-rango-panel">
-              <div class="filtro-precio-rango prod-funda-precio-rango">
-                <div class="prod-funda-rango-slider-wrap">
-                  <div class="filtro-precio-rango-slider" id="prod-funda-precio-slider" data-limite-min="50" data-limite-max="650" data-step="50">
-                    <div class="filtro-precio-rango-track" aria-hidden="true"></div>
-                    <button type="button" class="filtro-precio-rango-thumb" id="prod-funda-precio-thumb-min" aria-label="Precio mínimo"></button>
-                    <button type="button" class="filtro-precio-rango-thumb" id="prod-funda-precio-thumb-max" aria-label="Precio máximo"></button>
-                    <input type="hidden" id="prod-funda-precio-rango-min" value="50">
-                    <input type="hidden" id="prod-funda-precio-rango-max" value="650">
-                  </div>
-                </div>
-                <div class="filtro-precio-rango-inputs">
-                  <div class="filtro-precio-rango-campo">
-                    <label for="prod-funda-precio-input-min">Mínimo</label>
-                    <div class="filtro-precio-rango-input-wrap">
-                      <span class="filtro-precio-rango-simbolo" aria-hidden="true">$</span>
-                      <input type="number" id="prod-funda-precio-input-min" min="50" max="650" step="50" value="50" inputmode="numeric">
-                    </div>
-                  </div>
-                  <div class="filtro-precio-rango-campo">
-                    <label for="prod-funda-precio-input-max">Máximo</label>
-                    <div class="filtro-precio-rango-input-wrap">
-                      <span class="filtro-precio-rango-simbolo" aria-hidden="true">$</span>
-                      <input type="number" id="prod-funda-precio-input-max" min="50" max="650" step="50" value="650" inputmode="numeric">
-                    </div>
-                  </div>
-                </div>
-              </div>
-              </div>
-              <div id="prod-funda-precio-fijo-panel" class="form-row form-row-precio prod-funda-precio-fijo-panel" hidden>
-                <label>Precio</label>
-                <div class="form-precio-stack">
-                  <div class="precio-contador">
-                    <button type="button" class="stock-btn" id="prod-funda-precio-fijo-menos" aria-label="Menos">−</button>
-                    <span class="precio-simbolo">$</span>
-                    <input type="number" id="prod-funda-precio-fijo" min="0" step="1" placeholder="0" aria-label="Precio fijo">
-                    <button type="button" class="stock-btn" id="prod-funda-precio-fijo-mas" aria-label="Más">+</button>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div id="prod-campos-cargadores" class="prod-campos-categoria" style="display:none">
@@ -1068,7 +1057,7 @@
               <label>Velocidad de carga</label>
               <div class="stock-contador">
                 <button type="button" class="stock-btn" id="prod-powerbank-watts-menos" aria-label="Menos">−</button>
-                <input type="number" id="prod-powerbank-watts" min="0" step="1" value="0" aria-label="Velocidad en watts">
+                <input type="number" id="prod-powerbank-watts" min="0" step="0.01" value="0" aria-label="Velocidad en watts">
                 <span class="input-unidad-simbolo">W</span>
                 <button type="button" class="stock-btn" id="prod-powerbank-watts-mas" aria-label="Más">+</button>
               </div>
@@ -1125,6 +1114,13 @@
                 <option value="multicolor">Multicolor</option>
                 <option value="otro">Otro</option>
               </select>
+            </div>
+          </div>
+
+          <div id="prod-campos-otros" class="prod-campos-categoria" style="display:none">
+            <div class="form-row">
+              <label for="prod-otros-nombre">Nombre</label>
+              <input type="text" id="prod-otros-nombre" maxlength="500" placeholder="Ej: Soporte magnetico para celular" autocomplete="off">
             </div>
           </div>
 
@@ -1282,6 +1278,23 @@
         <div class="modal-acciones">
           <button type="button" class="btn btn-vaciar" id="confirmar-cancelar">Cancelar</button>
           <button type="button" class="btn btn-danger" id="confirmar-ok">Eliminar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal confirmar con contraseña del dueño -->
+    <div id="modal-confirmar-dueno" class="modal-overlay">
+      <div class="modal-content modal-form">
+        <h3>Confirmar eliminación</h3>
+        <p id="confirmar-dueno-texto">¿Eliminar?</p>
+        <div class="form-row">
+          <label for="confirmar-dueno-password">Contraseña</label>
+          <input type="password" id="confirmar-dueno-password" autocomplete="current-password" placeholder="Ingresa la contraseña">
+        </div>
+        <p id="confirmar-dueno-error" class="form-error" hidden></p>
+        <div class="modal-acciones">
+          <button type="button" class="btn btn-vaciar" id="confirmar-dueno-cancelar">Cancelar</button>
+          <button type="button" class="btn btn-danger" id="confirmar-dueno-ok">Eliminar</button>
         </div>
       </div>
     </div>

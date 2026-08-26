@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../config/db');
 const { requireAdmin } = require('../middleware/rbac');
+const { verificarPasswordDueno } = require('../services/verificar-dueno');
 
 const router = Router();
 
@@ -52,7 +53,12 @@ router.put('/:id', requireAdmin, async (req, res) => {
 });
 
 router.delete('/:id', requireAdmin, async (req, res) => {
+  const passwordDueno = req.body?.password_dueno ?? req.body?.password;
   try {
+    const valida = await verificarPasswordDueno(passwordDueno);
+    if (!valida) {
+      return res.status(403).json({ error: 'Contraseña incorrecta' });
+    }
     const { rows } = await pool.query('DELETE FROM sucursales WHERE id = $1 RETURNING id', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Sucursal no encontrada' });
     res.json({ ok: true });

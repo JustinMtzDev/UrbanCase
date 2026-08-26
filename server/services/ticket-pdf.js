@@ -22,7 +22,7 @@ function generarPdfTicket(datos) {
   const destino = path.join(TICKETS_DIR, `venta-${datos.folio}.pdf`);
 
   return new Promise((resolve, reject) => {
-    const alto = Math.max(480, 200 + (datos.items.length * 40));
+    const alto = Math.max(560, 280 + (datos.items.length * 40));
     const doc = new PDFDocument({
       size: [226, alto],
       margin: 12,
@@ -55,6 +55,10 @@ function generarPdfTicket(datos) {
     doc.font('Helvetica-Bold').fontSize(11).text(`TOTAL ${formatoMoneda(datos.total)}`, { align: 'center' });
     doc.moveDown(0.35);
     doc.font('Helvetica').fontSize(8).text('Gracias por su compra', { align: 'center' });
+    doc.moveDown(0.35);
+    doc.fontSize(7).text('Salida la mercancia no hay devoluciones', { align: 'center', width: 202 });
+    doc.text('No hay garantia en micas', { align: 'center', width: 202 });
+    doc.text('15 dias de garantia por defectos de fabrica con este ticket', { align: 'center', width: 202 });
 
     doc.end();
     stream.on('finish', () => resolve(relativo));

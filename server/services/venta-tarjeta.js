@@ -14,6 +14,7 @@ const {
   prepararLineasVenta,
   persistirVenta,
 } = require('./venta-core');
+const { actualizarComisionTrasVenta } = require('./comisiones');
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -164,6 +165,7 @@ async function procesarVentaTarjeta(req, res, { items, sucursalId, metodoPago })
       mpOrderId: orden.orderId,
       mpPaymentId: pago.paymentId || orden.paymentId,
     });
+    await actualizarComisionTrasVenta(client, usuarioId);
     await client.query('COMMIT');
 
     let ticket = { pdf: false, print: false, print_omitido: true, print_error: null };

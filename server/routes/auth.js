@@ -24,7 +24,7 @@ function mapUsuarioPerfil(row) {
 }
 
 router.post('/login', loginRateLimiter, async (req, res) => {
-  const usuarioLogin = String(req.body?.usuario ?? '').trim();
+  const usuarioLogin = String(req.body?.usuario ?? '').trim().toLowerCase();
   const password = String(req.body?.password ?? '');
   if (!usuarioLogin || !password) {
     return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
@@ -36,7 +36,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
               s.nombre AS sucursal_nombre
        FROM usuarios u
        LEFT JOIN sucursales s ON s.id = u.sucursal_id
-       WHERE u.usuario = $1 AND u.activo = TRUE`,
+       WHERE lower(u.usuario) = $1 AND u.activo = TRUE`,
       [usuarioLogin]
     );
     if (rows.length === 0) {

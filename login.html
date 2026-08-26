@@ -210,6 +210,111 @@
     .input-password-wrap input {
       padding-right: 48px;
     }
+    /* type=text + máscara visual: Chrome no ofrece el gestor de contraseñas */
+    #password.uc-pass-masked {
+      -webkit-text-security: disc;
+      text-security: disc;
+    }
+
+    .login-usuario-dropdown {
+      position: relative;
+      width: 100%;
+    }
+    .login-usuario-field {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .login-usuario-field #usuario {
+      padding-right: 48px;
+    }
+    .login-usuario-arrow {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.55);
+      cursor: pointer;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      line-height: 1;
+      transition: color 0.15s, background 0.15s, transform 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .login-usuario-arrow:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .login-usuario-dropdown.abierto .login-usuario-arrow {
+      transform: translateY(-50%) rotate(180deg);
+      color: #fff;
+    }
+    body:not(.theme-dark) .login-usuario-arrow {
+      color: rgba(255, 255, 255, 0.7);
+    }
+    body:not(.theme-dark) .login-usuario-dropdown.abierto .login-usuario-arrow,
+    body:not(.theme-dark) .login-usuario-arrow:hover {
+      color: #fff;
+    }
+    .login-usuario-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      max-height: 220px;
+      overflow-y: auto;
+      padding: 8px 0;
+      border-radius: 16px;
+      background: rgba(26, 26, 31, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45), 0 6px 16px rgba(0, 0, 0, 0.25);
+      z-index: 40;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .login-usuario-menu.abierto {
+      display: block;
+    }
+    .login-usuario-vacio {
+      padding: 12px 16px;
+      font-size: 0.9rem;
+      color: rgba(255, 255, 255, 0.45);
+    }
+    .login-usuario-item {
+      display: block;
+      width: calc(100% - 12px);
+      margin: 0 6px;
+      padding: 12px 14px;
+      border: none;
+      border-radius: 10px;
+      background: transparent;
+      color: #e8e8ed;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .login-usuario-item:hover,
+    .login-usuario-item.activo {
+      background: rgba(255, 49, 49, 0.18);
+      color: #fff;
+    }
+    body.theme-dark .login-usuario-item:hover,
+    body.theme-dark .login-usuario-item.activo,
+    html.theme-dark .login-usuario-item:hover,
+    html.theme-dark .login-usuario-item.activo {
+      background: rgba(0, 212, 170, 0.18);
+    }
     .btn-toggle-pass {
       position: absolute;
       right: 10px;
@@ -378,15 +483,24 @@
       <img src="img/urbanCase.svg" alt="UrbanCase" class="logo-brand">
     </div>
     <div class="login-error" id="login-error"></div>
-    <form id="login-form" method="post" action="/login.html" autocomplete="on">
+    <form id="login-form" method="post" action="/login.html" autocomplete="off">
       <div class="form-group">
         <label for="usuario">Usuario</label>
-        <input type="text" id="usuario" name="username" placeholder="Ej. admin" required autocomplete="username" spellcheck="false" autocapitalize="none" autocorrect="off" readonly>
+        <div class="login-usuario-dropdown" id="login-usuario-dropdown">
+          <div class="login-usuario-field">
+            <input type="text" id="usuario" name="uc-user" placeholder="Ej. admin" required autocomplete="off" spellcheck="false" autocapitalize="none" autocorrect="off" inputmode="text" data-1p-ignore="true" data-lpignore="true" aria-autocomplete="list" aria-expanded="false" aria-controls="login-usuario-menu">
+            <button type="button" class="login-usuario-arrow" id="login-usuario-arrow" tabindex="-1" aria-label="Ver usuarios guardados">▼</button>
+          </div>
+          <div class="login-usuario-menu" id="login-usuario-menu" role="listbox" hidden>
+            <div class="login-usuario-vacio" id="login-usuario-vacio" hidden>Sin usuarios guardados</div>
+            <div class="login-usuario-list" id="login-usuario-list"></div>
+          </div>
+        </div>
       </div>
       <div class="form-group">
         <label for="password">Contraseña</label>
         <div class="input-password-wrap">
-          <input type="password" id="password" name="password" placeholder="XXXXXXXXXXXX" required autocomplete="current-password" spellcheck="false" readonly>
+          <input type="text" id="password" name="uc-access-key" class="uc-pass-masked" placeholder="XXXXXXXXXXXX" required autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" inputmode="text" data-1p-ignore="true" data-lpignore="true" data-bwignore="true" data-form-type="other" role="presentation">
           <button type="button" class="btn-toggle-pass" id="btn-toggle-pass" tabindex="-1" title="Mostrar contraseña">
             <img src="img/icon_ojo_cerrado.svg" alt="" class="icon-ojo icon-ojo-default" id="icon-ojo-default" data-src="img/icon_ojo_cerrado.svg" data-src-dark="img/icon_ojo_cerrado_dark.svg">
             <img src="img/icon_ojo_abierto.svg" alt="" class="icon-ojo icon-ojo-hover" id="icon-ojo-hover" data-src="img/icon_ojo_abierto.svg" data-src-dark="img/icon_ojo_abierto_dark.svg">
@@ -435,10 +549,16 @@
 
     const $togglePass = document.getElementById('btn-toggle-pass');
     const $passInput = document.getElementById('password');
-    $togglePass.addEventListener('click', () => {
-      const visible = $passInput.type === 'text';
-      $passInput.type = visible ? 'password' : 'text';
-      $togglePass.classList.toggle('pass-visible', !visible);
+
+    function setPasswordVisible(visible) {
+      if (!$passInput) return;
+      $passInput.classList.toggle('uc-pass-masked', !visible);
+      $togglePass?.classList.toggle('pass-visible', visible);
+    }
+
+    $togglePass?.addEventListener('click', () => {
+      const visible = !$passInput.classList.contains('uc-pass-masked');
+      setPasswordVisible(!visible);
       $togglePass.blur();
     });
 
@@ -447,83 +567,197 @@
     const $btn = document.getElementById('btn-login');
     const $usuarioInput = document.getElementById('usuario');
     let loginFormActivo = false;
-    let limpiezaTimeouts = [];
+    let limpiaPassTimeouts = [];
 
-    function cancelarLimpiezaLogin() {
-      limpiezaTimeouts.forEach(clearTimeout);
-      limpiezaTimeouts = [];
+    function normalizarUsuarioLogin(valor) {
+      return String(valor ?? '').trim().toLowerCase();
     }
 
-    function bloquearAutollenadoInicial() {
+    function cancelarLimpiezaPassword() {
+      limpiaPassTimeouts.forEach(clearTimeout);
+      limpiaPassTimeouts = [];
+    }
+
+    function bloquearAutollenadoPassword() {
       if (loginFormActivo) return;
-      $usuarioInput?.setAttribute('readonly', 'readonly');
       $passInput?.setAttribute('readonly', 'readonly');
     }
 
     function habilitarFormularioLogin() {
       if (loginFormActivo) return;
       loginFormActivo = true;
-      cancelarLimpiezaLogin();
-      $usuarioInput?.removeAttribute('readonly');
+      cancelarLimpiezaPassword();
       $passInput?.removeAttribute('readonly');
     }
 
-    function limpiarFormularioLogin() {
+    function limpiarSoloPassword() {
       if (loginFormActivo) return;
-      $form?.reset();
-      if ($usuarioInput) $usuarioInput.value = '';
       if ($passInput) {
         $passInput.value = '';
-        $passInput.type = 'password';
+        setPasswordVisible(false);
       }
-      bloquearAutollenadoInicial();
-      $togglePass?.classList.remove('pass-visible');
+      bloquearAutollenadoPassword();
       $error?.classList.remove('visible');
     }
 
-    function programarLimpiezaLogin() {
+    function programarLimpiezaPassword() {
       loginFormActivo = false;
-      cancelarLimpiezaLogin();
-      limpiarFormularioLogin();
+      cancelarLimpiezaPassword();
+      limpiarSoloPassword();
       [50, 150, 400, 800].forEach((ms) => {
-        limpiezaTimeouts.push(setTimeout(limpiarFormularioLogin, ms));
+        limpiaPassTimeouts.push(setTimeout(limpiarSoloPassword, ms));
       });
     }
 
-    [$form, $usuarioInput, $passInput].forEach((el) => {
+    function forzarUsuarioMinusculas() {
+      if (!$usuarioInput) return;
+      const pos = $usuarioInput.selectionStart;
+      const normalizado = normalizarUsuarioLogin($usuarioInput.value);
+      if ($usuarioInput.value !== normalizado) {
+        $usuarioInput.value = normalizado;
+        if (typeof pos === 'number') {
+          const p = Math.min(pos, normalizado.length);
+          try { $usuarioInput.setSelectionRange(p, p); } catch (_) {}
+        }
+      }
+    }
+
+    const USUARIOS_LOGIN_KEY = 'uc_login_usuarios';
+    const ULTIMO_LOGIN_KEY = 'uc_login_ultimo';
+
+    function leerUsuariosRecordados() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(USUARIOS_LOGIN_KEY) || '[]');
+        if (!Array.isArray(raw)) return [];
+        return [...new Set(raw.map(normalizarUsuarioLogin).filter(Boolean))];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function recordarUsuarioLogin(usuario) {
+      const u = normalizarUsuarioLogin(usuario);
+      if (!u) return;
+      try {
+        const lista = [u, ...leerUsuariosRecordados().filter((x) => x !== u)].slice(0, 12);
+        localStorage.setItem(USUARIOS_LOGIN_KEY, JSON.stringify(lista));
+        localStorage.setItem(ULTIMO_LOGIN_KEY, u);
+      } catch (_) {}
+    }
+
+    function pintarSugerenciasUsuario(filtro = '') {
+      const $list = document.getElementById('login-usuario-list');
+      const $vacio = document.getElementById('login-usuario-vacio');
+      const $arrow = document.getElementById('login-usuario-arrow');
+      if (!$list) return;
+      const q = normalizarUsuarioLogin(filtro);
+      const lista = leerUsuariosRecordados().filter((u) => !q || u.includes(q));
+      $list.innerHTML = lista.map((u) => {
+        const activo = u === normalizarUsuarioLogin($usuarioInput?.value || '');
+        return `<button type="button" class="login-usuario-item${activo ? ' activo' : ''}" role="option" data-usuario="${u.replace(/"/g, '&quot;')}">${u}</button>`;
+      }).join('');
+      if ($vacio) $vacio.hidden = lista.length > 0;
+      if ($arrow) $arrow.hidden = leerUsuariosRecordados().length === 0;
+      $list.querySelectorAll('.login-usuario-item').forEach((btn) => {
+        btn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          const u = normalizarUsuarioLogin(btn.dataset.usuario || '');
+          if ($usuarioInput) $usuarioInput.value = u;
+          cerrarDropdownUsuario();
+          document.getElementById('password')?.focus();
+        });
+      });
+    }
+
+    function abrirDropdownUsuario() {
+      const $wrap = document.getElementById('login-usuario-dropdown');
+      const $menu = document.getElementById('login-usuario-menu');
+      if (!$wrap || !$menu) return;
+      if (leerUsuariosRecordados().length === 0) return;
+      pintarSugerenciasUsuario($usuarioInput?.value || '');
+      $wrap.classList.add('abierto');
+      $menu.classList.add('abierto');
+      $menu.hidden = false;
+      $usuarioInput?.setAttribute('aria-expanded', 'true');
+    }
+
+    function cerrarDropdownUsuario() {
+      const $wrap = document.getElementById('login-usuario-dropdown');
+      const $menu = document.getElementById('login-usuario-menu');
+      if (!$wrap || !$menu) return;
+      $wrap.classList.remove('abierto');
+      $menu.classList.remove('abierto');
+      $menu.hidden = true;
+      $usuarioInput?.setAttribute('aria-expanded', 'false');
+    }
+
+    function precargarUltimoUsuario() {
+      // El campo usuario debe iniciar vacío al entrar o refrescar.
+      if ($usuarioInput) $usuarioInput.value = '';
+    }
+
+    pintarSugerenciasUsuario();
+    precargarUltimoUsuario();
+
+    document.getElementById('login-usuario-arrow')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const $menu = document.getElementById('login-usuario-menu');
+      if ($menu?.classList.contains('abierto')) cerrarDropdownUsuario();
+      else abrirDropdownUsuario();
+    });
+    $usuarioInput?.addEventListener('focus', () => {
+      if (leerUsuariosRecordados().length) abrirDropdownUsuario();
+    });
+    $usuarioInput?.addEventListener('input', () => {
+      forzarUsuarioMinusculas();
+      if (leerUsuariosRecordados().length) abrirDropdownUsuario();
+      else cerrarDropdownUsuario();
+    });
+    $usuarioInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') cerrarDropdownUsuario();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        abrirDropdownUsuario();
+        document.querySelector('#login-usuario-list .login-usuario-item')?.focus();
+      }
+    });
+    $usuarioInput?.addEventListener('blur', () => {
+      forzarUsuarioMinusculas();
+      setTimeout(cerrarDropdownUsuario, 120);
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#login-usuario-dropdown')) cerrarDropdownUsuario();
+    });
+
+    [$form, $passInput].forEach((el) => {
       if (!el) return;
-      ['mousedown', 'touchstart', 'keydown'].forEach((evt) => {
+      ['mousedown', 'touchstart', 'keydown', 'focus'].forEach((evt) => {
         el.addEventListener(evt, habilitarFormularioLogin, { capture: true });
       });
     });
-    $usuarioInput?.addEventListener('input', habilitarFormularioLogin);
 
-    (function initAutofillDetect() {
-      const style = document.createElement('style');
-      style.textContent = '@keyframes uc-login-autofill-start { from {} to {} } #login-form input:-webkit-autofill { animation-name: uc-login-autofill-start; }';
-      document.head.appendChild(style);
-      [$usuarioInput, $passInput].forEach((input) => {
-        input?.addEventListener('animationstart', (e) => {
-          if (e.animationName === 'uc-login-autofill-start') habilitarFormularioLogin();
-        });
-      });
-    })();
-
-    programarLimpiezaLogin();
-    window.addEventListener('pageshow', programarLimpiezaLogin);
+    programarLimpiezaPassword();
+    window.addEventListener('pageshow', () => {
+      precargarUltimoUsuario();
+      programarLimpiezaPassword();
+    });
 
     $form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      habilitarFormularioLogin();
+      forzarUsuarioMinusculas();
       $error.classList.remove('visible');
       $btn.disabled = true;
       $btn.textContent = 'Verificando...';
 
       try {
+        const usuarioLogin = normalizarUsuarioLogin(document.getElementById('usuario').value);
         const res = await fetch(API + '/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            usuario: document.getElementById('usuario').value.trim(),
+            usuario: usuarioLogin,
             password: document.getElementById('password').value,
           }),
         });
@@ -539,7 +773,8 @@
 
         localStorage.setItem('uc_token', data.token);
         localStorage.setItem('uc_usuario', JSON.stringify(data.usuario));
-        var usr = (data.usuario && data.usuario.usuario) ? String(data.usuario.usuario).toLowerCase() : '';
+        var usr = (data.usuario && data.usuario.usuario) ? String(data.usuario.usuario).toLowerCase() : usuarioLogin;
+        recordarUsuarioLogin(usr);
         try { localStorage.setItem('urbancase-texto-grande', usr === 'edgar' ? '1' : '0'); } catch(_){}
         irAlInicioTrasLogin();
       } catch (err) {

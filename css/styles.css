@@ -1376,6 +1376,19 @@ body.theme-dark .inventario-drill-select {
   width: 100%;
 }
 
+#btn-inventario-recargar-imagenes.cargando i {
+  animation: inventario-recargar-spin 0.7s linear infinite;
+}
+
+#btn-inventario-recargar-imagenes:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+@keyframes inventario-recargar-spin {
+  to { transform: rotate(-360deg); }
+}
+
 .inventario-chip {
   font-family: inherit;
   font-size: 0.85rem;
@@ -3893,6 +3906,17 @@ body:not(.theme-dark) #modal-confirmar .modal-content h3 {
   color: #ff3131;
 }
 
+.form-error {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  color: #e53935;
+}
+
+body.theme-dark .form-error,
+html.theme-dark .form-error {
+  color: #ff6b6b;
+}
+
 .modulo-tabs {
   display: flex;
   gap: 4px;
@@ -3905,7 +3929,8 @@ body:not(.theme-dark) #modal-confirmar .modal-content h3 {
 
 body.uc-rol-vendedor .categoria-btn[data-categoria="todos"],
 body.uc-rol-vendedor .categoria-btn[data-categoria="clientes"],
-body.uc-rol-vendedor .categoria-btn[data-categoria="usuarios"] {
+body.uc-rol-vendedor .categoria-btn[data-categoria="usuarios"],
+body.uc-rol-vendedor .categoria-btn[data-categoria="ventas"] {
   display: none !important;
 }
 
@@ -4359,13 +4384,52 @@ body.theme-dark #tabla-reporte-corte-caja tbody tr[data-venta-id]:hover {
 }
 
 #tabla-reporte-movimientos tbody tr.reporte-mov-row-seleccionada,
-#tabla-reporte-corte-caja tbody tr.reporte-mov-row-seleccionada {
+#tabla-reporte-corte-caja tbody tr.reporte-mov-row-seleccionada,
+#tbody-usuarios tr.reporte-mov-row-seleccionada {
   background: rgba(127, 127, 127, 0.12);
 }
 
 body.theme-dark #tabla-reporte-movimientos tbody tr.reporte-mov-row-seleccionada,
-body.theme-dark #tabla-reporte-corte-caja tbody tr.reporte-mov-row-seleccionada {
+body.theme-dark #tabla-reporte-corte-caja tbody tr.reporte-mov-row-seleccionada,
+body.theme-dark #tbody-usuarios tr.reporte-mov-row-seleccionada {
   background: rgba(0, 212, 170, 0.12);
+}
+
+#tbody-usuarios tr.usuario-row-comisionable {
+  cursor: pointer;
+}
+
+#usuarios-comisiones-wrap.reporte-mov-detalle-wrap {
+  padding: 0.85rem 1rem 1rem;
+}
+
+.usuarios-comisiones-resumen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.35rem 0.75rem;
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.usuarios-comisiones-resumen-nombre {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.usuarios-comisiones-resumen-total {
+  font-weight: 700;
+  color: var(--accent, #fa3030);
+}
+
+.usuarios-comisiones-resumen-nota {
+  flex: 0 0 100%;
+  width: 100%;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.35;
 }
 
 #tabla-reporte-historial-productos tbody tr[data-historial-edicion-id] {
@@ -7240,10 +7304,6 @@ body:not(.theme-dark) .dashboard-comparativa-card {
   #vista-modulo-ventas .reporte-corte-resumen-bar .reporte-corte-resumen {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.55rem;
-  }
-
-  #vista-modulo-ventas .reporte-corte-resumen-bar .reporte-corte-card:last-child {
-    grid-column: 1 / -1;
   }
 
   #reporte-inventario-resumen {

@@ -206,12 +206,16 @@
   function pintarKpis(data) {
     const $ing = document.getElementById('dash-kpi-ingresos');
     const $ingMeta = document.getElementById('dash-kpi-ingresos-meta');
+    const $util = document.getElementById('dash-kpi-utilidad');
     const $com = document.getElementById('dash-kpi-comision');
+    const $prod = document.getElementById('dash-kpi-productos');
     const $tic = document.getElementById('dash-kpi-tickets');
     const $ticket = document.getElementById('dash-kpi-ticket');
 
     if ($ing) $ing.textContent = formatearPrecio(data.ingresos);
+    if ($util) $util.textContent = formatearPrecio(data.utilidad);
     if ($com) $com.textContent = formatearPrecio(data.ingresos_comision);
+    if ($prod) $prod.textContent = String(data.productos_vendidos ?? 0);
     if ($tic) $tic.textContent = String(data.tickets ?? 0);
     if ($ticket) $ticket.textContent = formatearPrecio(data.ticket_promedio);
 
@@ -255,6 +259,8 @@
       larga: d.etiqueta_larga || d.etiqueta || '',
       tickets: Number(d.tickets) || 0,
       promedio: Number(d.ticket_promedio) || 0,
+      utilidad: Number(d.utilidad) || 0,
+      productos: Math.max(0, Number(d.productos_vendidos) || 0),
     }));
     const maxIng = Math.max(0, ...ingresos);
     const tema = coloresChartTema();
@@ -295,6 +301,8 @@
                 const prom = m.promedio > 0 ? m.promedio : (m.tickets > 0 ? ingresos[i] / m.tickets : 0);
                 return [
                   `Ingresos: ${formatearPrecio(ingresos[i])}`,
+                  `Utilidad: ${formatearPrecio(m.utilidad)}`,
+                  `Productos vendidos: ${m.productos ?? 0}`,
                   `Tickets: ${m.tickets ?? 0}`,
                   `Promedio por ticket: ${formatearPrecio(prom)}`,
                 ];
@@ -387,7 +395,9 @@
         const msg = dataKpi.error || (rKpi.status === 404 ? 'Ruta no encontrada. Reinicia el servidor (npm start).' : 'No se pudieron cargar los indicadores');
         pintarKpis({
           ingresos: 0,
+          utilidad: 0,
           ingresos_comision: 0,
+          productos_vendidos: 0,
           tickets: 0,
           ticket_promedio: 0,
           variacion_pct: null,
