@@ -5797,10 +5797,11 @@ function initProductoModal() {
       return;
     }
     const stock = parseInt($stockValor?.value || 0, 10);
-    if (stock < 1) { alert('El stock debe ser al menos 1'); return; }
-
     const editId = $form?.dataset?.editId ? Number($form.dataset.editId) : NaN;
     const esEdicion = Number.isFinite(editId);
+    if (!Number.isFinite(stock) || stock < 0) { alert('Ingresa un stock válido'); return; }
+    if (!esEdicion && stock < 1) { alert('El stock debe ser al menos 1'); return; }
+
     let sidProd = NaN;
     if (!esEdicion) {
       const { raw: sidRaw, esTodasLasSucursales } = leerDatasetSucursalInventario();
@@ -9556,12 +9557,25 @@ function eliminarProveedor(id, nombre) {
 // ===================== MODAL CONFIRMAR =====================
 
 let confirmarCallback = null;
+let confirmarEnCurso = false;
 function initConfirmar() {
+  const $ok = document.getElementById('confirmar-ok');
   document.getElementById('confirmar-cancelar').addEventListener('click', cerrarConfirmar);
   document.getElementById('modal-confirmar').addEventListener('click', e => { if (e.target.id === 'modal-confirmar') cerrarConfirmar(); });
-  document.getElementById('confirmar-ok').addEventListener('click', async () => {
-    if (confirmarCallback) await confirmarCallback();
-    cerrarConfirmar();
+  $ok.addEventListener('click', async () => {
+    if (confirmarEnCurso) return;
+    const cb = confirmarCallback;
+    if (!cb) return;
+    confirmarEnCurso = true;
+    confirmarCallback = null;
+    if ($ok) $ok.disabled = true;
+    try {
+      await cb();
+    } finally {
+      confirmarEnCurso = false;
+      if ($ok) $ok.disabled = false;
+      cerrarConfirmar();
+    }
   });
 }
 
@@ -9583,8 +9597,11 @@ function eliminarProductoDesdeInventario(id, nombre, esConsignado = false) {
 }
 
 function abrirConfirmar(texto, cb) {
+  if (confirmarEnCurso) return;
   confirmarCallback = cb;
   document.getElementById('confirmar-texto').textContent = texto;
+  const $ok = document.getElementById('confirmar-ok');
+  if ($ok) $ok.disabled = false;
   document.getElementById('modal-confirmar').classList.add('visible');
 }
 
