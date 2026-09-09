@@ -16,6 +16,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
+// Railway pone un proxy delante: sin esto req.ip toma el header X-Forwarded-For
+// tal cual lo mande el cliente y el rate limit se evade.
+app.set('trust proxy', 1);
+
 const corsOrigins = String(process.env.CORS_ORIGINS || '')
   .split(',')
   .map((o) => o.trim())
@@ -62,7 +66,12 @@ app.use('/api/proveedores', authMiddleware, require('./routes/proveedores'));
 app.use('/api/productos', authMiddleware, require('./routes/productos'));
 app.use('/api/productos-consignados', authMiddleware, require('./routes/productos-consignados'));
 app.use('/api/inventario-favoritos', authMiddleware, require('./routes/inventario-favoritos'));
-app.use('/api/reportes', authMiddleware, require('./routes/reportes'));
+// El vendedor solo necesita el resumen de inventario; el resto de reportes
+// expone costos, utilidad y corte de caja de todas las sucursales.
+const requireAdminReportes = (req, res, next) => (
+  req.path === '/resumen-inventario' ? next() : requireAdmin(req, res, next)
+);
+app.use('/api/reportes', authMiddleware, requireAdminReportes, require('./routes/reportes'));
 app.use('/api/ventas', authMiddleware, require('./routes/ventas'));
 
 app.get('/', (req, res) => {

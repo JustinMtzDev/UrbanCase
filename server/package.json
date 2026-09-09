@@ -15,6 +15,9 @@
     "migrate-tickets": "node migrate-tickets.js",
     "migrate-ventas-mp": "node migrate-ventas-mp.js",
     "migrate-usuario-comisiones": "node migrate-usuario-comisiones.js",
+    "migrate-cliente-precios": "node migrate-cliente-precios.js",
+    "migrate-devoluciones": "node migrate-devoluciones.js",
+    "migrate-hardening": "node migrate-hardening.js",
     "setup-mp-terminal": "node setup-mp-terminal.js"
   },
   "keywords": [],

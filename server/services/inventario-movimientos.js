@@ -38,6 +38,19 @@ async function registrarMovimientoInventario({
   const sucursalIdNum = Number(sucursalId);
   const detalleJson = detalle && typeof detalle === 'object' ? JSON.stringify(detalle) : null;
 
+  // El INSERT va en un SAVEPOINT: sin él, un error deja la transacción abortada
+  // y la siguiente consulta falla con 25P02 en vez de la causa real. Con el pool
+  // como executor no hay transacción abierta y el SAVEPOINT no aplica.
+  let conSavepoint = false;
+  if (typeof executor.release === 'function') {
+    try {
+      await executor.query('SAVEPOINT movimiento_inventario');
+      conSavepoint = true;
+    } catch {
+      conSavepoint = false;
+    }
+  }
+
   try {
     await executor.query(
       `INSERT INTO inventario_movimientos
@@ -53,9 +66,13 @@ async function registrarMovimientoInventario({
         detalleJson,
       ]
     );
+    if (conSavepoint) await executor.query('RELEASE SAVEPOINT movimiento_inventario');
     return true;
   } catch (err) {
     if (strict) throw err;
+    if (conSavepoint) {
+      await executor.query('ROLLBACK TO SAVEPOINT movimiento_inventario').catch(() => {});
+    }
     console.warn('No se pudo registrar movimiento de inventario:', err.message);
     return false;
   }

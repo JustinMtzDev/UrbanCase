@@ -1,10 +1,18 @@
 const { Router } = require('express');
 const pool = require('../config/db');
+const { responderError } = require('../middleware/errors');
+const { tieneAccesoCompleto } = require('../middleware/roles');
 
 const router = Router();
 const TZ = 'America/Mexico_City';
 const TS = `(v.created_at AT TIME ZONE '${TZ}')`;
 const PERIODOS_KPI = new Set(['diario', 'semanal', 'mensual', 'anual']);
+
+// El mensaje de Postgres delata tablas, columnas y constraints: se queda en el log.
+function errorReporte(req, res, err) {
+  console.error('Reportes', req.originalUrl, err);
+  return responderError(res, err);
+}
 
 function parseSucursalIdQuery(req) {
   const sidRaw = String(req.query.sucursal_id ?? '').trim();
@@ -56,7 +64,10 @@ function rangoKpi(periodo) {
 }
 
 async function metricasPeriodo(pool, whereSql, vals) {
-  const where = whereSql ? `WHERE ${whereSql}` : '';
+  // Las ventas devueltas no cuentan como ingreso ni como utilidad.
+  const where = whereSql
+    ? `WHERE (${whereSql}) AND v.devuelta_at IS NULL`
+    : 'WHERE v.devuelta_at IS NULL';
   const [ingRes, comRes, utilRes, prodRes] = await Promise.all([
     pool.query(
       `SELECT
@@ -163,7 +174,7 @@ router.get('/dashboard-kpis', async (req, res) => {
       etiqueta_comparacion: etiquetaCmp,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorReporte(req, res, err);
   }
 });
 
@@ -184,7 +195,8 @@ router.get('/dashboard-top-productos', async (req, res) => {
     idx++;
   }
   const { actual } = rangoKpi(periodo);
-  const whereActual = [...filtrosSuc, actual].join(' AND ');
+  // Una venta devuelta no cuenta para el top, igual que en metricasPeriodo.
+  const whereActual = [...filtrosSuc, actual, 'v.devuelta_at IS NULL'].join(' AND ');
 
   try {
     const { rows } = await pool.query(
@@ -234,7 +246,7 @@ router.get('/dashboard-top-productos', async (req, res) => {
       })),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorReporte(req, res, err);
   }
 });
 
@@ -252,7 +264,7 @@ router.get('/dashboard-comparativa-sucursales', async (req, res) => {
            COUNT(*)::int AS tickets,
            COALESCE(AVG(v.total), 0)::float8 AS ticket_promedio
          FROM ventas v
-         WHERE ${actual}
+         WHERE ${actual} AND v.devuelta_at IS NULL
          GROUP BY v.sucursal_id
        ),
        top_prod AS (
@@ -269,6 +281,7 @@ router.get('/dashboard-comparativa-sucursales', async (req, res) => {
            FROM venta_detalle d
            INNER JOIN ventas v ON v.id = d.venta_id
            WHERE ${actual}
+             AND v.devuelta_at IS NULL
              AND BTRIM(COALESCE(d.producto_nombre, '')) <> ''
            GROUP BY v.sucursal_id, LOWER(BTRIM(d.producto_nombre))
          ) x
@@ -305,7 +318,7 @@ router.get('/dashboard-comparativa-sucursales', async (req, res) => {
     });
     res.json({ periodo, total_ingresos: totalIngresos, sucursales });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorReporte(req, res, err);
   }
 });
 
@@ -347,6 +360,7 @@ router.get('/dashboard-ventas-7d', async (req, res) => {
          FROM ventas v
          WHERE (${TS})::date >= ((NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '6 days')::date
            AND (${TS})::date <= ((NOW() AT TIME ZONE '${TZ}')::date)::date
+           AND v.devuelta_at IS NULL
            ${joinSuc}
          GROUP BY 1
        ),
@@ -373,6 +387,7 @@ router.get('/dashboard-ventas-7d', async (req, res) => {
          LEFT JOIN productos p ON p.id = d.producto_id
          WHERE (${TS})::date >= ((NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '6 days')::date
            AND (${TS})::date <= ((NOW() AT TIME ZONE '${TZ}')::date)::date
+           AND v.devuelta_at IS NULL
            ${joinSuc}
          GROUP BY 1
        )
@@ -412,15 +427,23 @@ router.get('/dashboard-ventas-7d', async (req, res) => {
 
     res.json({ dias });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorReporte(req, res, err);
   }
 });
 
+// Único reporte abierto al vendedor: se le acota a su propia sucursal.
 router.get('/resumen-inventario', async (req, res) => {
   const sidRaw = String(req.query.sucursal_id ?? '').trim();
   const filtros = [];
   const vals = [];
-  if (sidRaw) {
+  if (!tieneAccesoCompleto(req.usuario?.rol)) {
+    const sidUsuario = Number(req.usuario?.sucursal_id);
+    if (!Number.isFinite(sidUsuario) || sidUsuario <= 0) {
+      return res.status(403).json({ error: 'No tienes una sucursal asignada' });
+    }
+    filtros.push('sucursal_id = $1');
+    vals.push(sidUsuario);
+  } else if (sidRaw) {
     const sid = Number(sidRaw);
     if (!Number.isFinite(sid) || sid <= 0) {
       return res.status(400).json({ error: 'sucursal_id inválido' });
@@ -446,7 +469,7 @@ router.get('/resumen-inventario', async (req, res) => {
       stock_total: Number(row.stock_total) || 0,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorReporte(req, res, err);
   }
 });
 
@@ -454,10 +477,10 @@ router.get('/movimientos-inventario', async (req, res) => {
   const limitRaw = Number(req.query.limit);
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 1000) : 300;
   const q = String(req.query.q || '').trim();
+  // Las devoluciones tienen su propio reporte, no se mezclan con el restock.
   const filtros = [
     `(
-      im.movimiento = 'devolucion'
-      OR im.movimiento = 'restock_rapido'
+      im.movimiento = 'restock_rapido'
       OR (im.movimiento = 'entrada_mercancia' AND COALESCE(im.detalle->>'motivo', '') = 'restock_rapido')
     )`,
   ];
@@ -507,7 +530,89 @@ router.get('/movimientos-inventario', async (req, res) => {
     );
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorReporte(req, res, err);
+  }
+});
+
+router.get('/devoluciones', async (req, res) => {
+  const limitRaw = Number(req.query.limit);
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 1000) : 300;
+  const q = String(req.query.q || '').trim();
+  const filtros = [];
+  const vals = [];
+  let idx = 1;
+
+  if (q) {
+    filtros.push(`(
+      CAST(d.venta_id AS TEXT) ILIKE $${idx}
+      OR COALESCE(d.motivo, '') ILIKE $${idx}
+      OR COALESCE(u.nombre, '') ILIKE $${idx}
+      OR COALESCE(ua.nombre, '') ILIKE $${idx}
+      OR COALESCE(s.nombre, '') ILIKE $${idx}
+      OR EXISTS (
+        SELECT 1 FROM venta_detalle vd
+        WHERE vd.venta_id = d.venta_id AND vd.producto_nombre ILIKE $${idx}
+      )
+    )`);
+    vals.push(`%${q}%`);
+    idx++;
+  }
+
+  const sucRes = anexarFiltroSucursalQuery(req, filtros, vals, idx, 'd.sucursal_id');
+  if (sucRes.error) return res.status(400).json({ error: sucRes.error });
+  idx = sucRes.idx;
+
+  vals.push(limit);
+  const where = filtros.length ? `WHERE ${filtros.join(' AND ')}` : '';
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         d.id,
+         d.created_at,
+         d.venta_id,
+         d.total::float8 AS total,
+         COALESCE(d.metodo_pago, 'efectivo') AS metodo_pago,
+         d.motivo,
+         (d.nota_pdf_path IS NOT NULL AND BTRIM(d.nota_pdf_path) <> '') AS nota_pdf,
+         COALESCE(u.nombre, 'Sistema') AS usuario_nombre,
+         ua.nombre AS autorizado_nombre,
+         COALESCE(s.nombre, 'Sin sucursal') AS sucursal_nombre,
+         v.created_at AS venta_created_at,
+         COALESCE((
+           SELECT SUM(vd.cantidad)::int FROM venta_detalle vd WHERE vd.venta_id = d.venta_id
+         ), 0) AS total_productos,
+         COALESCE((
+           SELECT string_agg(vd.cantidad || ' × ' || vd.producto_nombre, ', ' ORDER BY vd.id)
+           FROM venta_detalle vd WHERE vd.venta_id = d.venta_id
+         ), '') AS productos_texto,
+         COALESCE((
+           SELECT json_agg(
+             json_build_object(
+               'id', vd.id,
+               'producto_nombre', vd.producto_nombre,
+               'cantidad', vd.cantidad,
+               'precio_unitario', vd.precio_unitario::float8,
+               'subtotal', vd.subtotal::float8,
+               'es_consignado', vd.es_consignado
+             )
+             ORDER BY vd.id
+           )
+           FROM venta_detalle vd WHERE vd.venta_id = d.venta_id
+         ), '[]'::json) AS productos
+       FROM devoluciones d
+       LEFT JOIN ventas v ON v.id = d.venta_id
+       LEFT JOIN usuarios u ON u.id = d.usuario_id
+       LEFT JOIN usuarios ua ON ua.id = d.autorizado_por
+       LEFT JOIN sucursales s ON s.id = d.sucursal_id
+       ${where}
+       ORDER BY d.created_at DESC, d.id DESC
+       LIMIT $${idx}`,
+      vals
+    );
+    res.json(rows);
+  } catch (err) {
+    return errorReporte(req, res, err);
   }
 });
 
@@ -569,7 +674,7 @@ router.get('/transferencias-sucursales', async (req, res) => {
     );
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorReporte(req, res, err);
   }
 });
 
@@ -642,7 +747,7 @@ router.get('/historial-productos', async (req, res) => {
     );
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorReporte(req, res, err);
   }
 });
 
@@ -668,7 +773,7 @@ router.get('/corte-caja/fechas', async (req, res) => {
     });
     res.json({ fechas });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorReporte(req, res, err);
   }
 });
 
@@ -704,7 +809,7 @@ router.get('/corte-caja/:id/detalle', async (req, res) => {
     );
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorReporte(req, res, err);
   }
 });
 
@@ -785,6 +890,12 @@ router.get('/corte-caja', async (req, res) => {
          v.sucursal_id,
          COALESCE(s.nombre, 'Sin sucursal') AS sucursal_nombre,
          (v.ticket_pdf_path IS NOT NULL AND BTRIM(v.ticket_pdf_path) <> '') AS ticket_pdf,
+         v.devuelta_at,
+         dev.id AS devolucion_id,
+         dev.motivo AS devolucion_motivo,
+         (dev.nota_pdf_path IS NOT NULL AND BTRIM(dev.nota_pdf_path) <> '') AS devolucion_nota_pdf,
+         udev.nombre AS devolucion_usuario_nombre,
+         uaut.nombre AS devolucion_autorizado_nombre,
          COALESCE((
            SELECT SUM(d.cantidad)::int
            FROM venta_detalle d
@@ -817,6 +928,9 @@ router.get('/corte-caja', async (req, res) => {
        FROM ventas v
        LEFT JOIN usuarios u ON u.id = v.usuario_id
        LEFT JOIN sucursales s ON s.id = v.sucursal_id
+       LEFT JOIN devoluciones dev ON dev.venta_id = v.id
+       LEFT JOIN usuarios udev ON udev.id = dev.usuario_id
+       LEFT JOIN usuarios uaut ON uaut.id = dev.autorizado_por
        ${where}
        ORDER BY v.created_at DESC, v.id DESC
        LIMIT $${idx}`,
@@ -824,7 +938,7 @@ router.get('/corte-caja', async (req, res) => {
     );
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorReporte(req, res, err);
   }
 });
 

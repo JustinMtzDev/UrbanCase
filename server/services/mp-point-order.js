@@ -34,7 +34,6 @@ function mpRequest(method, url, { token, body, idempotencyKey, extraHeaders }) {
         path: u.pathname + u.search,
         method,
         headers,
-        rejectUnauthorized: false,
       },
       (res) => {
         let data = '';

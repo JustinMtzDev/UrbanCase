@@ -1,4 +1,5 @@
 const { registrarMovimientoInventario } = require('./inventario-movimientos');
+const { obtenerMapaPreciosCliente, precioEspecialParaProducto } = require('./cliente-precios');
 
 const { normalizarRol } = require('../middleware/roles');
 
@@ -34,12 +35,19 @@ async function obtenerSucursalVenta(client, sucursalId) {
   return sucCheck.rows[0];
 }
 
-async function prepararLineasVenta(client, { items, sucursalId, bloquearStock = true, rolUsuario = null } = {}) {
+async function prepararLineasVenta(client, {
+  items,
+  sucursalId,
+  bloquearStock = true,
+  rolUsuario = null,
+  clienteId = null,
+} = {}) {
   const lock = bloquearStock ? ' FOR UPDATE' : '';
   const lineas = [];
   const cantidadPorProducto = new Map();
   const consignadoIds = new Set();
   const precioLibreDueno = esDuenoUsuario(rolUsuario);
+  const preciosCliente = await obtenerMapaPreciosCliente(client, clienteId);
 
   for (const raw of items) {
     const esConsignado = Boolean(raw?.es_consignado ?? raw?.consignado);
@@ -77,12 +85,20 @@ async function prepararLineasVenta(client, { items, sucursalId, bloquearStock = 
       if (Number(cons.sucursal_id) !== sucursalId) {
         throw new Error(`«${cons.nombre}» no pertenece a la sucursal seleccionada`);
       }
-      if (!precioLibreDueno && Math.round(precioUnitario * 100) !== Math.round(Number(cons.precio_venta) * 100)) {
+      // `cliente_precios` identifica el producto por categoría + nombre: el mismo
+      // artículo debe costar igual esté en `productos` o en `productos_consignados`.
+      const precioEspecialCons = precioLibreDueno ? null : precioEspecialParaProducto(preciosCliente, cons);
+      if (precioEspecialCons == null
+        && !precioLibreDueno
+        && Math.round(precioUnitario * 100) !== Math.round(Number(cons.precio_venta) * 100)) {
         throw new Error(`Precio inválido para «${cons.nombre}»`);
       }
       if (cantidad !== 1) {
         throw new Error('Los productos consignados solo se venden de uno en uno');
       }
+      const precioFinalCons = precioEspecialCons != null
+        ? redondearMoneda(precioEspecialCons)
+        : precioUnitario;
 
       lineas.push({
         es_consignado: true,
@@ -90,11 +106,14 @@ async function prepararLineasVenta(client, { items, sucursalId, bloquearStock = 
         producto_consignado_id: consignadoId,
         producto_nombre: cons.nombre,
         cantidad: 1,
-        precio_unitario: precioUnitario,
-        subtotal: redondearMoneda(precioUnitario),
+        precio_unitario: precioFinalCons,
+        subtotal: redondearMoneda(precioFinalCons),
         detalle: {
           costo_consignacion: cons.costo_consignacion,
           categoria: cons.categoria,
+          ...(precioEspecialCons != null
+            ? { precio_lista: Number(cons.precio_venta), precio_especial_cliente: true }
+            : {}),
         },
       });
       continue;
@@ -122,8 +141,13 @@ async function prepararLineasVenta(client, { items, sucursalId, bloquearStock = 
   }
 
   const productosCache = new Map();
-  for (const [clave, cantidadTotal] of cantidadPorProducto.entries()) {
-    const productoId = Number(clave);
+  // Siempre en el mismo orden de id: dos cajas con los mismos productos en orden
+  // inverso se bloquearían entre sí al tomar los FOR UPDATE.
+  const idsOrdenados = [...cantidadPorProducto.keys()]
+    .map(Number)
+    .sort((a, b) => a - b);
+  for (const productoId of idsOrdenados) {
+    const cantidadTotal = cantidadPorProducto.get(`${productoId}`);
     const prodRes = await client.query(
       `SELECT id, nombre, precio::float8 AS precio, precio_max::float8 AS precio_max,
               costo_compra::float8 AS costo_compra, stock, sucursal_id, categoria
@@ -149,14 +173,26 @@ async function prepararLineasVenta(client, { items, sucursalId, bloquearStock = 
     if (linea.es_consignado || !linea._pendiente_producto) continue;
     const prod = productosCache.get(linea.producto_id);
     if (!prod) continue;
-    if (!precioVentaValido(prod, linea.precio_unitario, { precioLibreDueno })) {
+
+    // El precio especial del cliente lo manda el servidor, no el navegador.
+    // El dueño conserva su precio libre si lo cambió a mano en el carrito.
+    const precioEspecial = precioLibreDueno ? null : precioEspecialParaProducto(preciosCliente, prod);
+    if (precioEspecial != null) {
+      linea.precio_unitario = redondearMoneda(precioEspecial);
+      linea.subtotal = redondearMoneda(linea.precio_unitario * linea.cantidad);
+    } else if (!precioVentaValido(prod, linea.precio_unitario, { precioLibreDueno })) {
       throw new Error(`Precio inválido para «${prod.nombre}»`);
     }
+
     linea.producto_nombre = prod.nombre;
     linea.detalle = {
       costo_compra: prod.costo_compra,
       categoria: prod.categoria,
     };
+    if (precioEspecial != null) {
+      linea.detalle.precio_lista = Number(prod.precio);
+      linea.detalle.precio_especial_cliente = true;
+    }
     delete linea._pendiente_producto;
   }
 
@@ -173,15 +209,19 @@ async function persistirVenta(client, {
   productosCache,
   mpOrderId = null,
   mpPaymentId = null,
+  clienteId = null,
+  clienteNombre = null,
 }) {
+  const cliente = Number.isFinite(Number(clienteId)) && Number(clienteId) > 0 ? Number(clienteId) : null;
   const ventaRes = await client.query(
-    `INSERT INTO ventas (sucursal_id, usuario_id, subtotal, total, metodo_pago, mp_order_id, mp_payment_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO ventas (sucursal_id, usuario_id, subtotal, total, metodo_pago, mp_order_id, mp_payment_id, cliente_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id, sucursal_id, usuario_id, subtotal::float8 AS subtotal, total::float8 AS total,
-               metodo_pago, mp_order_id, mp_payment_id, created_at`,
-    [sucursalId, usuarioId, subtotal, subtotal, metodoPago, mpOrderId, mpPaymentId]
+               metodo_pago, mp_order_id, mp_payment_id, cliente_id, created_at`,
+    [sucursalId, usuarioId, subtotal, subtotal, metodoPago, mpOrderId, mpPaymentId, cliente]
   );
   const venta = ventaRes.rows[0];
+  if (cliente) venta.cliente_nombre = clienteNombre || null;
 
   const detalleMovimiento = [];
   let cantidadMovimientoInventario = 0;

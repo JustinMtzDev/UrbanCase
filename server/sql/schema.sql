@@ -57,10 +57,12 @@ BEGIN
   END IF;
 END $$;
 
--- Superusuario: soporte / soporte123
+-- Superusuario inicial: soporte / soporte123.
+-- DO NOTHING y no DO UPDATE: si no, cada ejecución reabre la cuenta con la
+-- contraseña que está en claro en el repo.
 INSERT INTO usuarios (usuario, nombre, password_hash, rol, activo) VALUES
   ('soporte', 'Soporte', '$2b$10$WvDeilZe/jmlV0pznP6nRe2hjjCXgvugFApuoR8wmBm5HkVnDow7C', 'admin', TRUE)
-ON CONFLICT (usuario) DO UPDATE SET password_hash = EXCLUDED.password_hash, activo = TRUE;
+ON CONFLICT (usuario) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS public.productos (
   id SERIAL PRIMARY KEY,
@@ -236,4 +238,55 @@ BEGIN
   ) THEN
     ALTER TABLE public.ventas ADD COLUMN mp_payment_id VARCHAR(80);
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'ventas' AND column_name = 'cliente_id'
+  ) THEN
+    ALTER TABLE public.ventas ADD COLUMN cliente_id INTEGER REFERENCES public.clientes(id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'ventas' AND column_name = 'devuelta_at'
+  ) THEN
+    ALTER TABLE public.ventas ADD COLUMN devuelta_at TIMESTAMPTZ;
+  END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS idx_ventas_cliente ON public.ventas(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_devuelta ON public.ventas(devuelta_at);
+
+-- Devolución de una venta completa. Sin tabla de detalle: las líneas se leen
+-- de `venta_detalle`, que no cambia después de la venta.
+CREATE TABLE IF NOT EXISTS public.devoluciones (
+  id SERIAL PRIMARY KEY,
+  venta_id INTEGER NOT NULL REFERENCES public.ventas(id) ON DELETE CASCADE,
+  sucursal_id INTEGER NOT NULL REFERENCES public.sucursales(id) ON DELETE RESTRICT,
+  usuario_id INTEGER REFERENCES public.usuarios(id) ON DELETE SET NULL,
+  autorizado_por INTEGER REFERENCES public.usuarios(id) ON DELETE SET NULL,
+  motivo TEXT,
+  total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  metodo_pago VARCHAR(30),
+  nota_pdf_path TEXT,
+  nota_impresa_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS devoluciones_venta_uniq ON public.devoluciones(venta_id);
+CREATE INDEX IF NOT EXISTS idx_devoluciones_created ON public.devoluciones(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_devoluciones_sucursal ON public.devoluciones(sucursal_id);
+
+-- Precio especial por cliente. El producto se identifica por categoría + nombre
+-- porque en `productos` hay una fila por sucursal y por variante de precio.
+CREATE TABLE IF NOT EXISTS public.cliente_precios (
+  id SERIAL PRIMARY KEY,
+  cliente_id INTEGER NOT NULL REFERENCES public.clientes(id) ON DELETE CASCADE,
+  categoria VARCHAR(40) NOT NULL,
+  nombre VARCHAR(200) NOT NULL,
+  precio NUMERIC(12,2) NOT NULL CHECK (precio > 0),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS cliente_precios_producto_uniq
+  ON public.cliente_precios (cliente_id, lower(btrim(categoria)), lower(btrim(nombre)));
+CREATE INDEX IF NOT EXISTS idx_cliente_precios_cliente ON public.cliente_precios(cliente_id);

@@ -31,6 +31,7 @@ async function obtenerVentasDiaUsuario(executor, usuarioId, dia) {
        COUNT(v.id)::int AS tickets
      FROM ventas v
      WHERE v.usuario_id = $1
+       AND v.devuelta_at IS NULL
        AND (v.created_at AT TIME ZONE '${TZ}')::date = $2::date`,
     [usuarioId, dia]
   );
@@ -68,7 +69,7 @@ async function sincronizarComisionDiariaUsuario(executor, usuarioId, diaInput = 
     [uid, dia]
   );
   const comisionAnterior = Number(prevRes.rows[0]?.comision) || 0;
-  const delta = nuevaComision - comisionAnterior;
+  const deltaComision = nuevaComision - comisionAnterior;
 
   if (ventasTotal <= 0 && nuevaComision <= 0 && !prevRes.rows.length) {
     return { dia, ventas_total: 0, comision: 0, tickets: 0, delta: 0 };
@@ -86,16 +87,20 @@ async function sincronizarComisionDiariaUsuario(executor, usuarioId, diaInput = 
     [uid, dia, ventasTotal, nuevaComision, tickets]
   );
 
-  if (delta !== 0) {
-    await executor.query(
-      `UPDATE usuarios
-       SET comision_total_acumulada = COALESCE(comision_total_acumulada, 0) + $1
-       WHERE id = $2`,
-      [delta, uid]
-    );
-  }
+  await ajustarComisionAcumulada(executor, uid, deltaComision);
 
-  return { dia, ventas_total: ventasTotal, comision: nuevaComision, tickets, delta };
+  return { dia, ventas_total: ventasTotal, comision: nuevaComision, tickets, delta: deltaComision };
+}
+
+async function ajustarComisionAcumulada(executor, usuarioId, delta) {
+  const monto = Number(delta) || 0;
+  if (monto === 0) return;
+  await executor.query(
+    `UPDATE usuarios
+     SET comision_total_acumulada = COALESCE(comision_total_acumulada, 0) + $1
+     WHERE id = $2`,
+    [monto, Number(usuarioId)]
+  );
 }
 
 async function purgarComisionesAntiguas(executor) {
@@ -103,6 +108,15 @@ async function purgarComisionesAntiguas(executor) {
     `DELETE FROM usuario_comision_diaria
      WHERE dia < ((NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '${DIAS_DETALLE - 1} days')::date`
   );
+}
+
+let ultimoDiaPurgado = null;
+
+/** En cada venta la purga solo agrega contención: basta una vez al día por proceso. */
+async function purgarComisionesAntiguasSiToca(executor, dia) {
+  if (dia && ultimoDiaPurgado === dia) return;
+  await purgarComisionesAntiguas(executor);
+  ultimoDiaPurgado = dia || null;
 }
 
 async function actualizarComisionTrasVenta(executor, usuarioId) {
@@ -115,7 +129,7 @@ async function actualizarComisionTrasVenta(executor, usuarioId) {
   );
   const dia = normalizarDiaSql(hoyRes.rows[0]?.dia);
   await sincronizarComisionDiariaUsuario(executor, uid, dia);
-  await purgarComisionesAntiguas(executor);
+  await purgarComisionesAntiguasSiToca(executor, dia);
 }
 
 async function recalcularComisionesUsuario(executor, usuarioId) {
@@ -135,6 +149,7 @@ async function recalcularComisionesUsuario(executor, usuarioId) {
        COUNT(v.id)::int AS tickets
      FROM ventas v
      WHERE v.usuario_id = $1
+       AND v.devuelta_at IS NULL
      GROUP BY 1
      ORDER BY 1 ASC`,
     [uid]
@@ -233,6 +248,9 @@ module.exports = {
   TZ,
   rolGeneraComision,
   calcularComisionDiaria,
+  normalizarDiaSql,
+  obtenerVentasDiaUsuario,
+  ajustarComisionAcumulada,
   sincronizarComisionDiariaUsuario,
   purgarComisionesAntiguas,
   actualizarComisionTrasVenta,

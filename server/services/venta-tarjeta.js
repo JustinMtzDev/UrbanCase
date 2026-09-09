@@ -15,6 +15,7 @@ const {
   persistirVenta,
 } = require('./venta-core');
 const { actualizarComisionTrasVenta } = require('./comisiones');
+const { obtenerClienteVenta } = require('./cliente-precios');
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -75,12 +76,13 @@ async function emitirTicketUrbanCaseSincrono(pool, {
   return ticket;
 }
 
-async function procesarVentaTarjeta(req, res, { items, sucursalId, metodoPago }) {
+async function procesarVentaTarjeta(req, res, { items, sucursalId, metodoPago, clienteId = null }) {
   const usuarioId = req.usuario?.id != null ? Number(req.usuario.id) : null;
   const rolUsuario = req.usuario?.rol;
   const token = String(process.env.MP_ACCESS_TOKEN || '').trim();
 
   let sucursal;
+  let cliente = null;
   let subtotal;
   let lineasPreview;
 
@@ -88,11 +90,13 @@ async function procesarVentaTarjeta(req, res, { items, sucursalId, metodoPago })
   try {
     await clientPreview.query('BEGIN');
     sucursal = await obtenerSucursalVenta(clientPreview, sucursalId);
+    cliente = await obtenerClienteVenta(clientPreview, clienteId);
     const prep = await prepararLineasVenta(clientPreview, {
       items,
       sucursalId,
       bloquearStock: false,
       rolUsuario,
+      clienteId,
     });
     subtotal = prep.subtotal;
     lineasPreview = prep.lineas;
@@ -151,6 +155,7 @@ async function procesarVentaTarjeta(req, res, { items, sucursalId, metodoPago })
       sucursalId,
       bloquearStock: true,
       rolUsuario,
+      clienteId,
     });
     if (prep.subtotal !== subtotal) {
       throw new Error('El total cambió mientras se cobraba. Revisá inventario y reintenta.');
@@ -164,6 +169,8 @@ async function procesarVentaTarjeta(req, res, { items, sucursalId, metodoPago })
       productosCache: prep.productosCache,
       mpOrderId: orden.orderId,
       mpPaymentId: pago.paymentId || orden.paymentId,
+      clienteId,
+      clienteNombre: cliente?.nombre || null,
     });
     await actualizarComisionTrasVenta(client, usuarioId);
     await client.query('COMMIT');

@@ -1248,6 +1248,8 @@ body.theme-dark .inventario-vista-btn.activo {
 }
 
 .inventario-buscador {
+  -webkit-appearance: none;
+  appearance: none;
   flex: 1;
   min-width: 180px;
   padding: 10px 14px;
@@ -1632,6 +1634,25 @@ body.theme-dark .inventario-producto-img {
 
 body:not(.theme-dark) .inventario-producto-precio {
   color: #3fb750;
+}
+
+/* Precio especial del cliente elegido en el carrito */
+.inventario-precio-cliente {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.inventario-precio-lista {
+  font-size: 0.8em;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.inventario-precio-especial {
+  color: inherit;
 }
 
 .inventario-producto-stock {
@@ -2812,6 +2833,106 @@ body.uc-rol-dueno .carrito-item-precio-editable:hover {
   color: var(--danger);
 }
 
+.carrito-cliente {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.85rem;
+  margin-top: auto;
+}
+
+.carrito-cliente label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.carrito-cliente select {
+  flex: 1;
+  min-width: 0;
+}
+
+.carrito-cliente + .carrito-totales {
+  margin-top: 0.85rem;
+}
+
+.carrito-item-precio-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+}
+
+.carrito-item-precio-lista {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: line-through;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.modal-cliente-precios-sub {
+  margin: -0.35rem 0 1rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* Dropdowns del precio especial: mismo acabado que «Agregar producto» */
+body:not(.theme-dark) #modal-cliente-precios .form-row input,
+body:not(.theme-dark) #modal-cliente-precios .custom-select-trigger,
+body:not(.theme-dark) #modal-cliente-precios .custom-select-options {
+  background: #ffffff;
+}
+
+body:not(.theme-dark) #modal-cliente-precios .form-row input,
+body:not(.theme-dark) #modal-cliente-precios .custom-select-trigger {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+body:not(.theme-dark) #modal-cliente-precios .custom-select-options {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+body.theme-dark #modal-cliente-precios .form-row input,
+body.theme-dark #modal-cliente-precios .custom-select-trigger,
+body.theme-dark #modal-cliente-precios .custom-select-options {
+  background: #1a1a1f;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+body:not(.theme-dark) #modal-cliente-precios .custom-select-option:hover,
+body:not(.theme-dark) .carrito-cliente .custom-select-option:hover {
+  background: rgba(255, 49, 49, 0.15);
+  color: #ff3131;
+}
+
+body.theme-dark #modal-cliente-precios .custom-select-option:hover,
+body.theme-dark .carrito-cliente .custom-select-option:hover {
+  background: rgba(0, 212, 170, 0.2);
+  color: var(--accent);
+}
+
+/* Selector de cliente del carrito: mismo dropdown, en versión compacta */
+.carrito-cliente .custom-select-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.carrito-cliente .custom-select-trigger {
+  padding: 9px 34px 9px 12px;
+  border-radius: 11px;
+  font-size: 0.88rem;
+  background-position: right 12px center;
+}
+
+.carrito-cliente .custom-select-option {
+  padding: 9px 12px;
+  font-size: 0.88rem;
+}
+
 .carrito-totales {
   border-top: 1px solid var(--border);
   padding-top: 1rem;
@@ -3912,6 +4033,47 @@ body:not(.theme-dark) #modal-confirmar .modal-content h3 {
   color: #e53935;
 }
 
+/* Campos de clave: type=text con máscara visual, así el navegador no los ve
+   como formulario de sesión y no ofrece el gestor de contraseñas. */
+input.uc-pass-masked {
+  -webkit-text-security: disc;
+  text-security: disc;
+}
+
+/* Los buscadores no llevan la «x» nativa de type=search */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+/* Detector de autollenado: si el navegador insiste en rellenar un campo,
+   esta animación avisa a app.js para limpiarlo, y de paso se le quita el
+   fondo amarillo/lila que Chrome le pinta encima. */
+@keyframes ucAutofillDetectado {
+  from { opacity: 1; }
+  to { opacity: 1; }
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* La animación solo se aplica donde el autollenado nunca es deseable */
+input.modulo-buscar:-webkit-autofill,
+input.inventario-buscador:-webkit-autofill,
+input.uc-pass-masked:-webkit-autofill {
+  animation-name: ucAutofillDetectado;
+  animation-duration: 1ms;
+}
+
 body.theme-dark .form-error,
 html.theme-dark .form-error {
   color: #ff6b6b;
@@ -4287,6 +4449,87 @@ body.theme-dark .reporte-corte-recargar-btn:hover {
   text-align: center;
 }
 
+.reporte-corte-card--devoluciones {
+  border-color: rgba(229, 57, 53, 0.45);
+}
+
+.reporte-corte-card--devoluciones .reporte-corte-card-valor {
+  color: #e53935;
+}
+
+body.theme-dark .reporte-corte-card--devoluciones .reporte-corte-card-valor {
+  color: #ff6b6b;
+}
+
+.reporte-corte-card--devoluciones[hidden] {
+  display: none !important;
+}
+
+/* Venta devuelta: sigue visible, en rojo, pero ya no cuenta en el corte */
+#tbody-reporte-corte-caja tr.venta-row-devuelta td {
+  background: rgba(229, 57, 53, 0.1);
+  color: #c62828;
+}
+
+body.theme-dark #tbody-reporte-corte-caja tr.venta-row-devuelta td {
+  background: rgba(255, 107, 107, 0.12);
+  color: #ff8a80;
+}
+
+#tbody-reporte-corte-caja tr.venta-row-devuelta.reporte-mov-row-seleccionada td {
+  background: rgba(229, 57, 53, 0.18);
+}
+
+body.theme-dark #tbody-reporte-corte-caja tr.venta-row-devuelta.reporte-mov-row-seleccionada td {
+  background: rgba(255, 107, 107, 0.2);
+}
+
+.venta-badge-devuelta {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: rgba(229, 57, 53, 0.15);
+  color: #e53935;
+  cursor: help;
+}
+
+body.theme-dark .venta-badge-devuelta {
+  background: rgba(255, 107, 107, 0.18);
+  color: #ff6b6b;
+}
+
+.modal-devolucion {
+  max-width: 520px;
+  width: 100%;
+}
+
+.modal-devolucion-sub {
+  margin: -0.35rem 0 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.modal-devolucion-aviso {
+  margin: 0 0 0.85rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(229, 57, 53, 0.35);
+  background: rgba(229, 57, 53, 0.08);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.modal-devolucion-productos {
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 0.85rem;
+}
+
 .reporte-historial-cambios-cell {
   min-width: 280px;
 }
@@ -4368,28 +4611,33 @@ html.theme-dark .venta-detalle-precio-costo {
 }
 
 #tabla-reporte-movimientos tbody tr[data-movimiento-id],
+#tabla-reporte-devoluciones tbody tr[data-devolucion-id],
 #tabla-reporte-corte-caja tbody tr[data-venta-id] {
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
 body:not(.theme-dark) #tabla-reporte-movimientos tbody tr[data-movimiento-id]:hover,
+body:not(.theme-dark) #tabla-reporte-devoluciones tbody tr[data-devolucion-id]:hover,
 body:not(.theme-dark) #tabla-reporte-corte-caja tbody tr[data-venta-id]:hover {
   background: rgba(255, 49, 49, 0.05);
 }
 
 body.theme-dark #tabla-reporte-movimientos tbody tr[data-movimiento-id]:hover,
+body.theme-dark #tabla-reporte-devoluciones tbody tr[data-devolucion-id]:hover,
 body.theme-dark #tabla-reporte-corte-caja tbody tr[data-venta-id]:hover {
   background: rgba(0, 212, 170, 0.08);
 }
 
 #tabla-reporte-movimientos tbody tr.reporte-mov-row-seleccionada,
+#tabla-reporte-devoluciones tbody tr.reporte-mov-row-seleccionada,
 #tabla-reporte-corte-caja tbody tr.reporte-mov-row-seleccionada,
 #tbody-usuarios tr.reporte-mov-row-seleccionada {
   background: rgba(127, 127, 127, 0.12);
 }
 
 body.theme-dark #tabla-reporte-movimientos tbody tr.reporte-mov-row-seleccionada,
+body.theme-dark #tabla-reporte-devoluciones tbody tr.reporte-mov-row-seleccionada,
 body.theme-dark #tabla-reporte-corte-caja tbody tr.reporte-mov-row-seleccionada,
 body.theme-dark #tbody-usuarios tr.reporte-mov-row-seleccionada {
   background: rgba(0, 212, 170, 0.12);
@@ -4397,6 +4645,27 @@ body.theme-dark #tbody-usuarios tr.reporte-mov-row-seleccionada {
 
 #tbody-usuarios tr.usuario-row-comisionable {
   cursor: pointer;
+}
+
+#tbody-clientes tr[data-cliente-id] {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+body:not(.theme-dark) #tbody-clientes tr[data-cliente-id]:hover {
+  background: rgba(255, 49, 49, 0.05);
+}
+
+body.theme-dark #tbody-clientes tr[data-cliente-id]:hover {
+  background: rgba(0, 212, 170, 0.08);
+}
+
+#tbody-clientes tr.reporte-mov-row-seleccionada {
+  background: rgba(127, 127, 127, 0.12);
+}
+
+body.theme-dark #tbody-clientes tr.reporte-mov-row-seleccionada {
+  background: rgba(0, 212, 170, 0.12);
 }
 
 #usuarios-comisiones-wrap.reporte-mov-detalle-wrap {
@@ -5075,6 +5344,8 @@ body.theme-dark .reporte-historial-cambio-ver {
 }
 
 .modulo-buscar {
+  -webkit-appearance: none;
+  appearance: none;
   font-family: inherit;
   font-size: 0.9rem;
   padding: 8px 14px;
@@ -5987,6 +6258,77 @@ body.theme-dark .form-row select:focus {
 .form-row-inline .custom-select-wrap {
   flex: 1;
   min-width: 0;
+}
+
+.form-row-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.form-row-switch > label:first-child {
+  margin-bottom: 0;
+}
+
+.form-row label.uc-switch,
+.uc-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 26px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.uc-switch input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.uc-switch .uc-switch-track {
+  display: block;
+  box-sizing: border-box;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--border);
+  position: relative;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.uc-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s;
+}
+
+.uc-switch input[type="checkbox"]:checked + .uc-switch-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.uc-switch input[type="checkbox"]:checked + .uc-switch-track::after {
+  transform: translateX(20px);
+}
+
+.uc-switch input[type="checkbox"]:focus-visible + .uc-switch-track {
+  box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.25);
 }
 
 .form-chips {

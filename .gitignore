@@ -27,3 +27,13 @@ Thumbs.db
 # PDFs de tickets de venta
 server/tickets/*
 !server/tickets/.gitkeep
+
+# Respaldos de datos (pueden contener informacion del negocio)
+respaldos/
+
+# Capturas y artefactos de pruebas
+.playwright-mcp/
+switch-check.png
+mask-check.png
+devolucion-fila-roja.png
+precio-cliente-card.png

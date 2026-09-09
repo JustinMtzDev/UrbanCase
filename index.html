@@ -179,7 +179,7 @@
           <div class="inventario-header">
             <div class="inventario-buscador-wrap">
               <div class="inventario-buscador-field">
-                <input type="text" class="inventario-buscador" id="inventario-buscador" placeholder="Buscar productos...">
+                <input type="search" class="inventario-buscador" id="inventario-buscador" name="uc-busqueda-inventario" autocomplete="off" spellcheck="false" data-form-type="other" data-1p-ignore data-lpignore="true" placeholder="Buscar productos...">
                 <button type="button" class="inventario-buscador-limpiar" id="btn-inventario-buscador-limpiar" title="Borrar búsqueda" aria-label="Borrar búsqueda" hidden>
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/>
@@ -220,6 +220,7 @@
                 <button type="button" class="inventario-chip" data-cat="cargadores">Cargadores</button>
                 <button type="button" class="inventario-chip" data-cat="powerbanks">Power banks</button>
                 <button type="button" class="inventario-chip" data-cat="audifonos">Audífonos</button>
+                <button type="button" class="inventario-chip" data-cat="relojes">Relojes</button>
                 <button type="button" class="inventario-chip" data-cat="bocinas">Bocinas</button>
                 <button type="button" class="inventario-chip" data-cat="accesorios">Accesorios</button>
                 <button type="button" class="inventario-chip" data-cat="otros">Otros</button>
@@ -270,6 +271,12 @@
         <div class="carrito-lista" id="carrito-lista">
           <div class="carrito-vacio carrito-vacio-link" id="carrito-vacio">Agrega productos tocando aquí</div>
         </div>
+        <div class="carrito-cliente" id="carrito-cliente-wrap">
+          <label for="carrito-cliente">Cliente</label>
+          <select id="carrito-cliente">
+            <option value="">Público general</option>
+          </select>
+        </div>
         <div class="carrito-totales" id="carrito-totales-venta">
           <div class="carrito-fila">
             <span>Subtotal</span>
@@ -313,7 +320,7 @@
             <option value="movimientos-inventario">Movimientos de inventario</option>
           </select>
           <div class="modulo-acciones">
-            <input type="text" class="modulo-buscar" id="buscar-reporte" placeholder="Buscar...">
+            <input type="search" class="modulo-buscar" id="buscar-reporte" name="uc-busqueda-reportes" autocomplete="off" spellcheck="false" data-form-type="other" data-1p-ignore data-lpignore="true" placeholder="Buscar...">
             <button type="button" class="btn btn-cobrar" id="btn-recargar-reporte">Recargar</button>
           </div>
         </div>
@@ -331,6 +338,7 @@
             <input type="date" class="reporte-ventas-fecha" id="reporte-ventas-fecha" aria-label="Filtrar ventas por fecha">
           </div>
           <div class="modulo-acciones">
+            <button type="button" class="btn btn-danger" id="btn-devolver-venta" hidden>Devolución</button>
             <button type="button" class="btn btn-cobrar" id="btn-recargar-ventas">Recargar</button>
           </div>
         </div>
@@ -348,6 +356,10 @@
               <div class="reporte-corte-card">
                 <span class="reporte-corte-card-label">Utilidad</span>
                 <strong class="reporte-corte-card-valor" id="reporte-corte-utilidad">$0.00</strong>
+              </div>
+              <div class="reporte-corte-card reporte-corte-card--devoluciones" id="reporte-corte-card-devoluciones" hidden>
+                <span class="reporte-corte-card-label">Devoluciones</span>
+                <strong class="reporte-corte-card-valor" id="reporte-corte-devoluciones">$0.00</strong>
               </div>
               <div class="reporte-corte-card">
                 <span class="reporte-corte-card-label">Efectivo</span>
@@ -416,6 +428,7 @@
               <button type="button" class="reporte-accion-chip" data-reporte-chip="alta">Alta</button>
               <button type="button" class="reporte-accion-chip" data-reporte-chip="eliminacion">Eliminación</button>
               <button type="button" class="reporte-accion-chip" data-reporte-chip="edicion">Edición</button>
+              <button type="button" class="reporte-accion-chip" data-reporte-chip="devoluciones">Devoluciones</button>
             </div>
           </div>
         </div>
@@ -465,6 +478,44 @@
               </thead>
               <tbody id="tbody-reporte-mov-detalle">
                 <tr><td colspan="5" class="tabla-vacio">Selecciona un registro para ver el detalle</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="reporte-panel-devoluciones" class="reporte-panel" data-reporte="devoluciones" hidden>
+          <div class="tabla-wrap">
+            <table class="tabla" id="tabla-reporte-devoluciones">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Folio</th>
+                  <th class="tabla-num">Artículos</th>
+                  <th class="tabla-num">Total</th>
+                  <th>Motivo</th>
+                  <th>Usuario</th>
+                  <th>Autorizó</th>
+                  <th>Sucursal</th>
+                  <th>Nota</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reporte-devoluciones">
+                <tr><td colspan="9" class="tabla-vacio">Sin datos</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="tabla-wrap reporte-mov-detalle-wrap" id="reporte-devoluciones-detalle-wrap" hidden>
+            <table class="tabla" id="tabla-reporte-devoluciones-detalle">
+              <thead>
+                <tr>
+                  <th class="tabla-num">#</th>
+                  <th>Producto devuelto</th>
+                  <th class="tabla-num">Cantidad</th>
+                  <th class="tabla-num">Precio</th>
+                  <th class="tabla-num">Importe</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reporte-devoluciones-detalle">
+                <tr><td colspan="5" class="tabla-vacio">Selecciona una devolución para ver el detalle</td></tr>
               </tbody>
             </table>
           </div>
@@ -536,7 +587,7 @@
         <div class="modulo-header">
           <div></div>
           <div class="modulo-acciones">
-            <input type="text" class="modulo-buscar" id="buscar-usuario" placeholder="Buscar usuario...">
+            <input type="search" class="modulo-buscar" id="buscar-usuario" name="uc-busqueda-usuarios" autocomplete="off" spellcheck="false" data-form-type="other" data-1p-ignore data-lpignore="true" placeholder="Buscar usuario...">
             <button type="button" class="btn btn-cobrar" id="btn-nuevo-usuario">+ Nuevo</button>
           </div>
         </div>
@@ -580,7 +631,7 @@
         <div class="modulo-header">
           <div></div>
           <div class="modulo-acciones">
-            <input type="text" class="modulo-buscar" id="buscar-sucursal" placeholder="Buscar sucursal...">
+            <input type="search" class="modulo-buscar" id="buscar-sucursal" name="uc-busqueda-sucursales" autocomplete="off" spellcheck="false" data-form-type="other" data-1p-ignore data-lpignore="true" placeholder="Buscar sucursal...">
             <button type="button" class="btn btn-cobrar" id="btn-nueva-sucursal">+ Nueva</button>
           </div>
         </div>
@@ -610,7 +661,7 @@
         <div class="modulo-header">
           <div></div>
           <div class="modulo-acciones">
-            <input type="text" class="modulo-buscar" id="buscar-cliente" placeholder="Buscar cliente...">
+            <input type="search" class="modulo-buscar" id="buscar-cliente" name="uc-busqueda-clientes" autocomplete="off" spellcheck="false" data-form-type="other" data-1p-ignore data-lpignore="true" placeholder="Buscar cliente...">
             <button type="button" class="btn btn-cobrar" id="btn-nuevo-cliente">+ Nuevo</button>
           </div>
         </div>
@@ -629,13 +680,28 @@
             <tbody id="tbody-clientes"></tbody>
           </table>
         </div>
+        <div class="tabla-wrap reporte-mov-detalle-wrap" id="cliente-precios-detalle-wrap" hidden>
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>Producto con precio especial</th>
+                <th class="tabla-num">Precio normal</th>
+                <th class="tabla-num">Precio cliente</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-cliente-precios">
+              <tr><td colspan="4" class="tabla-vacio">Selecciona un cliente para ver sus precios</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div id="subvista-proveedores" style="display:none">
         <div class="modulo-header">
           <div></div>
           <div class="modulo-acciones">
-            <input type="text" class="modulo-buscar" id="buscar-proveedor" placeholder="Buscar proveedor...">
+            <input type="search" class="modulo-buscar" id="buscar-proveedor" name="uc-busqueda-proveedores" autocomplete="off" spellcheck="false" data-form-type="other" data-1p-ignore data-lpignore="true" placeholder="Buscar proveedor...">
             <button type="button" class="btn btn-cobrar" id="btn-nuevo-proveedor">+ Nuevo</button>
           </div>
         </div>
@@ -669,11 +735,11 @@
           </div>
           <div class="form-row">
             <label>Nombre</label>
-            <input type="text" id="mu-nombre" required>
+            <input type="text" id="mu-nombre" autocomplete="off" data-form-type="other" data-1p-ignore required>
           </div>
           <div class="form-row">
             <label>Contraseña</label>
-            <input type="password" id="mu-password" placeholder="Dejar vacío para no cambiar" autocomplete="new-password">
+            <input type="text" id="mu-password" class="uc-pass-masked" placeholder="Dejar vacío para no cambiar" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" data-form-type="other" data-lpignore="true" data-1p-ignore data-bwignore="true" role="presentation">
           </div>
           <div class="form-row" id="mu-row-rol">
             <label>Rol</label>
@@ -712,7 +778,7 @@
         <form id="form-sucursal">
           <div class="form-row">
             <label>Nombre</label>
-            <input type="text" id="ms-nombre" required>
+            <input type="text" id="ms-nombre" autocomplete="off" data-form-type="other" data-1p-ignore required>
           </div>
           <div class="form-row">
             <label>Activo</label>
@@ -736,22 +802,63 @@
         <form id="form-cliente">
           <div class="form-row">
             <label>Nombre <span class="required">*</span></label>
-            <input type="text" id="mc-nombre" required>
+            <input type="text" id="mc-nombre" autocomplete="off" data-form-type="other" data-1p-ignore required>
           </div>
           <div class="form-row">
             <label>Teléfono</label>
-            <input type="text" id="mc-telefono" placeholder="10 dígitos" maxlength="10" inputmode="numeric">
+            <input type="text" id="mc-telefono" autocomplete="off" data-form-type="other" data-1p-ignore placeholder="10 dígitos" maxlength="10" inputmode="numeric">
           </div>
           <div class="form-row">
             <label>Correo</label>
-            <input type="email" id="mc-correo" placeholder="ejemplo@correo.com">
+            <input type="email" id="mc-correo" autocomplete="off" data-form-type="other" data-1p-ignore placeholder="ejemplo@correo.com">
           </div>
           <div class="form-row">
             <label>Dirección</label>
-            <input type="text" id="mc-direccion" placeholder="Opcional">
+            <input type="text" id="mc-direccion" autocomplete="off" data-form-type="other" data-1p-ignore placeholder="Opcional">
           </div>
           <div class="modal-acciones">
             <button type="button" class="btn btn-vaciar" id="modal-cliente-cancelar">Cancelar</button>
+            <button type="submit" class="btn btn-cobrar">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Precios especiales del cliente -->
+    <div id="modal-cliente-precios" class="modal-overlay">
+      <div class="modal-content modal-form">
+        <h3>Precio especial</h3>
+        <p class="modal-cliente-precios-sub" id="mcp-cliente-nombre"></p>
+        <form id="form-cliente-precio">
+          <div class="form-row">
+            <label for="mcp-categoria">Categoría <span class="required">*</span></label>
+            <select id="mcp-categoria">
+              <option value="">Seleccionar</option>
+            </select>
+          </div>
+          <div class="form-row" id="mcp-subcategoria-wrap" hidden>
+            <label for="mcp-subcategoria">Subcategoría</label>
+            <select id="mcp-subcategoria">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div class="form-row" id="mcp-producto-wrap" hidden>
+            <label for="mcp-producto">Producto <span class="required">*</span></label>
+            <select id="mcp-producto" disabled>
+              <option value="">Seleccionar</option>
+            </select>
+          </div>
+          <div class="form-row form-row-precio">
+            <label for="mcp-precio">Precio <span class="required">*</span></label>
+            <div class="precio-contador">
+              <button type="button" class="stock-btn" id="mcp-precio-menos" aria-label="Menos">−</button>
+              <span class="precio-simbolo">$</span>
+              <input type="number" id="mcp-precio" min="1" step="1" placeholder="0" required>
+              <button type="button" class="stock-btn" id="mcp-precio-mas" aria-label="Más">+</button>
+            </div>
+          </div>
+          <div class="modal-acciones">
+            <button type="button" class="btn btn-vaciar" id="modal-cliente-precios-cerrar">Cerrar</button>
             <button type="submit" class="btn btn-cobrar">Guardar</button>
           </div>
         </form>
@@ -765,23 +872,23 @@
         <form id="form-proveedor">
           <div class="form-row">
             <label>Nombre <span class="required">*</span></label>
-            <input type="text" id="mp-nombre" required>
+            <input type="text" id="mp-nombre" autocomplete="off" data-form-type="other" data-1p-ignore required>
           </div>
           <div class="form-row">
             <label>RFC</label>
-            <input type="text" id="mp-rfc" placeholder="XAXX010101XXX" maxlength="13">
+            <input type="text" id="mp-rfc" autocomplete="off" data-form-type="other" data-1p-ignore placeholder="XAXX010101XXX" maxlength="13">
           </div>
           <div class="form-row">
             <label>Teléfono</label>
-            <input type="text" id="mp-telefono" placeholder="10 dígitos" maxlength="10" inputmode="numeric">
+            <input type="text" id="mp-telefono" autocomplete="off" data-form-type="other" data-1p-ignore placeholder="10 dígitos" maxlength="10" inputmode="numeric">
           </div>
           <div class="form-row">
             <label>Correo</label>
-            <input type="email" id="mp-correo" placeholder="ejemplo@correo.com">
+            <input type="email" id="mp-correo" autocomplete="off" data-form-type="other" data-1p-ignore placeholder="ejemplo@correo.com">
           </div>
           <div class="form-row">
             <label>Dirección</label>
-            <input type="text" id="mp-direccion" placeholder="Opcional">
+            <input type="text" id="mp-direccion" autocomplete="off" data-form-type="other" data-1p-ignore placeholder="Opcional">
           </div>
           <div class="modal-acciones">
             <button type="button" class="btn btn-vaciar" id="modal-proveedor-cancelar">Cancelar</button>
@@ -879,6 +986,7 @@
               <option value="cargadores">Cargadores</option>
               <option value="powerbanks">Power banks</option>
               <option value="audifonos">Audífonos</option>
+              <option value="relojes">Relojes</option>
               <option value="bocinas">Bocinas</option>
               <option value="accesorios">Accesorios</option>
               <option value="otros">Otros</option>
@@ -911,6 +1019,13 @@
                 <option value="mate">Mate</option>
                 <option value="privacidad">Privacidad</option>
               </select>
+            </div>
+            <div id="prod-mica-hidrogel-tableta-wrap" class="form-row form-row-switch" style="display:none">
+              <label for="prod-mica-hidrogel-tableta">Para tableta</label>
+              <label class="uc-switch">
+                <input type="checkbox" id="prod-mica-hidrogel-tableta">
+                <span class="uc-switch-track" aria-hidden="true"></span>
+              </label>
             </div>
             <div id="prod-mica-marca-modelo" style="display:none">
               <div class="form-row form-row-inline">
@@ -1072,6 +1187,17 @@
             </div>
           </div>
 
+          <div id="prod-campos-relojes" class="prod-campos-categoria" style="display:none">
+            <div class="form-row form-row-inline">
+              <label for="prod-reloj-marca">Marca</label>
+              <input type="text" id="prod-reloj-marca" placeholder="Ej: Xiaomi, Amazfit, Huawei..." autocomplete="off">
+            </div>
+            <div class="form-row form-row-inline">
+              <label for="prod-reloj-modelo">Modelo</label>
+              <input type="text" id="prod-reloj-modelo" placeholder="Ej: Watch 2 Lite, GTS 4 Mini..." autocomplete="off">
+            </div>
+          </div>
+
           <div id="prod-campos-bocinas" class="prod-campos-categoria" style="display:none">
             <div class="form-row form-row-inline">
               <label>Marca</label>
@@ -1114,6 +1240,25 @@
                 <option value="multicolor">Multicolor</option>
                 <option value="otro">Otro</option>
               </select>
+            </div>
+          </div>
+
+          <div id="prod-campos-accesorios" class="prod-campos-categoria" style="display:none">
+            <div class="form-row form-row-inline">
+              <label>Tipo de accesorio</label>
+              <select id="prod-accesorio-tipo">
+                <option value="">Seleccionar</option>
+                <option value="teclado-tableta">Teclado para tableta</option>
+                <option value="pop-socket">Pop socket</option>
+                <option value="correa-celular">Correa para celular</option>
+                <option value="carcasa-audifonos">Carcasa para audífonos</option>
+                <option value="protector-camara">Protector de cámara</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="prod-accesorio-detalle">Marca / modelo o compatibilidad</label>
+              <input type="text" id="prod-accesorio-detalle" maxlength="400" placeholder="Ej: iPad 10, AirPods Pro 2, iPhone 15 Pro..." autocomplete="off">
             </div>
           </div>
 
@@ -1283,13 +1428,48 @@
     </div>
 
     <!-- Modal confirmar con contraseña del dueño -->
+    <div id="modal-devolucion" class="modal-overlay">
+      <div class="modal-content modal-form modal-devolucion">
+        <h3>Devolver venta</h3>
+        <p class="modal-devolucion-sub" id="modal-devolucion-sub"></p>
+        <p class="modal-devolucion-aviso">La venta se devuelve completa: los productos regresan al inventario y el folio deja de contar en el corte de caja.</p>
+        <div class="tabla-wrap modal-devolucion-productos">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th class="tabla-num">Cant.</th>
+                <th class="tabla-num">Importe</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-devolucion-productos"></tbody>
+          </table>
+        </div>
+        <form id="form-devolucion" autocomplete="off">
+          <div class="form-row">
+            <label for="devolucion-motivo">Motivo</label>
+            <input type="text" id="devolucion-motivo" name="uc-devolucion-motivo" maxlength="200" autocomplete="off" autocorrect="off" spellcheck="false" data-form-type="other" placeholder="Ej. producto con defecto de fábrica">
+          </div>
+          <div class="form-row" id="devolucion-password-wrap" hidden>
+            <label for="devolucion-password">Contraseña de admin o dueño <span class="required">*</span></label>
+            <input type="text" id="devolucion-password" class="uc-pass-masked" name="uc-autorizacion" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-form-type="other" data-lpignore="true" data-1p-ignore data-bwignore="true" role="presentation" placeholder="Se requiere autorización">
+          </div>
+          <p class="form-error" id="devolucion-error" hidden></p>
+          <div class="modal-acciones">
+            <button type="button" class="btn btn-vaciar" id="modal-devolucion-cancelar">Cancelar</button>
+            <button type="submit" class="btn btn-danger" id="modal-devolucion-confirmar">Devolver</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div id="modal-confirmar-dueno" class="modal-overlay">
       <div class="modal-content modal-form">
         <h3>Confirmar eliminación</h3>
         <p id="confirmar-dueno-texto">¿Eliminar?</p>
         <div class="form-row">
           <label for="confirmar-dueno-password">Contraseña</label>
-          <input type="password" id="confirmar-dueno-password" autocomplete="current-password" placeholder="Ingresa la contraseña">
+          <input type="text" id="confirmar-dueno-password" class="uc-pass-masked" name="uc-clave" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-form-type="other" data-lpignore="true" data-1p-ignore data-bwignore="true" role="presentation" placeholder="Ingresa la contraseña">
         </div>
         <p id="confirmar-dueno-error" class="form-error" hidden></p>
         <div class="modal-acciones">

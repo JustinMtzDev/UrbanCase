@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../config/db');
 const { requireAdmin } = require('../middleware/rbac');
+const { responderError } = require('../middleware/errors');
 const { registrarMovimientoInventario } = require('../services/inventario-movimientos');
 const {
   registrarHistorialProductoAlta,
@@ -10,6 +11,12 @@ const {
 
 const router = Router();
 const IMAGEN_MAX_BASE64 = 3_500_000;
+
+// El mensaje de Postgres delata tablas, columnas y constraints: se queda en el log.
+function errorProducto(req, res, err) {
+  console.error('Productos', req.originalUrl, err);
+  return responderError(res, err);
+}
 
 const SQL_LISTAR_TODAS_SUCURSALES = `
   SELECT p.id, p.nombre, p.precio::float8 AS precio, p.precio_max::float8 AS precio_max,
@@ -32,7 +39,7 @@ router.get('/inventario-todas-sucursales', async (req, res) => {
   try {
     res.json(await obtenerProductosTodasLasSucursales());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorProducto(req, res, err);
   }
 });
 
@@ -45,7 +52,7 @@ router.get('/', async (req, res) => {
     try {
       res.json(await obtenerProductosTodasLasSucursales());
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      return errorProducto(req, res, err);
     }
     return;
   }
@@ -67,7 +74,7 @@ router.get('/', async (req, res) => {
     );
     res.json(rows.map((row) => ({ ...row, id_sucursal: row.sucursal_id })));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorProducto(req, res, err);
   }
 });
 
@@ -150,7 +157,7 @@ router.post('/', requireAdmin, async (req, res) => {
     });
     res.status(201).json({ ...row, id_sucursal: row.sucursal_id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorProducto(req, res, err);
   }
 });
 
@@ -169,7 +176,7 @@ router.get('/:id/imagen', async (req, res) => {
     }
     res.json({ imagen: String(imagen), tiene_imagen: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorProducto(req, res, err);
   }
 });
 
@@ -279,7 +286,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
     });
     res.json({ ...row, id_sucursal: row.sucursal_id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorProducto(req, res, err);
   }
 });
 
@@ -528,7 +535,7 @@ router.post('/trasladar', requireAdmin, async (req, res) => {
     });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    res.status(500).json({ error: err.message });
+    errorProducto(req, res, err);
   } finally {
     client.release();
   }
@@ -564,7 +571,7 @@ router.delete('/:id', requireAdmin, async (req, res) => {
     });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return errorProducto(req, res, err);
   }
 });
 
