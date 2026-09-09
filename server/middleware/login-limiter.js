@@ -1,29 +1,80 @@
-/** Límite de intentos de login por IP (sin dependencias externas). */
-const ventanaMs = 15 * 60 * 1000;
-const maxIntentos = Number(process.env.LOGIN_RATE_MAX) || 10;
-const intentosPorIp = new Map();
+/** Límite de intentos por ventana de tiempo (sin dependencias externas). */
+const VENTANA_LOGIN_MS = 15 * 60 * 1000;
+const MAX_INTENTOS_LOGIN = Number(process.env.LOGIN_RATE_MAX) || 10;
 
+// req.ip es confiable solo porque index.js declara 'trust proxy'.
 function ipCliente(req) {
-  const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return xf || req.socket?.remoteAddress || 'unknown';
+  return req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
-function loginRateLimiter(req, res, next) {
-  const ip = ipCliente(req);
-  const ahora = Date.now();
-  let reg = intentosPorIp.get(ip);
-  if (!reg || ahora - reg.inicio > ventanaMs) {
-    reg = { inicio: ahora, count: 0 };
-  }
-  reg.count += 1;
-  intentosPorIp.set(ip, reg);
+/**
+ * Crea un limitador con su propio Map de intentos. `clave` devuelve una cadena
+ * o un arreglo de cadenas: se cuenta cada una por separado y basta que una pase
+ * el máximo para rechazar. Con `contarAutomatico` en false el conteo lo hace el
+ * handler llamando a `registrarIntento` (para contar solo los fallos).
+ */
+function crearRateLimiter({
+  maxIntentos,
+  ventanaMs,
+  clave,
+  mensaje = 'Demasiados intentos. Intenta más tarde.',
+  contarAutomatico = true,
+} = {}) {
+  const intentos = new Map();
 
-  if (reg.count > maxIntentos) {
-    return res.status(429).json({
-      error: 'Demasiados intentos de inicio de sesión. Intenta más tarde.',
-    });
+  function purgarVencidos(ahora) {
+    for (const [k, reg] of intentos) {
+      if (ahora - reg.inicio > ventanaMs) intentos.delete(k);
+    }
   }
-  next();
+
+  function clavesDe(req) {
+    const valor = clave(req);
+    return (Array.isArray(valor) ? valor : [valor])
+      .map((v) => String(v ?? '').trim())
+      .filter(Boolean);
+  }
+
+  function contar(claves, ahora) {
+    for (const k of claves) {
+      const reg = intentos.get(k);
+      if (!reg || ahora - reg.inicio > ventanaMs) {
+        intentos.set(k, { inicio: ahora, count: 1 });
+      } else {
+        reg.count += 1;
+      }
+    }
+  }
+
+  function limiter(req, res, next) {
+    const ahora = Date.now();
+    purgarVencidos(ahora);
+    const claves = clavesDe(req);
+    const excedido = claves.some((k) => (intentos.get(k)?.count || 0) >= maxIntentos);
+    if (excedido) {
+      return res.status(429).json({ error: mensaje });
+    }
+    if (contarAutomatico) contar(claves, ahora);
+    next();
+  }
+
+  limiter.registrarIntento = (req) => {
+    const ahora = Date.now();
+    purgarVencidos(ahora);
+    contar(clavesDe(req), ahora);
+  };
+
+  return limiter;
 }
 
-module.exports = { loginRateLimiter };
+const loginRateLimiter = crearRateLimiter({
+  maxIntentos: MAX_INTENTOS_LOGIN,
+  ventanaMs: VENTANA_LOGIN_MS,
+  clave: (req) => [
+    `ip:${ipCliente(req)}`,
+    `usuario:${String(req.body?.usuario ?? '').trim().toLowerCase()}`,
+  ],
+  mensaje: 'Demasiados intentos de inicio de sesión. Intenta más tarde.',
+});
+
+module.exports = { loginRateLimiter, crearRateLimiter, ipCliente };

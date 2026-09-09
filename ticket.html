@@ -44,11 +44,15 @@
   <script>
     (function () {
       const params = new URLSearchParams(window.location.search);
-      const ventaId = Number(params.get('venta') || '');
+      const devolucionParam = params.get('devolucion');
+      const esDevolucion = devolucionParam != null && devolucionParam !== '';
+      const ventaId = Number((esDevolucion ? devolucionParam : params.get('venta')) || '');
       const token = localStorage.getItem('uc_token');
       const $estado = document.getElementById('estado');
       const $titulo = document.getElementById('titulo');
       const $visor = document.getElementById('visor');
+      const etiqueta = esDevolucion ? 'Nota de devolución' : 'Ticket';
+      const recurso = esDevolucion ? '/nota-devolucion' : '/ticket';
 
       if (!token) {
         window.location.href = '/login.html';
@@ -59,10 +63,12 @@
         return;
       }
 
-      $titulo.textContent = 'UrbanCase · Ticket #' + ventaId;
-      document.title = 'Ticket #' + ventaId + ' — UrbanCase';
+      $titulo.textContent = 'UrbanCase · ' + etiqueta + ' #' + ventaId;
+      document.title = etiqueta + ' #' + ventaId + ' — UrbanCase';
+      $estado.textContent = 'Cargando ' + etiqueta.toLowerCase() + '…';
+      $visor.title = etiqueta + ' PDF';
 
-      fetch('/api/ventas/' + ventaId + '/ticket', {
+      fetch('/api/ventas/' + ventaId + recurso, {
         headers: { Authorization: 'Bearer ' + token },
       }).then(async (r) => {
         if (r.status === 401) {
@@ -71,7 +77,7 @@
         }
         if (!r.ok) {
           const data = await r.json().catch(() => ({}));
-          $estado.textContent = data.error || 'No se pudo abrir el ticket.';
+          $estado.textContent = data.error || ('No se pudo abrir ' + (esDevolucion ? 'la nota.' : 'el ticket.'));
           return;
         }
         const blob = await r.blob();
@@ -80,7 +86,7 @@
         $visor.hidden = false;
         $estado.hidden = true;
       }).catch(() => {
-        $estado.textContent = 'Error de red al cargar el ticket.';
+        $estado.textContent = 'Error de red al cargar ' + (esDevolucion ? 'la nota.' : 'el ticket.');
       });
     })();
   </script>

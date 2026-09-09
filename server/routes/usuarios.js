@@ -11,6 +11,11 @@ function normalizarUsuarioLogin(raw) {
   return u || null;
 }
 
+function parseIdParam(raw) {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
+}
+
 function normalizarSucursalId(raw) {
   if (raw === '' || raw === undefined || raw === null) return null;
   const n = parseInt(String(raw), 10);
@@ -104,8 +109,8 @@ router.post('/', async (req, res) => {
 });
 
 router.get('/:id/comisiones', async (req, res) => {
-  const usuarioId = Number(req.params.id);
-  if (!Number.isFinite(usuarioId) || usuarioId <= 0) {
+  const usuarioId = parseIdParam(req.params.id);
+  if (usuarioId == null) {
     return res.status(400).json({ error: 'id de usuario inválido' });
   }
   try {
@@ -118,6 +123,8 @@ router.get('/:id/comisiones', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
+  const usuarioId = parseIdParam(req.params.id);
+  if (usuarioId == null) return res.status(400).json({ error: 'id de usuario inválido' });
   const usuarioNorm = req.body?.usuario !== undefined
     ? normalizarUsuarioLogin(req.body.usuario)
     : undefined;
@@ -128,17 +135,26 @@ router.put('/:id', async (req, res) => {
   try {
     const prev = await pool.query(
       'SELECT rol, sucursal_id FROM usuarios WHERE id = $1',
-      [req.params.id]
+      [usuarioId]
     );
     if (prev.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
 
     const rolFinal = normalizarRol(rol ?? prev.rows[0].rol);
+    // Solo el dueño toca la cuenta del dueño: si no, un admin le cambia la
+    // contraseña y entra con su rol, o lo degrada a vendedor.
+    const solicitanteEsDueno = normalizarRol(req.usuario?.rol) === 'dueno';
+    if (normalizarRol(prev.rows[0].rol) === 'dueno' && !solicitanteEsDueno) {
+      return res.status(403).json({ error: 'Solo el Dueño puede modificar su propia cuenta' });
+    }
+    if (rolFinal === 'dueno' && !solicitanteEsDueno) {
+      return res.status(403).json({ error: 'Solo el Dueño puede asignar el rol Dueño' });
+    }
     const sidFinal = sucursal_id !== undefined
       ? normalizarSucursalId(sucursal_id)
       : prev.rows[0].sucursal_id;
     const errSuc = validarSucursalObligatoria(rolFinal, sidFinal);
     if (errSuc) return res.status(400).json({ error: errSuc });
-    const errRolUnico = await validarRolUnico(rolFinal, req.params.id);
+    const errRolUnico = await validarRolUnico(rolFinal, usuarioId);
     if (errRolUnico) return res.status(400).json({ error: errRolUnico });
 
     let hash = null;
@@ -154,7 +170,7 @@ router.put('/:id', async (req, res) => {
         sucursal_id = $6
        WHERE id = $7
        RETURNING id, usuario, nombre, rol, sucursal_id, activo, created_at`,
-      [usuarioNorm ?? null, nombre, hash, rolFinal, activo, sidFinal, req.params.id]
+      [usuarioNorm ?? null, nombre, hash, rolFinal, activo, sidFinal, usuarioId]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
     res.json(rows[0]);
@@ -165,14 +181,16 @@ router.put('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
+  const usuarioId = parseIdParam(req.params.id);
+  if (usuarioId == null) return res.status(400).json({ error: 'id de usuario inválido' });
   try {
-    const prev = await pool.query('SELECT id, rol FROM usuarios WHERE id = $1', [req.params.id]);
+    const prev = await pool.query('SELECT id, rol FROM usuarios WHERE id = $1', [usuarioId]);
     if (prev.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (normalizarRol(prev.rows[0].rol) === 'dueno') {
       return res.status(400).json({ error: 'No se puede eliminar al usuario Dueño' });
     }
     const { rows } = await pool.query(
-      'DELETE FROM usuarios WHERE id = $1 RETURNING id', [req.params.id]
+      'DELETE FROM usuarios WHERE id = $1 RETURNING id', [usuarioId]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
     res.json({ ok: true });

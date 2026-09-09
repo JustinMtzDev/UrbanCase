@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../config/db');
 const { requireAdmin } = require('../middleware/rbac');
+const { responderError } = require('../middleware/errors');
 
 const router = Router();
 
@@ -23,7 +24,8 @@ router.get('/inventario-todas-sucursales', async (req, res) => {
   try {
     res.json(await obtenerConsignadosTodasLasSucursales());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('GET /productos-consignados/inventario-todas-sucursales:', err);
+    responderError(res, err);
   }
 });
 
@@ -36,7 +38,8 @@ router.get('/', async (req, res) => {
     try {
       res.json(await obtenerConsignadosTodasLasSucursales());
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error('GET /productos-consignados:', err);
+      responderError(res, err);
     }
     return;
   }
@@ -57,7 +60,8 @@ router.get('/', async (req, res) => {
     );
     res.json(rows.map((row) => ({ ...row, id_sucursal: row.sucursal_id })));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('GET /productos-consignados:', err);
+    responderError(res, err);
   }
 });
 
@@ -108,11 +112,12 @@ router.post('/', requireAdmin, async (req, res) => {
     const row = rows[0];
     res.status(201).json({ ...row, id_sucursal: row.sucursal_id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('POST /productos-consignados:', err);
+    responderError(res, err);
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'ID inválido' });
   let {
@@ -189,7 +194,8 @@ router.put('/:id', async (req, res) => {
     if (err.code === '23514') {
       return res.status(400).json({ error: 'El costo de consignación no puede ser mayor al precio de venta' });
     }
-    res.status(500).json({ error: err.message });
+    console.error('PUT /productos-consignados/:id:', err);
+    responderError(res, err);
   }
 });
 
@@ -204,7 +210,8 @@ router.delete('/:id', requireAdmin, async (req, res) => {
     if (rows.length === 0) return res.status(404).json({ error: 'Producto consignado no encontrado' });
     res.json({ ok: true, id: rows[0].id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('DELETE /productos-consignados/:id:', err);
+    responderError(res, err);
   }
 });
 

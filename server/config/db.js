@@ -13,9 +13,10 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL.includes('supabase') ? { rejectUnauthorized: false } : false,
 });
 
+// El pooler de Supabase cierra conexiones inactivas: es rutina, no motivo para
+// tumbar el servidor a media jornada.
 pool.on('error', (err) => {
   console.error('Error en el pool de PostgreSQL:', err);
-  process.exit(-1);
 });
 
 module.exports = pool;

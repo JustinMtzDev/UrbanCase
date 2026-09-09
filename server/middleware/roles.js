@@ -16,9 +16,16 @@ function rolRequiereSucursal(rol) {
   return r === 'admin' || r === 'vendedor';
 }
 
+/** El vendedor solo opera sobre la sucursal que tiene asignada en su sesión. */
+function sucursalPermitida(usuario, sucursalId) {
+  if (tieneAccesoCompleto(usuario?.rol)) return true;
+  return Number(sucursalId) === Number(usuario?.sucursal_id);
+}
+
 module.exports = {
   ROLES_ACCESO_COMPLETO,
   normalizarRol,
   tieneAccesoCompleto,
   rolRequiereSucursal,
+  sucursalPermitida,
 };

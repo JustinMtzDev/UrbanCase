@@ -36,7 +36,7 @@ function truncar(texto, max) {
   return `${t.slice(0, Math.max(0, max - 1))}…`;
 }
 
-function armarDatosTicket({ venta, sucursalNombre, usuarioNombre, lineas }) {
+function armarDatosTicket({ venta, sucursalNombre, usuarioNombre, lineas, clienteNombre }) {
   const items = (Array.isArray(lineas) ? lineas : []).map((l) => {
     const cantidad = Number(l.cantidad) || 0;
     const precio = redondearMoneda(l.precio_unitario);
@@ -52,6 +52,7 @@ function armarDatosTicket({ venta, sucursalNombre, usuarioNombre, lineas }) {
     folio: Number(venta.id) || 0,
     sucursal: String(sucursalNombre || 'Sucursal').trim() || 'Sucursal',
     cajero: String(usuarioNombre || 'Sistema').trim() || 'Sistema',
+    cliente: String(clienteNombre ?? venta.cliente_nombre ?? '').trim(),
     fecha: formatoFechaTicket(venta.created_at),
     metodo: etiquetaMetodoPago(venta.metodo_pago),
     total: redondearMoneda(venta.total),
@@ -59,7 +60,73 @@ function armarDatosTicket({ venta, sucursalNombre, usuarioNombre, lineas }) {
   };
 }
 
+function armarDatosNotaDevolucion({
+  venta,
+  devolucion,
+  sucursalNombre,
+  usuarioNombre,
+  autorizadoPorNombre,
+  lineas,
+  clienteNombre,
+}) {
+  const base = armarDatosTicket({ venta, sucursalNombre, usuarioNombre, lineas, clienteNombre });
+  return {
+    ...base,
+    tipo: 'devolucion',
+    folio: Number(devolucion.id) || 0,
+    folio_venta: Number(venta.id) || 0,
+    fecha: formatoFechaTicket(devolucion.created_at || new Date()),
+    fecha_venta: formatoFechaTicket(venta.created_at),
+    autorizado_por: String(autorizadoPorNombre || '').trim(),
+    motivo: String(devolucion.motivo || '').trim(),
+    total: redondearMoneda(devolucion.total != null ? devolucion.total : venta.total),
+  };
+}
+
+function armarContenidoPointDevolucion(datos) {
+  const lineas = [
+    '{br}--------------------------------',
+    '{br}{center}{w}URBAN CASE{/w}{/center}',
+    `{br}{center}{s}${escaparPoint(datos.sucursal)}{/s}{/center}`,
+    '{br}{center}{b}NOTA DE DEVOLUCION{/b}{/center}',
+    '{br}--------------------------------',
+    `{br}{s}Nota: #${datos.folio}{/s}`,
+    `{br}{s}Venta: #${datos.folio_venta}{/s}`,
+    `{br}{s}${escaparPoint(datos.fecha)}{/s}`,
+    `{br}{s}Atendio: ${escaparPoint(datos.cajero)}{/s}`,
+  ];
+  if (datos.autorizado_por) {
+    lineas.push(`{br}{s}Autorizo: ${escaparPoint(truncar(datos.autorizado_por, 24))}{/s}`);
+  }
+  lineas.push(`{br}{s}Reembolso: ${escaparPoint(datos.metodo)}{/s}`);
+  if (datos.cliente) {
+    lineas.push(`{br}{s}Cliente: ${escaparPoint(truncar(datos.cliente, 24))}{/s}`);
+  }
+  lineas.push('{br}--------------------------------');
+  for (const item of datos.items) {
+    lineas.push(`{br}{s}${escaparPoint(truncar(item.nombre, 28))}{/s}`);
+    lineas.push(
+      `{br}{s}${item.cantidad} x ${formatoMoneda(item.precio_unitario)}  ${formatoMoneda(item.subtotal)}{/s}`
+    );
+  }
+  lineas.push('{br}--------------------------------');
+  lineas.push(`{br}{center}{b}DEVUELTO ${formatoMoneda(datos.total)}{/b}{/center}`);
+  if (datos.motivo) {
+    lineas.push(`{br}{s}Motivo: ${escaparPoint(truncar(datos.motivo, 60))}{/s}`);
+  }
+  lineas.push('{br}{center}{s}Mercancia devuelta a inventario{/s}{/center}');
+  lineas.push('{br}{center}{s}Conserve esta nota{/s}{/center}');
+  lineas.push('{br}--------------------------------{br}');
+  let content = lineas.join('');
+  while (content.length < 100) content += '{br}';
+  if (content.length > 4096) {
+    content = `${content.slice(0, 4080)}{br}`;
+  }
+  return content;
+}
+
 function armarContenidoPoint(datos) {
+  if (datos?.tipo === 'devolucion') return armarContenidoPointDevolucion(datos);
   const lineas = [
     '{br}--------------------------------',
     '{br}{center}{w}URBAN CASE{/w}{/center}',
@@ -69,8 +136,11 @@ function armarContenidoPoint(datos) {
     `{br}{s}${escaparPoint(datos.fecha)}{/s}`,
     `{br}{s}Cajero: ${escaparPoint(datos.cajero)}{/s}`,
     `{br}{s}Pago: ${escaparPoint(datos.metodo)}{/s}`,
-    '{br}--------------------------------',
   ];
+  if (datos.cliente) {
+    lineas.push(`{br}{s}Cliente: ${escaparPoint(truncar(datos.cliente, 24))}{/s}`);
+  }
+  lineas.push('{br}--------------------------------');
   for (const item of datos.items) {
     lineas.push(`{br}{s}${escaparPoint(truncar(item.nombre, 28))}{/s}`);
     lineas.push(
@@ -101,6 +171,7 @@ function escaparPoint(texto) {
 
 module.exports = {
   armarDatosTicket,
+  armarDatosNotaDevolucion,
   armarContenidoPoint,
   formatoMoneda,
   etiquetaMetodoPago,

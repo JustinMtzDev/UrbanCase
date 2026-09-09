@@ -68,7 +68,6 @@ function mpRequest(method, url, { token, body, idempotencyKey }) {
         path: u.pathname + u.search,
         method,
         headers,
-        rejectUnauthorized: false,
       },
       (res) => {
         let data = '';
@@ -108,12 +107,13 @@ async function estadoAccion(token, actionId) {
 }
 
 async function crearImpresion(token, terminal, datos) {
+  const tipo = datos?.tipo === 'devolucion' ? 'devolucion' : 'venta';
   return mpRequest('POST', MP_ACTIONS_URL, {
     token,
-    idempotencyKey: `venta-${datos.folio}-${randomUUID()}`,
+    idempotencyKey: `${tipo}-${datos.folio}-${randomUUID()}`,
     body: {
       type: 'print',
-      external_reference: `venta_${datos.folio}`,
+      external_reference: `${tipo}_${datos.folio}`,
       config: {
         point: {
           terminal_id: terminal,
@@ -175,39 +175,53 @@ async function enviarHastaAceptar(token, terminal, datos) {
   }
 }
 
+// Un callback que lance no puede tumbar el drenado: la cola quedaría trabada
+// y no se imprimiría ningún ticket más hasta reiniciar el proceso.
+async function avisarJob(job, callback, arg) {
+  if (!job || typeof job[callback] !== 'function') return;
+  try {
+    await job[callback](arg);
+  } catch (err) {
+    console.error(`Ticket Point (${callback}):`, err.message);
+  }
+}
+
 async function drenarColaImpresion() {
   if (drenandoCola) return;
   drenandoCola = true;
-  const token = String(process.env.MP_ACCESS_TOKEN || '').trim();
-  while (colaImpresion.length) {
-    const job = colaImpresion[0];
-    try {
-      const res = await enviarHastaAceptar(token, job.terminal, job.datos);
-      if (!res.ok) {
-        console.error('Ticket Point:', mensajeMercadoPago(res.status, res.body));
-        if (job.onFail) await job.onFail(mensajeMercadoPago(res.status, res.body));
-        colaImpresion.shift();
-        continue;
+  try {
+    const token = String(process.env.MP_ACCESS_TOKEN || '').trim();
+    while (colaImpresion.length) {
+      const job = colaImpresion[0];
+      try {
+        const res = await enviarHastaAceptar(token, job.terminal, job.datos);
+        if (!res.ok) {
+          console.error('Ticket Point:', mensajeMercadoPago(res.status, res.body));
+          await avisarJob(job, 'onFail', mensajeMercadoPago(res.status, res.body));
+          colaImpresion.shift();
+          continue;
+        }
+        const actionId = res.body?.id || null;
+        guardarUltimaAccion(actionId);
+        const estado = await esperarProcesada(token, actionId);
+        if (estado === 'processed') {
+          console.log('Ticket Point: impreso venta', job.datos?.folio, actionId);
+          await avisarJob(job, 'onOk', actionId);
+        } else {
+          const msg = estado === 'timeout'
+            ? 'La Point no respondió a tiempo. Revisá que esté en Ingresar monto y pulsá Actualizar.'
+            : `Impresión ${estado}`;
+          await avisarJob(job, 'onFail', msg);
+        }
+      } catch (err) {
+        console.error('Ticket Point:', err.message);
+        await avisarJob(job, 'onFail', err.message);
       }
-      const actionId = res.body?.id || null;
-      guardarUltimaAccion(actionId);
-      const estado = await esperarProcesada(token, actionId);
-      if (estado === 'processed') {
-        console.log('Ticket Point: impreso venta', job.datos?.folio, actionId);
-        if (job.onOk) await job.onOk(actionId);
-      } else if (job.onFail) {
-        const msg = estado === 'timeout'
-          ? 'La Point no respondió a tiempo. Revisá que esté en Ingresar monto y pulsá Actualizar.'
-          : `Impresión ${estado}`;
-        await job.onFail(msg);
-      }
-    } catch (err) {
-      console.error('Ticket Point:', err.message);
-      if (job.onFail) await job.onFail(err.message);
+      colaImpresion.shift();
     }
-    colaImpresion.shift();
+  } finally {
+    drenandoCola = false;
   }
-  drenandoCola = false;
 }
 
 function encolarImpresionPoint({ datos, terminalId, onOk, onFail }) {
@@ -225,7 +239,9 @@ function encolarImpresionPoint({ datos, terminalId, onOk, onFail }) {
     onOk,
     onFail,
   });
-  void drenarColaImpresion();
+  drenarColaImpresion().catch((err) => {
+    console.error('Ticket Point (cola):', err.message);
+  });
   return { ok: true, encolado: true };
 }
 
