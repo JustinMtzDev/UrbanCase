@@ -5,3 +5,7 @@ builder = "NIXPACKS"
 startCommand = "npm start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
+# La base de datos (Supabase) vive en Oregon (us-west-2); us-west2 es la región
+# de Railway más cercana. Antes estaba en asia-southeast1 por error, lo que
+# agregaba ~200ms de latencia de red a cada consulta.
+multiRegionConfig = { "us-west2" = { numReplicas = 1 } }
