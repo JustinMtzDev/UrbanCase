@@ -217,14 +217,14 @@ router.get('/dashboard-top-productos', async (req, res) => {
          r.es_consignado,
          r.unidades,
          r.ingresos,
-         p.imagen
+         p.imagen_thumb
        FROM ranked r
        LEFT JOIN LATERAL (
-         SELECT imagen
+         SELECT imagen_thumb
          FROM productos
          WHERE LOWER(BTRIM(nombre)) = r.clave
-           AND imagen IS NOT NULL
-           AND BTRIM(imagen) <> ''
+           AND imagen_thumb IS NOT NULL
+           AND BTRIM(imagen_thumb) <> ''
          ORDER BY id DESC
          LIMIT 1
        ) p ON TRUE
@@ -241,7 +241,9 @@ router.get('/dashboard-top-productos', async (req, res) => {
         es_consignado: Boolean(row.es_consignado),
         unidades: Number(row.unidades) || 0,
         ingresos: Number(row.ingresos) || 0,
-        imagen: row.imagen || null,
+        // Miniatura (420px), no la imagen grande: esto viaja en cada carga
+        // del Home y antes mandaba hasta ~3.5MB por producto en la lista.
+        imagen: row.imagen_thumb || null,
       })),
     });
   } catch (err) {
