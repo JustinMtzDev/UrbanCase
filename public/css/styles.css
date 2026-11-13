@@ -7073,7 +7073,27 @@ html.theme-dark .dashboard-chart-card {
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
   padding: 0.15rem 0.1rem 0.55rem;
+}
+
+.dashboard-top-track::-webkit-scrollbar {
+  height: 8px;
+}
+
+.dashboard-top-track::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard-top-track::-webkit-scrollbar-thumb {
+  background-color: var(--text-muted);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.dashboard-top-track::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent);
 }
 
 .dashboard-top-card {
