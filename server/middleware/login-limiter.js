@@ -1,18 +1,10 @@
-/** Límite de intentos por ventana de tiempo (sin dependencias externas). */
 const VENTANA_LOGIN_MS = 15 * 60 * 1000;
 const MAX_INTENTOS_LOGIN = Number(process.env.LOGIN_RATE_MAX) || 10;
 
-// req.ip es confiable solo porque index.js declara 'trust proxy'.
 function ipCliente(req) {
   return req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
-/**
- * Crea un limitador con su propio Map de intentos. `clave` devuelve una cadena
- * o un arreglo de cadenas: se cuenta cada una por separado y basta que una pase
- * el máximo para rechazar. Con `contarAutomatico` en false el conteo lo hace el
- * handler llamando a `registrarIntento` (para contar solo los fallos).
- */
 function crearRateLimiter({
   maxIntentos,
   ventanaMs,

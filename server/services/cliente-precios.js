@@ -1,7 +1,5 @@
 const pool = require('../config/db');
 
-// El producto se identifica por categoría + nombre porque en `productos` hay una
-// fila por sucursal y por variante de precio.
 function clavePrecioCliente(categoria, nombre) {
   const cat = String(categoria || '').trim().toLowerCase();
   const nom = String(nombre || '').trim().toLowerCase().replace(/\s+/g, ' ');

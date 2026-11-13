@@ -8,7 +8,6 @@ const TZ = 'America/Mexico_City';
 const TS = `(v.created_at AT TIME ZONE '${TZ}')`;
 const PERIODOS_KPI = new Set(['diario', 'semanal', 'mensual', 'anual']);
 
-// El mensaje de Postgres delata tablas, columnas y constraints: se queda en el log.
 function errorReporte(req, res, err) {
   console.error('Reportes', req.originalUrl, err);
   return responderError(res, err);
@@ -33,10 +32,6 @@ function anexarFiltroSucursalQuery(req, filtros, vals, idx, columnSql) {
   return { idx: idx + 1 };
 }
 
-// Los límites se calculan una sola vez a partir de NOW() y nunca envuelven
-// v.created_at: así el planner puede usar idx_ventas_created (range scan) en
-// vez de una función sobre la columna, que fuerza un seq scan de toda la
-// tabla sin importar el periodo (eso hacía mensual/anual lentos en Home).
 function rangoKpi(periodo) {
   const now = `(NOW() AT TIME ZONE '${TZ}')`;
   const local = (expr) => `((${expr}) AT TIME ZONE '${TZ}')`;
@@ -74,13 +69,9 @@ function rangoKpi(periodo) {
 }
 
 async function metricasPeriodo(pool, whereSql, vals) {
-  // Las ventas devueltas no cuentan como ingreso ni como utilidad.
   const where = whereSql
     ? `WHERE (${whereSql}) AND v.devuelta_at IS NULL`
     : 'WHERE v.devuelta_at IS NULL';
-  // Antes eran 4 queries por periodo (8 por request, 6 de ellas escaneando
-  // venta_detalle con el mismo join); comision+utilidad+productos_vendidos
-  // comparten FROM/JOIN así que se calculan en una sola pasada.
   const [ingRes, detRes] = await Promise.all([
     pool.query(
       `SELECT
@@ -194,7 +185,6 @@ router.get('/dashboard-top-productos', async (req, res) => {
     idx++;
   }
   const { actual } = rangoKpi(periodo);
-  // Una venta devuelta no cuenta para el top, igual que en metricasPeriodo.
   const whereActual = [...filtrosSuc, actual, 'v.devuelta_at IS NULL'].join(' AND ');
 
   try {
@@ -241,8 +231,6 @@ router.get('/dashboard-top-productos', async (req, res) => {
         es_consignado: Boolean(row.es_consignado),
         unidades: Number(row.unidades) || 0,
         ingresos: Number(row.ingresos) || 0,
-        // Miniatura (420px), no la imagen grande: esto viaja en cada carga
-        // del Home y antes mandaba hasta ~3.5MB por producto en la lista.
         imagen: row.imagen_thumb || null,
       })),
     });
@@ -342,9 +330,6 @@ router.get('/dashboard-ventas-7d', async (req, res) => {
     idx++;
   }
   const joinSuc = filtrosSuc.length ? `AND ${filtrosSuc.join(' AND ')}` : '';
-  // Filtro sargable (sin envolver v.created_at) para que el planner use
-  // idx_ventas_created en vez de escanear toda la tabla; el filtro exacto
-  // por (${TS})::date se queda para el recorte fino de los 7 días locales.
   const inicioSarg = `(((NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '6 days') AT TIME ZONE '${TZ}')`;
   const finSarg = `((((NOW() AT TIME ZONE '${TZ}')::date) + INTERVAL '1 day') AT TIME ZONE '${TZ}')`;
   const rangoSarg = `AND v.created_at >= ${inicioSarg} AND v.created_at < ${finSarg}`;
@@ -440,7 +425,6 @@ router.get('/dashboard-ventas-7d', async (req, res) => {
   }
 });
 
-// Único reporte abierto al vendedor: se le acota a su propia sucursal.
 router.get('/resumen-inventario', async (req, res) => {
   const sidRaw = String(req.query.sucursal_id ?? '').trim();
   const filtros = [];
@@ -486,7 +470,6 @@ router.get('/movimientos-inventario', async (req, res) => {
   const limitRaw = Number(req.query.limit);
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 1000) : 300;
   const q = String(req.query.q || '').trim();
-  // Las devoluciones tienen su propio reporte, no se mezclan con el restock.
   const filtros = [
     `(
       im.movimiento = 'restock_rapido'

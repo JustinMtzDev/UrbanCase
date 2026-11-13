@@ -1,4 +1,3 @@
-/* ===== Tema claro por defecto (variables base; el body en claro refuerza superficies sólidas) ===== */
 :root {
   --bg-solid: #e0e6ef;
   --surface: rgba(255, 255, 255, 0.65);
@@ -21,7 +20,6 @@
   --glass-radius: 20px;
 }
 
-/* ===== Tema obscuro ===== */
 html.theme-dark,
 html.theme-dark,
 body.theme-dark {
@@ -94,14 +92,12 @@ body:not(.app-loading) .app {
   padding: 0;
 }
 
-/* Evita selección accidental de texto en toda la app. */
 .app,
 .app * {
   -webkit-user-select: none;
   user-select: none;
 }
 
-/* Mantiene seleccionable texto en campos de edición. */
 .app input,
 .app textarea,
 .app select,
@@ -110,7 +106,6 @@ body:not(.app-loading) .app {
   user-select: text;
 }
 
-/* Permite habilitar selección puntualmente cuando se necesite. */
 .app .pos-seleccionable,
 .app .pos-seleccionable *,
 .app .ui-seleccionable,
@@ -119,7 +114,6 @@ body:not(.app-loading) .app {
   user-select: text;
 }
 
-/* Base normal; texto grande activado con clase .texto-grande en html */
 html {
   font-size: 16px;
   scrollbar-gutter: stable;
@@ -139,7 +133,6 @@ body {
 
 html:not(.theme-dark) body,
 body:not(.theme-dark) {
-  /* Fondo rojo + blobs negros animados (oscuro sigue con blobs verdes) */
   background: #c62828;
   position: relative;
   --surface: #ffffff;
@@ -153,7 +146,6 @@ body:not(.theme-dark) .app {
   z-index: 1;
 }
 
-/* Modo claro: blobs negros sobre fondo rojo */
 html:not(.theme-dark) .blob,
 body:not(.theme-dark) .blob {
   position: fixed;
@@ -290,7 +282,6 @@ body.theme-dark .blob-extra {
   100% { transform: translate(-100px, 150px) scale(0.9); }
 }
 
-/* Tema oscuro: mismo diseño */
 html.theme-dark body,
 html.theme-dark,
 body.theme-dark {
@@ -341,7 +332,6 @@ body.theme-dark .blob3 {
 html.theme-dark header,
 body.theme-dark header {
   background: rgba(26, 26, 31, 0.98);
-  /* Igual que claro: sin blur distinto (evita subpíxeles / capas distintas al togglear) */
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   border-radius: 24px;
@@ -461,7 +451,6 @@ header {
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  /* Alto fijo: el contenido no puede “empujar” la barra al cambiar tema */
   height: 72px;
   min-height: 72px;
   max-height: 72px;
@@ -505,7 +494,6 @@ body:not(.theme-dark) header {
   box-sizing: border-box;
 }
 
-/* Texto “URBAN CASE”: caja fija para que el SVG ancho no redibuje la barra */
 .logo-brand {
   display: block;
   flex-shrink: 0;
@@ -515,7 +503,6 @@ body:not(.theme-dark) header {
   object-position: left center;
 }
 
-/* Mascota: mismo slot en claro/oscuro/hover (los dos SVG tienen tamaños distintos) */
 .logo-icon-wrap {
   position: relative;
   flex-shrink: 0;
@@ -542,7 +529,6 @@ body:not(.theme-dark) header {
   transition: opacity 0.15s ease;
 }
 
-/* Mismo layout siempre: no usar display:none (opacidad + visibilidad) */
 body .logo-icon-light {
   opacity: 1;
   visibility: visible;
@@ -569,7 +555,6 @@ body.theme-dark .logo-icon-dark {
   z-index: 2;
 }
 
-/* Hover solo en mouse: en touch :hover se pega y deja el logo invertido */
 @media (hover: hover) and (pointer: fine) {
   body:not(.theme-dark) .logo:hover .logo-icon-light {
     opacity: 0;
@@ -641,12 +626,10 @@ body.theme-dark .logo-icon-dark {
   justify-content: center;
 }
 
-/* Misma caja de borde que los demás (evita salto al cambiar claro/oscuro) */
 .categorias > button.categoria-btn:last-of-type {
   border-right: 1px solid transparent;
 }
 
-/* Dropdown Sucursales */
 .dropdown-sucursales {
   position: relative;
   flex: 2 1 0;
@@ -750,14 +733,12 @@ body:not(.theme-dark) .dropdown-sucursales-item:hover {
   border-radius: 10px;
 }
 
-/* Tema claro: mismas capas de sombra que oscuro (mismos offsets → mismo “dibujo”) */
 body:not(.theme-dark) .categoria-btn {
   border-right: 1px solid rgba(0, 0, 0, 0.12);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.05);
   color: #2c2c2e;
 }
 
-/* Claro, nav: indicador inferior rojo + texto rojo */
 body:not(.theme-dark) .categoria-btn:hover:not(.activo) {
   color: #fa3030;
   background: transparent;
@@ -786,7 +767,6 @@ body:not(.theme-dark) .categoria-btn.activo:hover {
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Tema oscuro: mismos offsets de sombra que en claro (solo colores distintos) */
 body.theme-dark .categoria-btn {
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 1px 2px rgba(0, 0, 0, 0.35);
@@ -806,7 +786,6 @@ body.theme-dark .categoria-btn.activo {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 3px 8px rgba(0, 0, 0, 0.25), 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
-/* Botón tema: mismo ancho que categorías */
 .theme-toggle {
   flex: 1 1 0;
   min-width: 0;
@@ -978,7 +957,6 @@ body.theme-dark .btn-logout:hover {
   padding: 1rem;
 }
 
-/* ===== Inventario ===== */
 .inventario-contenido {
   display: flex;
   flex-direction: column;
@@ -1662,7 +1640,6 @@ body:not(.theme-dark) .inventario-producto-precio {
   color: #3fb750;
 }
 
-/* Precio especial del cliente elegido en el carrito */
 .inventario-precio-cliente {
   display: inline-flex;
   align-items: baseline;
@@ -1977,7 +1954,6 @@ body:not(.theme-dark) .inventario-producto-sucursal {
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
-/* Tema claro: reglas generales de .inventario-producto-card tienen más especificidad */
 body:not(.theme-dark) .inventario-producto-card.inventario-producto-card--consignado {
   background: #f74040;
   border-color: rgba(255, 255, 255, 0.28);
@@ -2002,7 +1978,6 @@ body:not(.theme-dark) .inventario-producto-card--consignado .inventario-producto
   color: #fff;
 }
 
-/* Tema oscuro: fill verde del acento (#00d4aa / #00a884) */
 html.theme-dark .inventario-producto-card.inventario-producto-card--consignado,
 body.theme-dark .inventario-producto-card.inventario-producto-card--consignado {
   background: linear-gradient(165deg, var(--accent) 0%, var(--accent-dim) 100%);
@@ -2321,7 +2296,6 @@ body:not(.theme-dark) .carrito-overlay {
   display: block;
 }
 
-/* Vista ampliada de producto (inventario): overlay + panel centrado como carrito maximizado */
 .inventario-producto-zoom-backdrop {
   display: none;
   position: fixed;
@@ -2905,7 +2879,6 @@ body.uc-rol-dueno .carrito-item-precio-editable:hover {
   font-size: 0.9rem;
 }
 
-/* Dropdowns del precio especial: mismo acabado que «Agregar producto» */
 body:not(.theme-dark) #modal-cliente-precios .form-row input,
 body:not(.theme-dark) #modal-cliente-precios .custom-select-trigger,
 body:not(.theme-dark) #modal-cliente-precios .custom-select-options {
@@ -2941,7 +2914,6 @@ body.theme-dark .carrito-cliente .custom-select-option:hover {
   color: var(--accent);
 }
 
-/* Selector de cliente del carrito: mismo dropdown, en versión compacta */
 .carrito-cliente .custom-select-wrap {
   flex: 1;
   min-width: 0;
@@ -3259,7 +3231,6 @@ body:not(.theme-dark) .modal-content {
   flex: 1;
 }
 
-/* ===== Modal cobro (checkout) ===== */
 .modal-cobro {
   max-width: 520px;
   width: 100%;
@@ -3639,7 +3610,6 @@ html.theme-dark .cobro-total-final span:last-child {
   }
 }
 
-/* ===== Módulos Gestión, Ventas/Reportes y Clientes/Proveedores ===== */
 body:not(.theme-dark) #vista-modulo,
 body:not(.theme-dark) #vista-modulo-ventas,
 body:not(.theme-dark) #vista-modulo-clientes {
@@ -3726,7 +3696,6 @@ body:not(.theme-dark) #modal-producto {
   --accent: #ff3131;
 }
 
-/* Modal producto */
 body:not(.theme-dark) #modal-producto .modal-content {
   background: #ffffff;
   -webkit-backdrop-filter: none;
@@ -3851,7 +3820,6 @@ body:not(.theme-dark) #modal-producto .form-row select:focus {
   border-color: #ff3131;
 }
 
-/* Custom dropdowns en modal producto */
 .custom-select-wrap {
   position: relative;
   width: 100%;
@@ -4036,13 +4004,11 @@ body.theme-dark .custom-select-options {
   border-radius: 0 0 13px 13px;
 }
 
-/* Hover tema default: rojo */
 body:not(.theme-dark) #modal-producto .custom-select-option:hover {
   background: rgba(255, 49, 49, 0.15);
   color: #ff3131;
 }
 
-/* Hover tema dark: colores del tema */
 html.theme-dark,
 body.theme-dark #modal-producto .custom-select-option:hover {
   background: rgba(0, 212, 170, 0.2);
@@ -4059,14 +4025,11 @@ body:not(.theme-dark) #modal-confirmar .modal-content h3 {
   color: #e53935;
 }
 
-/* Campos de clave: type=text con máscara visual, así el navegador no los ve
-   como formulario de sesión y no ofrece el gestor de contraseñas. */
 input.uc-pass-masked {
   -webkit-text-security: disc;
   text-security: disc;
 }
 
-/* Los buscadores no llevan la «x» nativa de type=search */
 input[type="search"]::-webkit-search-cancel-button,
 input[type="search"]::-webkit-search-decoration {
   -webkit-appearance: none;
@@ -4074,9 +4037,6 @@ input[type="search"]::-webkit-search-decoration {
   display: none;
 }
 
-/* Detector de autollenado: si el navegador insiste en rellenar un campo,
-   esta animación avisa a app.js para limpiarlo, y de paso se le quita el
-   fondo amarillo/lila que Chrome le pinta encima. */
 @keyframes ucAutofillDetectado {
   from { opacity: 1; }
   to { opacity: 1; }
@@ -4092,7 +4052,6 @@ select:-webkit-autofill {
   transition: background-color 9999s ease-out 0s;
 }
 
-/* La animación solo se aplica donde el autollenado nunca es deseable */
 input.modulo-buscar:-webkit-autofill,
 input.inventario-buscador:-webkit-autofill,
 input.uc-pass-masked:-webkit-autofill {
@@ -4257,8 +4216,6 @@ body:not(.theme-dark) .modulo-tab.activo {
   gap: 0.5rem;
 }
 
-/* Usuarios/Sucursales y Clientes/Proveedores:
-   tabs a la izquierda + buscador/nuevo a la derecha en la misma fila. */
 #vista-modulo .modulo-tabs,
 #vista-modulo-ventas .modulo-tabs,
 #vista-modulo-clientes .modulo-tabs {
@@ -4491,7 +4448,6 @@ body.theme-dark .reporte-corte-card--devoluciones .reporte-corte-card-valor {
   display: none !important;
 }
 
-/* Venta devuelta: sigue visible, en rojo, pero ya no cuenta en el corte */
 #tbody-reporte-corte-caja tr.venta-row-devuelta td {
   background: rgba(229, 57, 53, 0.1);
   color: #c62828;
@@ -4818,7 +4774,6 @@ body.theme-dark .reporte-mov-producto-ver {
   position: relative;
 }
 
-/* ===== Datepicker UrbanCase ===== */
 .uc-datepicker-trigger {
   display: flex;
   align-items: center;
@@ -5400,7 +5355,6 @@ body:not(.theme-dark) .modulo-buscar {
   border-color: var(--accent);
 }
 
-/* Tabla */
 .tabla-wrap {
   overflow-x: auto;
   border-radius: 12px;
@@ -5650,7 +5604,6 @@ body.theme-dark .btn-tabla.reporte-historial-cambio-ver:hover {
   box-shadow: 0 1px 4px rgba(255, 59, 48, 0.25), inset 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
-/* Modal overlay genérico */
 .modal-overlay {
   display: none;
   position: fixed;
@@ -6048,7 +6001,6 @@ html.theme-dark .filtro-precio-rango-input-wrap:focus-within {
   display: none;
 }
 
-/* Tamaño uniforme en campos y dropdowns del modal producto */
 #modal-producto .modal-content h3 {
   font-size: 1.25rem;
   font-weight: 700;
@@ -6108,7 +6060,6 @@ body.theme-dark #modal-producto .precio-contador:has(.stock-btn:active) input {
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 2px rgba(0, 212, 170, 0.2);
 }
 
-/* Autollenado del navegador: mantener fondo y texto del tema */
 body:not(.theme-dark) #modal-producto .form-row input:-webkit-autofill,
 body:not(.theme-dark) #modal-producto .custom-select-input:-webkit-autofill,
 body:not(.theme-dark) #modal-producto .stock-contador input:-webkit-autofill,
@@ -6797,7 +6748,6 @@ body:not(.theme-dark) .stock-btn:hover {
   white-space: nowrap;
 }
 
-/* Solo cuando texto grande está activo: refuerzo para textos muy pequeños */
 html.texto-grande .dropdown-sucursales-trigger .dropdown-arrow {
   font-size: 0.85em;
 }
@@ -6808,7 +6758,6 @@ html.texto-grande .btn-tabla {
   font-size: 0.95rem !important;
 }
 
-/* ===== Home — Dashboards KPI ===== */
 #productos.contenido-home {
   display: flex;
   flex-direction: column;
@@ -7325,7 +7274,6 @@ body:not(.theme-dark) .dashboard-comparativa-card {
   }
 }
 
-/* Navbar compacta: solo iPad y celular. Desktop no cambia. */
 @media (max-width: 1100px) {
   header .nav-menu-toggle {
     display: inline-flex;
@@ -7435,7 +7383,6 @@ body:not(.theme-dark) .dashboard-comparativa-card {
   }
 }
 
-/* Solo iPad: logo centrado en la navbar */
 @media (min-width: 701px) and (max-width: 1100px) {
   header .logo {
     position: absolute;
@@ -7449,7 +7396,6 @@ body:not(.theme-dark) .dashboard-comparativa-card {
   }
 }
 
-/* Solo celular (no iPad): módulos a 100% width y altura de viewport */
 @media (max-width: 700px) {
   .app {
     max-width: none;
@@ -7459,7 +7405,6 @@ body:not(.theme-dark) .dashboard-comparativa-card {
     box-sizing: border-box;
   }
 
-  /* Contenedor de módulos a full bleed; navbar sin cambios */
   .app > .app-glass {
     width: calc(100% + 3rem);
     max-width: none;
@@ -7471,7 +7416,6 @@ body:not(.theme-dark) .dashboard-comparativa-card {
     box-sizing: border-box;
   }
 
-  /* Menú hamburguesa a 100% del viewport */
   header .header-nav-wrap {
     left: -1.5rem;
     right: -1.5rem;
@@ -7480,7 +7424,6 @@ body:not(.theme-dark) .dashboard-comparativa-card {
     border-radius: 0 0 20px 20px;
   }
 
-  /* KPIs en grilla 2x2 */
   .dashboard-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.65rem;
@@ -7504,7 +7447,6 @@ body:not(.theme-dark) .dashboard-comparativa-card {
     font-size: 0.72rem;
   }
 
-  /* Inventario: 2 columnas + tarjeta más compacta */
   .inventario-grid,
   #vista-pos.carrito-oculto .inventario-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7565,7 +7507,6 @@ body:not(.theme-dark) .dashboard-comparativa-card {
     margin: 0.35rem 0.5rem 0.5rem;
   }
 
-  /* Ventas/Reportes: evitar desborde horizontal en celular */
   #vista-modulo-ventas,
   #vista-modulo,
   #vista-modulo-clientes {
@@ -7638,7 +7579,6 @@ body:not(.theme-dark) .dashboard-comparativa-card {
     width: 100%;
   }
 
-  /* Ventas: chips en una fila + calendario a 100% */
   #reporte-ventas-filtros {
     align-items: stretch;
   }

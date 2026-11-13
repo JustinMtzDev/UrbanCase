@@ -1,4 +1,3 @@
--- Permite el tipo restock_rapido en inventario_movimientos
 ALTER TABLE public.inventario_movimientos
   DROP CONSTRAINT IF EXISTS inventario_movimientos_movimiento_check;
 

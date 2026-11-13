@@ -85,8 +85,6 @@ async function prepararLineasVenta(client, {
       if (Number(cons.sucursal_id) !== sucursalId) {
         throw new Error(`«${cons.nombre}» no pertenece a la sucursal seleccionada`);
       }
-      // `cliente_precios` identifica el producto por categoría + nombre: el mismo
-      // artículo debe costar igual esté en `productos` o en `productos_consignados`.
       const precioEspecialCons = precioLibreDueno ? null : precioEspecialParaProducto(preciosCliente, cons);
       if (precioEspecialCons == null
         && !precioLibreDueno
@@ -141,8 +139,6 @@ async function prepararLineasVenta(client, {
   }
 
   const productosCache = new Map();
-  // Siempre en el mismo orden de id: dos cajas con los mismos productos en orden
-  // inverso se bloquearían entre sí al tomar los FOR UPDATE.
   const idsOrdenados = [...cantidadPorProducto.keys()]
     .map(Number)
     .sort((a, b) => a - b);
@@ -174,8 +170,6 @@ async function prepararLineasVenta(client, {
     const prod = productosCache.get(linea.producto_id);
     if (!prod) continue;
 
-    // El precio especial del cliente lo manda el servidor, no el navegador.
-    // El dueño conserva su precio libre si lo cambió a mano en el carrito.
     const precioEspecial = precioLibreDueno ? null : precioEspecialParaProducto(preciosCliente, prod);
     if (precioEspecial != null) {
       linea.precio_unitario = redondearMoneda(precioEspecial);

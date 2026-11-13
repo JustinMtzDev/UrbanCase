@@ -1,13 +1,9 @@
-// Respaldo de los datos a un archivo JSON, para cuando no hay pg_dump a mano.
-// Uso: node server/respaldo-datos.js
-// El archivo queda en respaldos/urbancase-<fecha>.json (carpeta ignorada por git).
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const fs = require('fs');
 const path = require('path');
-const pool = require('./config/db');
+const pool = require('../config/db');
 
-// Orden pensado para poder reinsertar respetando llaves foraneas.
 const TABLAS = [
   'sucursales',
   'usuarios',
@@ -41,7 +37,7 @@ async function main() {
     }
   }
 
-  const dir = path.join(__dirname, '..', 'respaldos');
+  const dir = path.join(__dirname, '..', '..', 'respaldos');
   fs.mkdirSync(dir, { recursive: true });
   const sello = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const archivo = path.join(dir, `urbancase-${sello}.json`);

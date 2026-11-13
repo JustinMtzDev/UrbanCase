@@ -11,7 +11,6 @@ function rolGeneraComision(rol) {
   return r === 'admin' || r === 'vendedor';
 }
 
-/** Desde $1,000: cada $500 completos de venta del día = $50 de comisión. */
 function calcularComisionDiaria(ventasTotal) {
   const ventas = Number(ventasTotal) || 0;
   if (ventas < COMISION_MINIMO_VENTAS) return 0;
@@ -112,7 +111,6 @@ async function purgarComisionesAntiguas(executor) {
 
 let ultimoDiaPurgado = null;
 
-/** En cada venta la purga solo agrega contención: basta una vez al día por proceso. */
 async function purgarComisionesAntiguasSiToca(executor, dia) {
   if (dia && ultimoDiaPurgado === dia) return;
   await purgarComisionesAntiguas(executor);

@@ -1,9 +1,4 @@
-/**
- * Configura la Smart Point en modo PDV y verifica la conexión.
- * Uso: MP_ACCESS_TOKEN=... MP_TERMINAL_ID=NEWLAND_N950__... node setup-mp-terminal.js
- * O con server/.env cargado: node setup-mp-terminal.js
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const https = require('https');
 
 const TERMINAL_ID = String(process.env.MP_TERMINAL_ID || 'NEWLAND_N950__N950NCBC02427685').trim();

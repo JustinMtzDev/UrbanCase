@@ -1,8 +1,4 @@
-/**
- * Crea la tabla de devoluciones y agrega ventas.devuelta_at.
- * Ejecutar: npm run migrate-devoluciones
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
@@ -19,9 +15,9 @@ const pool = new Pool({
 
 async function run() {
   try {
-    const sql = fs.readFileSync(path.join(__dirname, 'sql', 'migration_devoluciones.sql'), 'utf-8');
+    const sql = fs.readFileSync(path.join(__dirname, '..', 'sql', 'migration_cliente_precios.sql'), 'utf-8');
     await pool.query(sql);
-    console.log('✅ Tabla devoluciones y columna ventas.devuelta_at listas.');
+    console.log('✅ Tabla cliente_precios y columna ventas.cliente_id listas.');
     await pool.end();
   } catch (err) {
     console.error('❌ Error:', err.message);

@@ -1,4 +1,3 @@
-/** Roles con acceso completo al sistema (sin restricciones de vendedor). */
 const ROLES_ACCESO_COMPLETO = new Set(['admin', 'developer', 'dueno', 'dueño']);
 
 function normalizarRol(rol) {
@@ -16,7 +15,6 @@ function rolRequiereSucursal(rol) {
   return r === 'admin' || r === 'vendedor';
 }
 
-/** El vendedor solo opera sobre la sucursal que tiene asignada en su sesión. */
 function sucursalPermitida(usuario, sucursalId) {
   if (tieneAccesoCompleto(usuario?.rol)) return true;
   return Number(sucursalId) === Number(usuario?.sucursal_id);

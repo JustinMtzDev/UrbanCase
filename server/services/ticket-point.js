@@ -175,8 +175,6 @@ async function enviarHastaAceptar(token, terminal, datos) {
   }
 }
 
-// Un callback que lance no puede tumbar el drenado: la cola quedaría trabada
-// y no se imprimiría ningún ticket más hasta reiniciar el proceso.
 async function avisarJob(job, callback, arg) {
   if (!job || typeof job[callback] !== 'function') return;
   try {

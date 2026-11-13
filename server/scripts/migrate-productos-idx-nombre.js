@@ -1,8 +1,4 @@
-/**
- * Crea la tabla inventario_favoritos (favoritos por usuario).
- * Ejecutar desde la carpeta server: npm run migrate-inventario-favoritos
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
@@ -19,18 +15,17 @@ const pool = new Pool({
 
 async function run() {
   try {
-    const sql = fs.readFileSync(path.join(__dirname, 'sql', 'migration_inventario_favoritos.sql'), 'utf-8');
+    const sql = fs.readFileSync(path.join(__dirname, '..', 'sql', 'migration_productos_idx_nombre.sql'), 'utf-8');
     await pool.query(sql);
     const { rows } = await pool.query(
-      `SELECT table_schema, table_name
-       FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = 'inventario_favoritos'`
+      `SELECT indexname FROM pg_indexes
+       WHERE schemaname = 'public' AND tablename = 'productos' AND indexname = 'idx_productos_nombre_lower_btrim'`
     );
     if (rows.length === 0) {
-      console.error('❌ La tabla inventario_favoritos no aparece en information_schema; revisa permisos y errores.');
+      console.error('❌ El indice no aparece en pg_indexes.');
       process.exit(1);
     }
-    console.log('✅ Tabla public.inventario_favoritos lista.');
+    console.log('✅ Indice idx_productos_nombre_lower_btrim listo.');
     await pool.end();
   } catch (err) {
     console.error('❌ Error:', err.message);

@@ -1,8 +1,6 @@
-// Si abres el HTML directo (file://), redirigir al servidor
 if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
   window.location.href = 'http://localhost:3000/';
 }
-// UrbanCase API: mismo origen si la app corre en el puerto 3000 con Express; si no, Node en localhost:3000
 function ucResolveApiBase() {
   if (typeof window === 'undefined') return '/api';
   const { protocol, hostname, origin } = window.location;
@@ -66,7 +64,6 @@ function etiquetaRolUsuario(rol) {
   return map[r] || String(rol || '');
 }
 
-/** Orden de tabla: Dueño → Developer → Admin → Vendedor. */
 function ordenPrioridadRolUsuario(rol) {
   const r = normalizarRolUsuario(rol);
   if (r === 'dueno') return 0;
@@ -359,7 +356,6 @@ function authHeaders(json = true) {
   return h;
 }
 
-// Validaciones para clientes/proveedores
 const validaciones = {
   telefono: (v) => !v || /^\d{10}$/.test(v) || 'El teléfono debe tener exactamente 10 dígitos (sin letras)',
   correo: (v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || 'Ingresa un correo electrónico válido',
@@ -371,8 +367,6 @@ function formatFecha(iso) {
   return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
     + ' ' + d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 }
-
-// ===================== NAVEGACIÓN =====================
 
 const MODULO_KEY = 'uc_modulo';
 const SUCURSAL_KEY = 'uc_sucursal';
@@ -462,7 +456,6 @@ function vaciarCarritoSiCambioSucursal(sidAnterior, sidNuevo) {
   }
 }
 
-/** Aplica la sucursal en el dropdown, persiste y recarga inventario si aplica. */
 function aplicarSeleccionSucursal(sidRaw, nombre, opts = {}) {
   const { cerrarMenu = false, cerrarModal = false } = opts;
   const $label = document.getElementById('dropdown-sucursales-label');
@@ -561,7 +554,6 @@ async function restaurarSucursalGuardada() {
   } catch (_) {}
 }
 
-/** Lee la sucursal elegida en el dropdown (normaliza espacios y modo «todas» / «todas las sucursales»). */
 function leerDatasetSucursalInventario() {
   const $label = document.getElementById('dropdown-sucursales-label');
   const raw = String($label?.dataset?.sucursalId ?? '').trim();
@@ -579,7 +571,6 @@ function anexarSucursalIdParamsReporte(params) {
   return target;
 }
 
-/** Habilita botones de agregar según sucursal y chip activo. */
 function actualizarEstadoBtnAgregarProducto() {
   const $btn = document.getElementById('btn-agregar-producto');
   const $btnCons = document.getElementById('btn-agregar-consignado');
@@ -859,8 +850,6 @@ function initDropdownSucursales() {
   actualizarEstadoBtnAgregarProducto();
 }
 
-// ===================== INVENTARIO =====================
-
 const CATEGORIAS_INVENTARIO = ['todos', 'micas', 'fundas', 'cargadores', 'powerbanks', 'audifonos', 'relojes', 'bocinas', 'accesorios', 'otros'];
 const INVENTARIO_MICA_TIPOS = [
   { id: 'cristal', label: 'Cristal' },
@@ -980,7 +969,6 @@ function inferirMarcaDesdeModelo(texto) {
 const UC_ICONO_EDITAR = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
 let productosInventario = [];
 let productosConsignadosInventario = [];
-/** Último error al cargar inventario (solo para mensaje en pantalla). */
 let ultimoErrorCargaInventario = '';
 let categoriaInventarioActiva = 'todos';
 let inventarioNavegacionDrill = { drill: false, categoria: null, paso1: null, paso2: null };
@@ -1033,7 +1021,7 @@ async function toggleInventarioFavorito(p) {
     try {
       const err = await r.json();
       if (err?.error) msg = String(err.error);
-    } catch { /* ignore */ }
+    } catch {}
     throw new Error(msg);
   }
   const data = await r.json();
@@ -1571,7 +1559,6 @@ function getPrecioMaxProducto(p) {
 }
 
 function productoFundaTieneRangoPrecio(p) {
-  // Las fundas ya no usan rango: siempre precio fijo.
   return false;
 }
 
@@ -1584,8 +1571,6 @@ function formatearPrecioProductoInventario(p) {
   return fmt(Number(p?.precio));
 }
 
-// Con un cliente elegido en el carrito, sus precios especiales se ven en el
-// inventario: precio de lista tachado y precio del cliente.
 function htmlPrecioProductoInventario(p) {
   const fmt = window.formatearPrecioPOS || ((n) => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   const lista = Number(p?.precio);
@@ -1675,8 +1660,6 @@ function claveAgrupacionProductoInventario(p) {
   const esConsignado = Boolean(p.es_consignado);
   const cat = String(p.categoria || '').trim().toLowerCase();
   const nom = String(p.nombre || '').trim().toLowerCase();
-  // El precio entra en la clave para que cada variante quede en su propia
-  // tarjeta, y solo se reúnan las mismas variantes de distintas sucursales.
   return `${esConsignado ? 'c' : 'p'}:${cat}:${nom}:${clavePrecioProductoInventario(p)}`;
 }
 
@@ -2361,8 +2344,6 @@ function leerFormularioFiltrosInventario() {
   };
 }
 
-// `incluirVacio`: la primera opción sin valor es una opción real («Público
-// general», «Todas») y no un placeholder, así que se puede volver a elegir.
 function initCustomSelectBasico($select, { incluirVacio = false } = {}) {
   if (!$select || $select.dataset.customSelectBasico) return null;
   $select.dataset.customSelectBasico = '1';
@@ -2640,8 +2621,6 @@ function invalidarCacheInventario(sucursalRaw) {
     : String(sucursalRaw);
   inventarioCachePorSucursal.delete(key);
   inventarioCachePorSucursal.delete('all');
-  // Un producto que antes no tenía imagen quedó memorizado como "sin imagen";
-  // al invalidar el inventario hay que volver a preguntar por las imágenes.
   inventarioImagenCache.clear();
   inventarioImagenPromesas.clear();
 }
@@ -2694,8 +2673,6 @@ async function aplicarImagenLazyInventario(img) {
     ocultarImagenInventarioSiRota(img);
     return;
   }
-  // Espera a que la imagen quede pintada antes de seguir con la siguiente,
-  // así el llenado va de arriba-izquierda a abajo-derecha.
   await new Promise((resolve) => {
     let terminado = false;
     const finalizar = () => {
@@ -2746,8 +2723,6 @@ function enlazarLazyImagenesInventario($root) {
   const pendientes = $root.querySelectorAll('img.inventario-producto-img[data-lazy-id]:not([data-lazy-listo])');
   if (!pendientes.length) return;
 
-  // querySelectorAll respeta el orden del DOM, que en la cuadrícula es
-  // superior-izquierda -> inferior-derecha.
   pendientes.forEach((img, i) => { img.dataset.lazyOrden = String(i); });
 
   if (typeof IntersectionObserver === 'undefined') {
@@ -2755,8 +2730,6 @@ function enlazarLazyImagenesInventario($root) {
     return;
   }
 
-  // Cada render reemplaza el HTML de la cuadrícula: sin desconectar, el
-  // observer retiene las <img> del render anterior y nunca se liberan.
   inventarioLazyImagenObserver?.disconnect();
 
   if (!inventarioLazyImagenObserver) {
@@ -2784,7 +2757,6 @@ async function recargarImagenesInventarioTarjetas() {
     inventarioLazyImagenObserver.disconnect();
     inventarioLazyImagenObserver = null;
   }
-  // Re-renderiza tarjetas y vuelve a pedir las imágenes (base64) sin alterar la URL.
   renderInventarioProductos();
 }
 
@@ -2838,8 +2810,6 @@ function htmlInventarioCardImagen(p, sinStock = false) {
   if (!productoTieneImagenInventario(p)) {
     return `<div class="inventario-producto-img-wrap inventario-producto-img-wrap--vacia${claseSinStock}" tabindex="0" role="button" aria-label="Ver detalle ampliado">${HTML_INVENTARIO_SIN_IMAGEN}${capaSinStock}</div>`;
   }
-  // La miniatura (imagen_thumb) viaja embebida en la lista: evita el fetch
-  // uno-por-uno y ya pesa una fraccion de la imagen grande.
   const directa = (typeof p.imagen_thumb === 'string' && p.imagen_thumb.trim())
     ? p.imagen_thumb.trim()
     : (typeof p.imagen === 'string' && p.imagen.trim() ? p.imagen.trim() : null);
@@ -3619,7 +3589,6 @@ function getSucursalIdProductoInventario(p) {
   return Number.isFinite(n) ? n : NaN;
 }
 
-/** Evita que la rueda del mouse cambie inputs type=number; desplaza el panel scrollable. */
 function redirigirWheelScrollPanelDesdeInputNumerico($scrollContainer) {
   if (!$scrollContainer || $scrollContainer.dataset.wheelNumeroPanel === '1') return;
   $scrollContainer.dataset.wheelNumeroPanel = '1';
@@ -3934,8 +3903,6 @@ function initModalTrasladarInventario() {
 
   window.ucAbrirModalTrasladarProducto = abrirModalTrasladarProducto;
 }
-
-// ===================== MODAL AGREGAR PRODUCTO =====================
 
 const IMAGEN_PRODUCTO_MAX_BYTES = 3 * 1024 * 1024;
 const IMAGEN_PRODUCTO_MAX_BASE64 = 3_500_000;
@@ -4584,7 +4551,6 @@ function initProductoModal() {
   }
 
   function actualizarVisibilidadPrecioFundas() {
-    // Fundas usan el mismo precio fijo que el resto de categorías.
     if ($prodPrecioWrap) $prodPrecioWrap.hidden = false;
     if ($fundaRangoPrecioWrap) $fundaRangoPrecioWrap.hidden = true;
     ocultarCostoCompraEnModal(esModoConsignadaModal());
@@ -5526,14 +5492,11 @@ function initProductoModal() {
   });
 
   function activarModoRangoPrecioFunda() {
-    // Rango deshabilitado: las fundas solo usan precio fijo.
   }
 
   function activarModoPrecioFijoFunda() {
     fundaModoPrecioFijo = true;
   }
-
-  // initSliderRangoFundasProducto / tabs de rango: ya no aplican.
 
   $imagen?.addEventListener('change', async () => {
     const file = $imagen.files?.[0];
@@ -5798,7 +5761,6 @@ function initProductoModal() {
         return { ok: false, msg: 'Selecciona la serie Samsung' };
       }
       if (!esModoConsignadaModal()) {
-        // Las fundas usan el precio fijo del campo general.
       }
     }
     if (cat === 'cargadores') {
@@ -6071,7 +6033,6 @@ function initProductoModal() {
         payload.costo_compra = Number.isFinite(costoCompraRaw) && costoCompraRaw > 0 ? costoCompraRaw : null;
       }
       if (cat === 'fundas' && !esModoConsignadaModal()) {
-        // Siempre precio fijo: limpia cualquier rango anterior.
         payload.precio_max = null;
       }
       if (hayImagenNueva) {
@@ -6120,8 +6081,6 @@ function initProductoModal() {
     }
   });
 }
-
-// ===================== POS =====================
 
 function initPOS() {
   const PRODUCTOS = [];
@@ -6173,7 +6132,6 @@ function initPOS() {
     return '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  // Los importes se acumulan con flotantes; el total se cierra a centavos.
   function redondearCentavos(n) {
     return Math.round((Number(n) || 0) * 100) / 100;
   }
@@ -6182,9 +6140,7 @@ function initPOS() {
     return `${item.id}-${Number(item.precio)}`;
   }
 
-  // ---------- Precios especiales del cliente ----------
   const $carritoCliente = document.getElementById('carrito-cliente');
-  // Mismo dropdown personalizado que usa el modal de «Agregar producto».
   const customSelectCarritoCliente = initCustomSelectBasico($carritoCliente, { incluirVacio: true });
   let clienteVentaId = null;
   let preciosClienteVenta = new Map();
@@ -6222,7 +6178,6 @@ function initPOS() {
     }
   }
 
-  // Une líneas que quedaron con el mismo producto y precio tras recalcular.
   function consolidarLineasCarrito() {
     const porClave = new Map();
     const resultado = [];
@@ -6258,7 +6213,6 @@ function initPOS() {
     preciosClienteVenta = await cargarPreciosCliente(clienteVentaId);
     aplicarPreciosClienteAlCarrito();
     actualizarCarrito();
-    // Las tarjetas del inventario muestran el precio del cliente elegido.
     renderInventarioProductos();
   }
 
@@ -6286,7 +6240,6 @@ function initPOS() {
       customSelectCarritoCliente?.refresh?.();
       if (!sigueExistiendo && clienteVentaId != null) await seleccionarClienteVenta(null);
     } catch {
-      /* sin conexión: se queda «Público general» */
     }
   }
 
@@ -6370,7 +6323,6 @@ function initPOS() {
   let precioCarritoModalCtx = null;
 
   function productoCarritoTieneRangoPrecio(prod) {
-    // Ya no hay rangos de precio en catálogo; el dueño edita precio libre en venta.
     return false;
   }
 
@@ -6464,7 +6416,6 @@ function initPOS() {
       cerrarModalPrecioCarrito();
     };
 
-    // Dueño: al editar en carrito, cualquier precio (solo afecta la venta, no el inventario).
     if (modo === 'editar' && esUsuarioDueno()) {
       const min = getPrecioMinProducto(prod);
       const max = getPrecioMaxProducto(prod);
@@ -7488,12 +7439,9 @@ function initPOS() {
     if ($themeToggle) $themeToggle.addEventListener('click', toggleManual);
     const $logo = document.querySelector('.logo');
     if ($logo) $logo.addEventListener('click', toggleManual);
-    // Por si la gráfica cargó antes de sincronizar body/html.
     requestAnimationFrame(() => window.ucRefrescarTemaChart7d?.());
   }
 }
-
-// ===================== MÓDULO: TABS =====================
 
 function escReporteTexto(s) {
   return String(s || '')
@@ -7899,7 +7847,6 @@ function actualizarBotonDevolucionVenta() {
   }
 }
 
-// La fila se marca al instante, sin esperar a que vuelva la recarga del servidor.
 function marcarVentaDevueltaLocal(ventaId, fecha) {
   const venta = ventasCorteRegistrosCache.get(Number(ventaId));
   if (!venta) return;
@@ -7932,7 +7879,6 @@ async function pintarProductosModalDevolucion(venta) {
   if (!$tbody) return;
   $tbody.innerHTML = '<tr><td colspan="3" class="tabla-vacio">Cargando productos...</td></tr>';
   const lineas = await lineasVentaParaDevolucion(venta);
-  // La venta pudo cambiar mientras llegaba el detalle.
   if (Number(ventaCorteSeleccionadaId) !== Number(venta?.id)) return;
   if (!lineas.length) {
     $tbody.innerHTML = '<tr><td colspan="3" class="tabla-vacio">No se pudieron cargar los productos de esta venta</td></tr>';
@@ -7973,7 +7919,6 @@ function abrirModalDevolucion() {
   void pintarProductosModalDevolucion(venta);
   if ($motivo) $motivo.value = '';
   if ($error) $error.hidden = true;
-  // Al dueño y al admin les basta su sesión; el vendedor necesita autorización.
   const requiereAutorizacion = !esUsuarioAdmin();
   if ($passWrap) $passWrap.hidden = !requiereAutorizacion;
   if ($pass) $pass.value = '';
@@ -7989,8 +7934,6 @@ function cerrarModalDevolucion() {
   document.getElementById('modal-devolucion')?.classList.remove('visible');
   const $pass = document.getElementById('devolucion-password');
   if ($pass) $pass.value = '';
-  // Sin esto la bandera se queda pegada si el modal se cierra a media petición
-  // y el siguiente intento de devolución se ignora en silencio.
   devolucionEnCurso = false;
 }
 
@@ -8018,7 +7961,6 @@ async function confirmarDevolucionVenta() {
     $pass?.focus();
     return;
   }
-  // Un segundo clic no debe disparar otra devolución.
   if (devolucionEnCurso) {
     if ($error) {
       $error.hidden = false;
@@ -8044,7 +7986,6 @@ async function confirmarDevolucionVenta() {
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
-      // Si el servidor dice que ya estaba devuelta, la fila se pone al día.
       if (/ya fue devuelta/i.test(data.error || '')) {
         cerrarModalDevolucion();
         marcarVentaDevueltaLocal(venta.id, null);
@@ -8141,7 +8082,7 @@ function esLineaVentaConsignada(linea) {
     try {
       const parsed = JSON.parse(det);
       if (parsed?.es_consignado || parsed?.consignado) return true;
-    } catch (_) { /* ignore */ }
+    } catch (_) {}
   }
   return false;
 }
@@ -8160,7 +8101,6 @@ function leerCostoConsignacionLinea(linea) {
   return NaN;
 }
 
-/** Costo unitario de compra (o consignación) capturado en la línea de venta. */
 function leerCostoUnitarioCompraLinea(linea) {
   if (esLineaVentaConsignada(linea)) {
     const consignacion = leerCostoConsignacionLinea(linea);
@@ -8365,8 +8305,6 @@ function renderTablaCorteCajaReporte(lista) {
     if (v?.id == null) return;
     const id = Number(v.id);
     ventasCorteRegistrosCache.set(id, v);
-    // Solo se siembra si la fila trae líneas: con un arreglo vacío el detalle
-    // nunca se pediría al servidor y la venta se vería sin productos.
     const detalle = normalizarDetalleVentaDesdeFila(v);
     if (detalle.length) ventasDetalleCache.set(id, detalle);
   });
@@ -8385,7 +8323,6 @@ function renderTablaCorteCajaReporte(lista) {
   let ventasNetas = 0;
   rows.forEach((v) => {
     const totalVenta = Number(v.total) || 0;
-    // Una venta devuelta no suma: solo alimenta la métrica de devoluciones.
     if (ventaEstaDevuelta(v)) {
       sumaDevoluciones += totalVenta;
       return;
@@ -8765,7 +8702,6 @@ function ajustarFechaVentasActiva(recargarFn) {
   const $fecha = document.getElementById('reporte-ventas-fecha');
   if (!$fecha) return false;
 
-  // Diario = el día elegido (por defecto hoy). No saltar al último día con ventas.
   if (reporteVentasPeriodoFiltro === 'diario') {
     const hoy = fechaHoyLocalInput();
     if (!$fecha.value) {
@@ -9636,15 +9572,10 @@ function initModuloVentas() {
   irASubvista(subInicial);
 }
 
-// Chrome ignora autocomplete="off" cuando cree ver un formulario de sesión.
-// Este guardián borra cualquier valor que el navegador meta por su cuenta,
-// avisado por la animación que el CSS aplica a los campos autollenados.
 function initAntiAutollenado() {
   if (initAntiAutollenado._done) return;
   initAntiAutollenado._done = true;
 
-  // Solo buscadores y campos de clave: en los datos de cliente o proveedor el
-  // autollenado del perfil de Chrome es una ayuda legítima y no se toca.
   const SELECTOR_SIN_AUTOLLENADO = 'input.modulo-buscar, input.inventario-buscador, input.uc-pass-masked';
 
   const limpiar = ($campo) => {
@@ -9659,7 +9590,6 @@ function initAntiAutollenado() {
     limpiar(e.target);
   }, true);
 
-  // Por si el navegador ya había dejado un valor antes de que corra el guardián.
   document.querySelectorAll(SELECTOR_SIN_AUTOLLENADO).forEach(($campo) => {
     try {
       if ($campo.matches(':-webkit-autofill')) limpiar($campo);
@@ -9688,8 +9618,6 @@ function initModulo() {
   initConfirmar();
   initConfirmarDueno();
 }
-
-// ===================== USUARIOS =====================
 
 let todosUsuarios = [];
 let todasSucursales = [];
@@ -9731,13 +9659,9 @@ function renderTablaUsuarios(lista) {
     $tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;opacity:.5;padding:2rem">No se encontraron usuarios</td></tr>';
     return;
   }
-  // Con un usuario seleccionado la tabla se colapsa a su fila, aunque el
-  // buscador tenga texto: la selección manda y se limpia al volver a buscar.
   let seleccionado = usuarioComisionSeleccionadoId == null
     ? null
     : todosUsuarios.find((u) => Number(u.id) === Number(usuarioComisionSeleccionadoId));
-  // Si el usuario dejó de generar comisión, su fila ya no es clicable y la
-  // tabla quedaría colapsada en él sin manera de deseleccionarlo.
   if (seleccionado && !rolGeneraComisionUsuario(seleccionado.rol)) seleccionado = null;
   if (usuarioComisionSeleccionadoId != null && !seleccionado) {
     usuarioComisionSeleccionadoId = null;
@@ -10009,8 +9933,6 @@ function eliminarUsuario(id) {
   });
 }
 
-// ===================== SUCURSALES =====================
-
 async function cargarSucursales() {
   try {
     const r = await fetch(`${API}/sucursales`, { headers: authHeaders(false) });
@@ -10114,8 +10036,6 @@ function eliminarSucursal(id) {
   });
 }
 
-// ===================== MÓDULO CLIENTES Y PROVEEDORES =====================
-
 let todosClientes = [];
 let todosProveedores = [];
 
@@ -10139,14 +10059,11 @@ function initModuloClientes() {
   initClientesDetalleUI();
   initProveedores();
   initPreciosCliente();
-  // Restringir input: teléfono y cuenta bancaria solo dígitos
   ['mc-telefono', 'mp-telefono'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', () => { el.value = el.value.replace(/\D/g, '').slice(0, 10); });
   });
   }
-
-// ===================== CLIENTES =====================
 
 async function cargarClientes() {
   try {
@@ -10284,13 +10201,10 @@ function eliminarCliente(id) {
   });
 }
 
-// ===================== PRECIOS ESPECIALES POR CLIENTE =====================
-
 let clientePreciosActualId = null;
 let clienteSeleccionadoId = null;
 let clientesListaActual = [];
 let catalogoPreciosEspeciales = [];
-// Dropdowns con el mismo componente visual que el modal de «Agregar producto».
 const customSelectsPrecioEspecial = { categoria: null, subcategoria: null, producto: null };
 
 function claveCatalogoPrecioEspecial(categoria, nombre) {
@@ -10299,7 +10213,6 @@ function claveCatalogoPrecioEspecial(categoria, nombre) {
   return `${cat}|${nom}`;
 }
 
-// Misma navegación que los chips del inventario: micas por tipo, fundas por marca.
 function subcategoriaCatalogoPrecioEspecial(categoria, nombre) {
   if (categoria === 'micas') {
     const info = extraerInfoMicaInventario(nombre);
@@ -10314,8 +10227,6 @@ function subcategoriaCatalogoPrecioEspecial(categoria, nombre) {
   return null;
 }
 
-// Un producto por categoría + nombre: en `productos` hay una fila por sucursal
-// y por variante de precio, y el precio especial aplica a todas.
 async function cargarCatalogoPreciosEspeciales() {
   try {
     const r = await fetch(`${API}/productos/inventario-todas-sucursales`, { headers: authHeaders(false) });
@@ -10372,7 +10283,6 @@ function poblarSubcategoriasPrecioEspecial() {
     .filter((p) => p.categoria === categoria && p.subId)
     .forEach((p) => { if (!subs.has(p.subId)) subs.set(p.subId, p.subLabel || p.subId); });
 
-  // Sin subcategorías (o sin categoría elegida) el dropdown no se muestra.
   if (subs.size === 0) {
     $sub.innerHTML = '<option value="">Todas</option>';
     $sub.value = '';
@@ -10401,7 +10311,6 @@ function poblarProductosPrecioEspecial() {
   if (!categoria) {
     $prod.innerHTML = '<option value="">Seleccionar</option>';
     if ($wrap) $wrap.hidden = true;
-    // Deshabilitado además de oculto: un required escondido bloquea el submit.
     $prod.disabled = true;
     customSelectsPrecioEspecial.producto?.refresh?.();
     return;
@@ -10429,7 +10338,6 @@ async function renderDetallePreciosCliente(clienteId) {
   const $wrap = document.getElementById('cliente-precios-detalle-wrap');
   const $tbody = document.getElementById('tbody-cliente-precios');
   if (!$wrap || !$tbody) return;
-  // Los precios especiales solo los consulta el endpoint de admin/dueño.
   if (clienteId == null || !esUsuarioAdmin()) {
     $wrap.hidden = true;
     $tbody.innerHTML = '<tr><td colspan="4" class="tabla-vacio">Selecciona un cliente para ver sus precios</td></tr>';
@@ -10437,8 +10345,6 @@ async function renderDetallePreciosCliente(clienteId) {
   }
   $wrap.hidden = false;
   try {
-    // Se recarga siempre: con el catálogo memorizado, los productos nuevos no
-    // aparecen y la columna de precio normal muestra valores viejos.
     await cargarCatalogoPreciosEspeciales();
     const r = await fetch(`${API}/clientes/${clienteId}/precios`, { headers: authHeaders(false) });
     if (!r.ok) throw new Error('No se pudieron cargar los precios');
@@ -10514,7 +10420,6 @@ function eliminarPrecioCliente(precioId) {
   });
 }
 
-// Contador con auto-repetición al mantener presionado, como el precio de «Agregar producto».
 function initStepperPrecioEspecial($btn, $input, delta) {
   if (!$btn || !$input) return;
   let timer = null;
@@ -10596,7 +10501,6 @@ function initPreciosCliente() {
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) return alert(data.error || 'No se pudo guardar el precio');
-      // Se conserva la categoría elegida para capturar varios seguidos.
       if ($prodSelect) $prodSelect.value = '';
       customSelectsPrecioEspecial.producto?.syncDisplay?.();
       if (precioInput) precioInput.value = '';
@@ -10608,8 +10512,6 @@ function initPreciosCliente() {
     }
   });
 }
-
-// ===================== PROVEEDORES =====================
 
 async function cargarProveedores() {
   try {
@@ -10725,8 +10627,6 @@ function eliminarProveedor(id) {
     cargarProveedores();
   });
 }
-
-// ===================== MODAL CONFIRMAR =====================
 
 let confirmarCallback = null;
 let confirmarEnCurso = false;

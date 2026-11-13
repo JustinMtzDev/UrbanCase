@@ -1,25 +1,11 @@
-// Reinicio de datos para la puesta en produccion.
-//
-// Vacia lo transaccional y deja el catalogo de productos con stock 0 y costo de
-// compra 0. Conserva productos, sucursales, usuarios, clientes, proveedores y
-// los precios especiales de cliente.
-//
-// Uso:
-//   node server/reset-produccion.js            -> solo muestra que se borraria
-//   node server/reset-produccion.js --aplicar  -> ejecuta el borrado
-//
-// Detén el servidor antes de aplicarlo: TRUNCATE toma un lock exclusivo.
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const fs = require('fs');
 const path = require('path');
-const pool = require('./config/db');
+const pool = require('../config/db');
 
 const APLICAR = process.argv.includes('--aplicar');
 
-// Un solo TRUNCATE para las ocho: Postgres resuelve las dependencias porque
-// todas las tablas que apuntan a ventas estan en la lista. Sin CASCADE a
-// proposito, para que falle y avise si alguien agrega una tabla nueva con FK.
 const TABLAS_A_VACIAR = [
   'devoluciones',
   'venta_detalle',
@@ -55,10 +41,9 @@ function imprimir(titulo, conteos) {
 }
 
 function borrarTicketsEnDisco() {
-  const dir = path.join(__dirname, 'tickets');
+  const dir = path.join(__dirname, '..', 'tickets');
   if (!fs.existsSync(dir)) return 0;
   const pdfs = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.pdf'));
-  // Los folios vuelven a 1 y los PDF viejos se llamarian igual que los nuevos.
   pdfs.forEach((f) => fs.unlinkSync(path.join(dir, f)));
   return pdfs.length;
 }

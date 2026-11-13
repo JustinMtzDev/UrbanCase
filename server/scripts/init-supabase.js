@@ -1,9 +1,4 @@
-/**
- * Inicializa la base en Supabase desde cero: schema.sql más todas las
- * migraciones en orden de dependencias. Todas son idempotentes.
- * Ejecutar: node init-supabase.js
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
@@ -18,7 +13,6 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL.includes('supabase') ? { rejectUnauthorized: false } : false,
 });
 
-// El orden importa: cada archivo referencia tablas de los anteriores.
 const ARCHIVOS_SQL = [
   'schema.sql',
   'migration_productos.sql',
@@ -42,7 +36,6 @@ const ARCHIVOS_SQL = [
   'migration_hardening.sql',
 ];
 
-// Sin estas dos una base nueva no puede registrar ventas ni devoluciones.
 const OBJETOS_REQUERIDOS = [
   'public.productos',
   'public.productos_consignados',
@@ -57,7 +50,7 @@ async function init() {
     console.log('🔌 Conectando a Supabase...');
 
     for (const archivo of ARCHIVOS_SQL) {
-      const sql = fs.readFileSync(path.join(__dirname, 'sql', archivo), 'utf-8');
+      const sql = fs.readFileSync(path.join(__dirname, '..', 'sql', archivo), 'utf-8');
       await pool.query(sql);
       console.log('   ✔', archivo);
     }

@@ -1,14 +1,10 @@
-/**
- * Comisiones diarias admin/vendedor.
- * Ejecutar desde server: npm run migrate-usuario-comisiones
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const {
   recalcularComisionesGlobales,
-} = require('./services/comisiones');
+} = require('../services/comisiones');
 
 if (!process.env.DATABASE_URL) {
   console.error('❌ No hay DATABASE_URL en server/.env');
@@ -28,7 +24,7 @@ async function run() {
   const client = await pool.connect();
   try {
     const sql = fs.readFileSync(
-      path.join(__dirname, 'sql', 'migration_usuario_comisiones.sql'),
+      path.join(__dirname, '..', 'sql', 'migration_usuario_comisiones.sql'),
       'utf-8'
     );
     await client.query('BEGIN');

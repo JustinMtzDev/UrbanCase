@@ -1,9 +1,4 @@
-/**
- * Endurecimiento de la base: permisos de anon/authenticated, FK en RESTRICT,
- * CHECK de no negatividad y de valores válidos, índices de FK y created_at
- * con zona. Ejecutar: npm run migrate-hardening
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
@@ -20,9 +15,9 @@ const pool = new Pool({
 
 async function run() {
   try {
-    const sql = fs.readFileSync(path.join(__dirname, 'sql', 'migration_hardening.sql'), 'utf-8');
+    const sql = fs.readFileSync(path.join(__dirname, '..', 'sql', 'migration_tickets.sql'), 'utf-8');
     await pool.query(sql);
-    console.log('✅ Endurecimiento aplicado (permisos, FK, CHECK, índices y created_at).');
+    console.log('✅ Columnas mp_terminal_id, ticket_pdf_path y ticket_impreso_at listas.');
     await pool.end();
   } catch (err) {
     console.error('❌ Error:', err.message);

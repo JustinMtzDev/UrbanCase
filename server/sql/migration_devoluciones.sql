@@ -1,7 +1,3 @@
--- Devoluciones de venta completa.
--- No hay tabla de detalle: al devolverse el folio entero, las líneas se leen
--- de `venta_detalle`, que nunca se modifica después de la venta.
-
 CREATE TABLE IF NOT EXISTS public.devoluciones (
   id SERIAL PRIMARY KEY,
   venta_id INTEGER NOT NULL REFERENCES public.ventas(id) ON DELETE CASCADE,

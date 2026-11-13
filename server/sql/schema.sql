@@ -38,7 +38,6 @@ CREATE TABLE IF NOT EXISTS proveedores (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Migración: agregar sucursal_id a clientes y proveedores si no existe
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='clientes' AND column_name='sucursal_id') THEN
@@ -49,7 +48,6 @@ BEGIN
   END IF;
 END $$;
 
--- Migración: quitar cuenta_bancaria de proveedores si existe
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='proveedores' AND column_name='cuenta_bancaria') THEN
@@ -57,9 +55,6 @@ BEGIN
   END IF;
 END $$;
 
--- Superusuario inicial: soporte / soporte123.
--- DO NOTHING y no DO UPDATE: si no, cada ejecución reabre la cuenta con la
--- contraseña que está en claro en el repo.
 INSERT INTO usuarios (usuario, nombre, password_hash, rol, activo) VALUES
   ('soporte', 'Soporte', '$2b$10$WvDeilZe/jmlV0pznP6nRe2hjjCXgvugFApuoR8wmBm5HkVnDow7C', 'admin', TRUE)
 ON CONFLICT (usuario) DO NOTHING;
@@ -255,8 +250,6 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_ventas_cliente ON public.ventas(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_ventas_devuelta ON public.ventas(devuelta_at);
 
--- Devolución de una venta completa. Sin tabla de detalle: las líneas se leen
--- de `venta_detalle`, que no cambia después de la venta.
 CREATE TABLE IF NOT EXISTS public.devoluciones (
   id SERIAL PRIMARY KEY,
   venta_id INTEGER NOT NULL REFERENCES public.ventas(id) ON DELETE CASCADE,
@@ -275,8 +268,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS devoluciones_venta_uniq ON public.devoluciones
 CREATE INDEX IF NOT EXISTS idx_devoluciones_created ON public.devoluciones(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_devoluciones_sucursal ON public.devoluciones(sucursal_id);
 
--- Precio especial por cliente. El producto se identifica por categoría + nombre
--- porque en `productos` hay una fila por sucursal y por variante de precio.
 CREATE TABLE IF NOT EXISTS public.cliente_precios (
   id SERIAL PRIMARY KEY,
   cliente_id INTEGER NOT NULL REFERENCES public.clientes(id) ON DELETE CASCADE,

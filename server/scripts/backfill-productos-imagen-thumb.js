@@ -1,10 +1,4 @@
-/**
- * Genera imagen_thumb para los productos que ya tienen imagen pero no
- * miniatura (productos creados antes de agregar esta columna).
- * Requiere haber corrido antes: npm run migrate-productos-imagen-thumb
- * Ejecutar desde la carpeta server: npm run backfill-productos-imagen-thumb
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 const sharp = require('sharp');
 

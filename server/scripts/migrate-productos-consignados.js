@@ -1,8 +1,4 @@
-/**
- * Crea la tabla inventario_movimientos.
- * Ejecutar desde la carpeta server: npm run migrate-inventario-movimientos
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
@@ -19,18 +15,18 @@ const pool = new Pool({
 
 async function run() {
   try {
-    const sql = fs.readFileSync(path.join(__dirname, 'sql', 'migration_inventario_movimientos.sql'), 'utf-8');
+    const sql = fs.readFileSync(path.join(__dirname, '..', 'sql', 'migration_productos_consignados.sql'), 'utf-8');
     await pool.query(sql);
     const { rows } = await pool.query(
       `SELECT table_schema, table_name
        FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = 'inventario_movimientos'`
+       WHERE table_schema = 'public' AND table_name = 'productos_consignados'`
     );
     if (rows.length === 0) {
-      console.error('❌ La tabla inventario_movimientos no aparece en information_schema; revisa permisos y errores.');
+      console.error('❌ La tabla productos_consignados no aparece en information_schema; revisa permisos y errores.');
       process.exit(1);
     }
-    console.log('✅ Tabla public.inventario_movimientos lista.');
+    console.log('✅ Tabla public.productos_consignados lista.');
     await pool.end();
   } catch (err) {
     console.error('❌ Error:', err.message);

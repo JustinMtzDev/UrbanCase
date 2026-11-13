@@ -44,7 +44,6 @@ async function activarModoPdv(token, terminalId) {
   });
 }
 
-/** Al arrancar: asegura modo PDV en la Smart Point configurada. */
 async function ensureTerminalPdvMode() {
   const token = String(process.env.MP_ACCESS_TOKEN || '').trim();
   const terminalId = String(process.env.MP_TERMINAL_ID || '').trim();
@@ -76,7 +75,6 @@ async function ensureTerminalPdvMode() {
   }
 }
 
-/** Sincroniza mp_terminal_id en sucursales si falta. */
 async function syncSucursalesTerminalId(pool) {
   const terminalId = String(process.env.MP_TERMINAL_ID || '').trim();
   if (!terminalId || !pool) return;

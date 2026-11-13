@@ -1,8 +1,4 @@
-/**
- * Crea la tabla productos_historial.
- * Ejecutar desde la carpeta server: npm run migrate-productos-historial
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
@@ -19,18 +15,18 @@ const pool = new Pool({
 
 async function run() {
   try {
-    const sql = fs.readFileSync(path.join(__dirname, 'sql', 'migration_productos_historial.sql'), 'utf-8');
+    const sql = fs.readFileSync(path.join(__dirname, '..', 'sql', 'migration_ventas.sql'), 'utf-8');
     await pool.query(sql);
     const { rows } = await pool.query(
-      `SELECT table_schema, table_name
+      `SELECT table_name
        FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = 'productos_historial'`
+       WHERE table_schema = 'public' AND table_name IN ('ventas', 'venta_detalle')`
     );
-    if (rows.length === 0) {
-      console.error('❌ La tabla productos_historial no aparece en information_schema; revisa permisos y errores.');
+    if (rows.length < 2) {
+      console.error('❌ Faltan tablas ventas/venta_detalle; revisa permisos y errores.');
       process.exit(1);
     }
-    console.log('✅ Tabla public.productos_historial lista.');
+    console.log('✅ Tablas public.ventas y public.venta_detalle listas.');
     await pool.end();
   } catch (err) {
     console.error('❌ Error:', err.message);

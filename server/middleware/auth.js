@@ -1,4 +1,4 @@
-const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS) || 12 * 60 * 60 * 1000; // 12 h
+const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS) || 12 * 60 * 60 * 1000;
 const sessions = new Map();
 
 function limpiarSesionesExpiradas() {

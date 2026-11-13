@@ -1,8 +1,4 @@
-/**
- * Agrega columnas de ticket / terminal Mercado Pago.
- * Ejecutar: npm run migrate-tickets
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
@@ -19,9 +15,9 @@ const pool = new Pool({
 
 async function run() {
   try {
-    const sql = fs.readFileSync(path.join(__dirname, 'sql', 'migration_tickets.sql'), 'utf-8');
+    const sql = fs.readFileSync(path.join(__dirname, '..', 'sql', 'migration_ventas_mp.sql'), 'utf-8');
     await pool.query(sql);
-    console.log('✅ Columnas mp_terminal_id, ticket_pdf_path y ticket_impreso_at listas.');
+    console.log('✅ Columnas mp_order_id y mp_payment_id listas en ventas.');
     await pool.end();
   } catch (err) {
     console.error('❌ Error:', err.message);

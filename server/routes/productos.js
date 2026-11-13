@@ -12,8 +12,6 @@ const {
 
 const router = Router();
 const IMAGEN_MAX_BASE64 = 3_500_000;
-// La cuadricula de inventario pinta las tarjetas a ~160-220px; 420px cubre
-// pantallas retina sin mandar la imagen grande (hasta 1200px) de cada producto.
 const IMAGEN_THUMB_MAX_SIDE = 420;
 const DATA_URL_RE = /^data:(image\/\w+);base64,([\s\S]+)$/;
 
@@ -40,7 +38,6 @@ async function generarImagenThumb(dataUrl) {
   }
 }
 
-// El mensaje de Postgres delata tablas, columnas y constraints: se queda en el log.
 function errorProducto(req, res, err) {
   console.error('Productos', req.originalUrl, err);
   return responderError(res, err);
@@ -63,7 +60,6 @@ async function obtenerProductosTodasLasSucursales() {
   return rows.map((row) => ({ ...row, id_sucursal: row.sucursal_id }));
 }
 
-/** Sin query string: evita que proxies o clientes pierdan sucursal_id=all */
 router.get('/inventario-todas-sucursales', async (req, res) => {
   try {
     res.json(await obtenerProductosTodasLasSucursales());

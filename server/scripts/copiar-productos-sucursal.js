@@ -1,8 +1,4 @@
-/**
- * Copia productos de una sucursal origen a una destino.
- * Uso: node copiar-productos-sucursal.js "MATRIZ" "LOCAL 6"
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 
 const origenNombre = process.argv[2] || 'MATRIZ';

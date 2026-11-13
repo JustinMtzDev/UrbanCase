@@ -5,14 +5,11 @@ const { responderError } = require('../middleware/errors');
 
 const router = Router();
 
-// Límites de las columnas: clientes.nombre VARCHAR(200), telefono VARCHAR(50),
-// correo VARCHAR(254); cliente_precios.categoria VARCHAR(40), nombre VARCHAR(200).
 const CLIENTE_NOMBRE_MAX = 200;
 const CLIENTE_TELEFONO_MAX = 50;
 const CLIENTE_CORREO_MAX = 254;
 const PRECIO_CATEGORIA_MAX = 40;
 const PRECIO_NOMBRE_MAX = 200;
-// NUMERIC(12,2) desborda (22003) a partir de 10^10.
 const PRECIO_MAXIMO = 9999999999.99;
 
 function parseIdParam(raw) {
@@ -106,8 +103,6 @@ router.put('/:id', requireAdmin, async (req, res) => {
     return errorCliente(req, res, err);
   }
 });
-
-// ---------- Precios especiales por cliente ----------
 
 router.get('/:id/precios', async (req, res) => {
   const clienteId = parseIdParam(req.params.id);

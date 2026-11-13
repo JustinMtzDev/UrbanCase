@@ -1,7 +1,3 @@
--- Precios especiales por cliente.
--- El producto se identifica por categoría + nombre (no por id) porque en
--- `productos` hay una fila por sucursal y por variante de precio.
-
 CREATE TABLE IF NOT EXISTS public.cliente_precios (
   id SERIAL PRIMARY KEY,
   cliente_id INTEGER NOT NULL REFERENCES public.clientes(id) ON DELETE CASCADE,

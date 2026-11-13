@@ -1,5 +1,3 @@
--- Comisiones diarias (admin/vendedor): detalle últimos 7 días + total acumulado en usuarios.
-
 ALTER TABLE public.usuarios
   ADD COLUMN IF NOT EXISTS comision_total_acumulada NUMERIC(12,2) NOT NULL DEFAULT 0;
 

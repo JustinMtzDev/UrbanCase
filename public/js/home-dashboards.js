@@ -1,6 +1,3 @@
-/**
- * Home — KPIs, gráfica de ventas y top productos.
- */
 (function (global) {
   let periodoActivo = 'diario';
   let cargando = false;
@@ -43,7 +40,6 @@
   }
 
   function esTemaOscuro() {
-    // Misma regla visual que las cards del dashboard (body:not(.theme-dark) → claro).
     if (document.body) return document.body.classList.contains('theme-dark');
     return document.documentElement.classList.contains('theme-dark');
   }
@@ -235,7 +231,7 @@
   }
 
   function redimensionarChart7d() {
-    try { chart7d?.resize(); } catch (_) { /* ignore */ }
+    try { chart7d?.resize(); } catch (_) {}
   }
 
   const ORDEN_LUN_DOM = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];

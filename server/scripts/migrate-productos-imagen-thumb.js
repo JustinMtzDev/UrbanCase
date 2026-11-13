@@ -1,8 +1,4 @@
-/**
- * Agrega el indice funcional productos(LOWER(BTRIM(nombre))).
- * Ejecutar desde la carpeta server: npm run migrate-productos-idx-nombre
- */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
@@ -19,17 +15,17 @@ const pool = new Pool({
 
 async function run() {
   try {
-    const sql = fs.readFileSync(path.join(__dirname, 'sql', 'migration_productos_idx_nombre.sql'), 'utf-8');
+    const sql = fs.readFileSync(path.join(__dirname, '..', 'sql', 'migration_productos_imagen_thumb.sql'), 'utf-8');
     await pool.query(sql);
     const { rows } = await pool.query(
-      `SELECT indexname FROM pg_indexes
-       WHERE schemaname = 'public' AND tablename = 'productos' AND indexname = 'idx_productos_nombre_lower_btrim'`
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'productos' AND column_name = 'imagen_thumb'`
     );
     if (rows.length === 0) {
-      console.error('❌ El indice no aparece en pg_indexes.');
+      console.error('❌ La columna imagen_thumb no aparece en information_schema.');
       process.exit(1);
     }
-    console.log('✅ Indice idx_productos_nombre_lower_btrim listo.');
+    console.log('✅ Columna productos.imagen_thumb lista.');
     await pool.end();
   } catch (err) {
     console.error('❌ Error:', err.message);

@@ -64,7 +64,6 @@ async function regresarStockProducto(client, { linea, venta, usuarioId, motivo }
       motivo: motivo || null,
       venta_id: venta.id,
       precio_unitario: linea.precio_unitario,
-      // El producto pudo haberse eliminado después de la venta: ahí no hay stock que regresar.
       producto_eliminado: !producto,
       stock_despues: producto ? Number(producto.stock) : null,
     },
@@ -73,8 +72,6 @@ async function regresarStockProducto(client, { linea, venta, usuarioId, motivo }
   return Boolean(producto);
 }
 
-// Los consignados se borran de `productos_consignados` al venderse, así que la
-// devolución los vuelve a crear con los datos guardados en la venta.
 async function reponerConsignado(client, { linea, venta, usuarioId, motivo }) {
   const detalle = linea.detalle || {};
   const precioVenta = Number(linea.precio_unitario) || 0;
@@ -109,9 +106,6 @@ async function reponerConsignado(client, { linea, venta, usuarioId, motivo }) {
   });
 }
 
-// Con la fila del día presente basta volver a sincronizarla. Si ya la borró
-// `purgarComisionesAntiguas` (ventas de más de 7 días) no hay nada que
-// sincronizar, así que se descuenta el delta explícito del acumulado.
 async function ajustarComisionPorDevolucion(client, venta) {
   const usuarioId = Number(venta.usuario_id);
   if (!Number.isFinite(usuarioId) || usuarioId <= 0) return;
@@ -139,7 +133,6 @@ async function ajustarComisionPorDevolucion(client, venta) {
   );
   if (!userRows.length || !rolGeneraComision(userRows[0].rol)) return;
 
-  // La venta ya quedó marcada como devuelta: este total es el del día sin ella.
   const { ventas_total: ventasSinLaVenta } = await obtenerVentasDiaUsuario(client, usuarioId, dia);
   const totalVenta = Number(venta.total) || 0;
   const delta = calcularComisionDiaria(ventasSinLaVenta)
@@ -147,10 +140,6 @@ async function ajustarComisionPorDevolucion(client, venta) {
   await ajustarComisionAcumulada(client, usuarioId, delta);
 }
 
-/**
- * Devuelve una venta completa dentro de la transacción recibida: regresa el
- * stock, deja el rastro en movimientos y marca la venta como devuelta.
- */
 async function registrarDevolucion(client, { ventaId, usuarioId, autorizadoPor, motivo }) {
   const venta = await obtenerVentaParaDevolucion(client, ventaId);
   if (!venta) throw new Error('Venta no encontrada');

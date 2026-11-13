@@ -38,9 +38,6 @@ async function registrarMovimientoInventario({
   const sucursalIdNum = Number(sucursalId);
   const detalleJson = detalle && typeof detalle === 'object' ? JSON.stringify(detalle) : null;
 
-  // El INSERT va en un SAVEPOINT: sin él, un error deja la transacción abortada
-  // y la siguiente consulta falla con 25P02 en vez de la causa real. Con el pool
-  // como executor no hay transacción abierta y el SAVEPOINT no aplica.
   let conSavepoint = false;
   if (typeof executor.release === 'function') {
     try {

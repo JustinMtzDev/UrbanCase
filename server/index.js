@@ -16,8 +16,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-// Railway pone un proxy delante: sin esto req.ip toma el header X-Forwarded-For
-// tal cual lo mande el cliente y el rate limit se evade.
 app.set('trust proxy', 1);
 
 const corsOrigins = String(process.env.CORS_ORIGINS || '')
@@ -66,8 +64,6 @@ app.use('/api/proveedores', authMiddleware, require('./routes/proveedores'));
 app.use('/api/productos', authMiddleware, require('./routes/productos'));
 app.use('/api/productos-consignados', authMiddleware, require('./routes/productos-consignados'));
 app.use('/api/inventario-favoritos', authMiddleware, require('./routes/inventario-favoritos'));
-// El vendedor solo necesita el resumen de inventario; el resto de reportes
-// expone costos, utilidad y corte de caja de todas las sucursales.
 const requireAdminReportes = (req, res, next) => (
   req.path === '/resumen-inventario' ? next() : requireAdmin(req, res, next)
 );
@@ -93,11 +89,7 @@ app.use((err, req, res, next) => {
   return responderError(res, err);
 });
 
-// Supabase free tier pausa el proyecto tras ~7 días sin actividad. El
-// servidor en Railway corre 24/7, pero si la tienda cierra varios días
-// seguidos no hay tráfico real que cuente como actividad; este ping lo
-// genera igual para que el proyecto nunca se vea inactivo.
-const SUPABASE_KEEPALIVE_MS = 24 * 60 * 60 * 1000; // 24 h
+const SUPABASE_KEEPALIVE_MS = 24 * 60 * 60 * 1000;
 function iniciarKeepAliveSupabase() {
   setInterval(() => {
     pool.query('SELECT 1').catch((err) => {

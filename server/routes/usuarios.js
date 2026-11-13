@@ -140,8 +140,6 @@ router.put('/:id', async (req, res) => {
     if (prev.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
 
     const rolFinal = normalizarRol(rol ?? prev.rows[0].rol);
-    // Solo el dueño toca la cuenta del dueño: si no, un admin le cambia la
-    // contraseña y entra con su rol, o lo degrada a vendedor.
     const solicitanteEsDueno = normalizarRol(req.usuario?.rol) === 'dueno';
     if (normalizarRol(prev.rows[0].rol) === 'dueno' && !solicitanteEsDueno) {
       return res.status(403).json({ error: 'Solo el Dueño puede modificar su propia cuenta' });

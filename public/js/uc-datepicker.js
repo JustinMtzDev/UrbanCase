@@ -1,6 +1,3 @@
-/**
- * Datepicker UrbanCase — reemplaza el popup nativo de input[type=date].
- */
 (function (global) {
   const MESES = [
     'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -38,7 +35,6 @@
     return a.d - b.d;
   }
 
-  /** true si la fecha es posterior a hoy (futura). */
   function esFechaFutura(y, m, d, ref) {
     if (!ref) return false;
     return compararFecha({ y, m, d }, ref) > 0;
@@ -102,7 +98,6 @@
     });
   }
 
-  /** Evita que backdrop-filter/transform del panel desalineen position:fixed. */
   function anclarPopoverAlBody($wrap, $pop) {
     if ($pop.parentNode !== document.body) document.body.appendChild($pop);
     $wrap._ucDatepickerPop = $pop;

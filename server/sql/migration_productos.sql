@@ -1,6 +1,3 @@
--- Ejecutar en Supabase: SQL Editor → New query → pegar → Run
--- O desde la carpeta server: npm run migrate-productos
-
 CREATE TABLE IF NOT EXISTS public.productos (
   id SERIAL PRIMARY KEY,
   sucursal_id INTEGER NOT NULL REFERENCES public.sucursales(id) ON DELETE CASCADE,

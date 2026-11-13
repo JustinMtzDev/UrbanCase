@@ -1,4 +1,3 @@
-/** Bloquea rutas sensibles antes de servir archivos estáticos. */
 const RUTAS_BLOQUEADAS = [
   /^\/server(?:\/|$)/i,
   /^\/\.env/i,

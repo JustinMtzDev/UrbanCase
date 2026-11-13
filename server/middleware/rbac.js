@@ -1,4 +1,3 @@
-/** Control de acceso por rol. */
 const { normalizarRol, tieneAccesoCompleto } = require('./roles');
 
 function requireRol(...rolesPermitidos) {

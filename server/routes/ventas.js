@@ -24,8 +24,6 @@ const METODOS_PAGO = new Set(['efectivo', 'tarjeta', 'transferencia']);
 
 const router = Router();
 
-// La devolución acepta la contraseña de cualquier admin o dueño: sin límite de
-// intentos el endpoint sirve para probar contraseñas de administrador.
 const devolucionLimiter = crearRateLimiter({
   maxIntentos: 5,
   ventanaMs: 15 * 60 * 1000,
@@ -117,14 +115,11 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Devolución de la venta completa. El dueño y el admin la hacen directo; el
-// vendedor necesita la contraseña de un admin o dueño, que queda registrada.
 router.post('/:id/devolucion', devolucionLimiter, async (req, res) => {
   const ventaId = Number(req.params.id);
   if (!Number.isFinite(ventaId) || ventaId <= 0) {
     return res.status(400).json({ error: 'id de venta inválido' });
   }
-  // Saca dinero de la caja: el motivo queda por escrito, no es opcional.
   const motivo = String(req.body?.motivo ?? '').trim().slice(0, 500);
   if (!motivo) {
     return res.status(400).json({ error: 'El motivo de la devolución es requerido' });

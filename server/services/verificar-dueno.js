@@ -16,8 +16,6 @@ async function verificarPasswordDueno(password) {
   return bcrypt.compare(pwd, rows[0].password_hash);
 }
 
-// Autoriza una acción con la contraseña de cualquier admin o dueño activo.
-// Devuelve al usuario que autorizó (para dejar rastro) o null si no coincide.
 async function verificarPasswordAdminODueno(password) {
   const pwd = String(password ?? '');
   if (!pwd) return null;
