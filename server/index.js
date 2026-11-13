@@ -93,10 +93,24 @@ app.use((err, req, res, next) => {
   return responderError(res, err);
 });
 
+// Supabase free tier pausa el proyecto tras ~7 días sin actividad. El
+// servidor en Railway corre 24/7, pero si la tienda cierra varios días
+// seguidos no hay tráfico real que cuente como actividad; este ping lo
+// genera igual para que el proyecto nunca se vea inactivo.
+const SUPABASE_KEEPALIVE_MS = 24 * 60 * 60 * 1000; // 24 h
+function iniciarKeepAliveSupabase() {
+  setInterval(() => {
+    pool.query('SELECT 1').catch((err) => {
+      console.error('Keep-alive Supabase falló:', err.message);
+    });
+  }, SUPABASE_KEEPALIVE_MS).unref();
+}
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`UrbanCase corriendo en http://localhost:${PORT}`);
   console.log(`Seguridad: headers, rate-limit login, RBAC, sesión ${process.env.SESSION_TTL_MS || 43200000}ms`);
   if (!IS_PROD) console.log('Modo desarrollo (NODE_ENV != production)');
   void syncSucursalesTerminalId(pool);
   void ensureTerminalPdvMode();
+  iniciarKeepAliveSupabase();
 });

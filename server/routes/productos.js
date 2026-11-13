@@ -1,4 +1,5 @@
 const { Router } = require('express');
+const sharp = require('sharp');
 const pool = require('../config/db');
 const { requireAdmin } = require('../middleware/rbac');
 const { responderError } = require('../middleware/errors');
@@ -11,6 +12,33 @@ const {
 
 const router = Router();
 const IMAGEN_MAX_BASE64 = 3_500_000;
+// La cuadricula de inventario pinta las tarjetas a ~160-220px; 420px cubre
+// pantallas retina sin mandar la imagen grande (hasta 1200px) de cada producto.
+const IMAGEN_THUMB_MAX_SIDE = 420;
+const DATA_URL_RE = /^data:(image\/\w+);base64,([\s\S]+)$/;
+
+async function generarImagenThumb(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return null;
+  const match = dataUrl.match(DATA_URL_RE);
+  if (!match) return null;
+  const [, mime, base64] = match;
+  try {
+    const buffer = Buffer.from(base64, 'base64');
+    let pipeline = sharp(buffer).resize({
+      width: IMAGEN_THUMB_MAX_SIDE,
+      height: IMAGEN_THUMB_MAX_SIDE,
+      fit: 'inside',
+      withoutEnlargement: true,
+    });
+    const esPng = mime === 'image/png';
+    pipeline = esPng ? pipeline.png({ compressionLevel: 9 }) : pipeline.jpeg({ quality: 75 });
+    const outBuffer = await pipeline.toBuffer();
+    return `data:${esPng ? 'image/png' : 'image/jpeg'};base64,${outBuffer.toString('base64')}`;
+  } catch (err) {
+    console.error('No se pudo generar la miniatura del producto:', err.message);
+    return null;
+  }
+}
 
 // El mensaje de Postgres delata tablas, columnas y constraints: se queda en el log.
 function errorProducto(req, res, err) {
@@ -23,7 +51,8 @@ const SQL_LISTAR_TODAS_SUCURSALES = `
          p.costo_compra::float8 AS costo_compra,
          p.stock, p.categoria, p.sucursal_id,
          p.created_at, COALESCE(s.nombre, 'Sin sucursal') AS sucursal_nombre,
-         (p.imagen IS NOT NULL AND btrim(p.imagen) <> '') AS tiene_imagen
+         (p.imagen IS NOT NULL AND btrim(p.imagen) <> '') AS tiene_imagen,
+         p.imagen_thumb
   FROM productos p
   LEFT JOIN sucursales s ON s.id = p.sucursal_id
   ORDER BY COALESCE(s.nombre, '') ASC, p.id ASC
@@ -66,7 +95,8 @@ router.get('/', async (req, res) => {
       `SELECT id, nombre, precio::float8 AS precio, precio_max::float8 AS precio_max,
               costo_compra::float8 AS costo_compra,
               stock, categoria, sucursal_id, created_at,
-              (imagen IS NOT NULL AND btrim(imagen) <> '') AS tiene_imagen
+              (imagen IS NOT NULL AND btrim(imagen) <> '') AS tiene_imagen,
+              imagen_thumb
        FROM productos
        WHERE sucursal_id = $1
        ORDER BY id`,
@@ -127,15 +157,16 @@ router.post('/', requireAdmin, async (req, res) => {
     if (check.rows.length === 0) return res.status(400).json({ error: 'Sucursal no válida' });
     const img = normalizarImagenProducto(imagen);
     if (img === false) return res.status(400).json({ error: 'La imagen es demasiado grande' });
+    const imgThumb = img ? await generarImagenThumb(img) : null;
     const precioMaxNum = normalizarPrecioMaxProducto(precioNum, precio_max);
     const costoCompraNum = normalizarCostoCompraProducto(costo_compra);
     const { rows } = await pool.query(
-      `INSERT INTO productos (sucursal_id, nombre, precio, precio_max, costo_compra, stock, categoria, imagen)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO productos (sucursal_id, nombre, precio, precio_max, costo_compra, stock, categoria, imagen, imagen_thumb)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id, nombre, precio::float8 AS precio, precio_max::float8 AS precio_max,
                  costo_compra::float8 AS costo_compra,
-                 stock, categoria, imagen, sucursal_id, created_at`,
-      [Number(sid), nombre.trim(), precioNum, precioMaxNum, costoCompraNum, stockNum, catNorm, img]
+                 stock, categoria, imagen, imagen_thumb, sucursal_id, created_at`,
+      [Number(sid), nombre.trim(), precioNum, precioMaxNum, costoCompraNum, stockNum, catNorm, img, imgThumb]
     );
     const row = rows[0];
     if (stockNum > 0) {
@@ -245,9 +276,13 @@ router.put('/:id', requireAdmin, async (req, res) => {
     if (imagen !== undefined) {
       const img = normalizarImagenProducto(imagen);
       if (img === false) return res.status(400).json({ error: 'La imagen es demasiado grande' });
+      const imgThumb = img ? await generarImagenThumb(img) : null;
       set.push(`imagen = $${idx++}`);
       vals.push(img);
       camposActualizados.push('imagen');
+      set.push(`imagen_thumb = $${idx++}`);
+      vals.push(imgThumb);
+      camposActualizados.push('imagen_thumb');
     }
     if (set.length === 0) return res.status(400).json({ error: 'Sin campos para actualizar' });
     vals.push(id);
@@ -255,7 +290,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
       `UPDATE productos SET ${set.join(', ')} WHERE id = $${idx}
        RETURNING id, nombre, precio::float8 AS precio, precio_max::float8 AS precio_max,
                  costo_compra::float8 AS costo_compra,
-                 stock, categoria, imagen, sucursal_id, created_at`,
+                 stock, categoria, imagen, imagen_thumb, sucursal_id, created_at`,
       vals
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Producto no encontrado' });
@@ -416,7 +451,7 @@ router.post('/trasladar', requireAdmin, async (req, res) => {
     await client.query('BEGIN');
 
     const origRes = await client.query(
-      `SELECT id, nombre, precio, precio_max, costo_compra, stock, categoria, imagen, sucursal_id
+      `SELECT id, nombre, precio, precio_max, costo_compra, stock, categoria, imagen, imagen_thumb, sucursal_id
        FROM productos
        WHERE id = $1
        FOR UPDATE`,
@@ -475,8 +510,8 @@ router.post('/trasladar', requireAdmin, async (req, res) => {
       await client.query('UPDATE productos SET stock = stock + $1 WHERE id = $2', [cantidad, productoDestinoId]);
     } else {
       const insRes = await client.query(
-        `INSERT INTO productos (sucursal_id, nombre, precio, precio_max, costo_compra, stock, categoria, imagen)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO productos (sucursal_id, nombre, precio, precio_max, costo_compra, stock, categoria, imagen, imagen_thumb)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING id`,
         [
           sucursalDestinoId,
@@ -487,6 +522,7 @@ router.post('/trasladar', requireAdmin, async (req, res) => {
           cantidad,
           origen.categoria,
           origen.imagen,
+          origen.imagen_thumb,
         ]
       );
       productoDestinoId = insRes.rows[0].id;

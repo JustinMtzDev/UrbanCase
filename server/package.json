@@ -18,6 +18,8 @@
     "migrate-cliente-precios": "node migrate-cliente-precios.js",
     "migrate-devoluciones": "node migrate-devoluciones.js",
     "migrate-hardening": "node migrate-hardening.js",
+    "migrate-productos-imagen-thumb": "node migrate-productos-imagen-thumb.js",
+    "backfill-productos-imagen-thumb": "node backfill-productos-imagen-thumb.js",
     "setup-mp-terminal": "node setup-mp-terminal.js"
   },
   "keywords": [],
@@ -30,6 +32,7 @@
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "pdfkit": "^0.19.1",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "sharp": "^0.35.5"
   }
 }

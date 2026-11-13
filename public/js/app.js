@@ -1693,6 +1693,7 @@ function detalleSucursalDesdeProducto(p) {
     costo_compra: p.costo_compra,
     categoria: p.categoria,
     imagen: p.imagen,
+    imagen_thumb: p.imagen_thumb,
     tiene_imagen: Boolean(p.tiene_imagen) || productoTieneImagenInventario(p),
     es_consignado: Boolean(p.es_consignado),
   };
@@ -1716,6 +1717,7 @@ function fusionarDetalleSucursalInventario(prev, next) {
     stock: stockPrev + stockNext,
     tiene_imagen: prevTieneImagen || nextTieneImagen,
     imagen: (prevTieneImagen ? prev.imagen : null) || (nextTieneImagen ? next.imagen : null) || prev.imagen || next.imagen,
+    imagen_thumb: (prevTieneImagen ? prev.imagen_thumb : null) || (nextTieneImagen ? next.imagen_thumb : null) || prev.imagen_thumb || next.imagen_thumb,
     id: Math.max(Number(prev.id) || 0, Number(next.id) || 0) || prev.id || next.id,
   };
 }
@@ -1752,6 +1754,7 @@ function consolidarProductosInventarioTodasSucursales(lista) {
       || grupo.sucursales_detalle[0];
     grupo.id = rep.id;
     grupo.imagen = rep.imagen;
+    grupo.imagen_thumb = rep.imagen_thumb;
     grupo.tiene_imagen = productoTieneImagenInventario(rep);
     grupo.es_consignado = grupo.sucursales_detalle.some((s) => s.es_consignado);
     return grupo;
@@ -2835,8 +2838,13 @@ function htmlInventarioCardImagen(p, sinStock = false) {
   if (!productoTieneImagenInventario(p)) {
     return `<div class="inventario-producto-img-wrap inventario-producto-img-wrap--vacia${claseSinStock}" tabindex="0" role="button" aria-label="Ver detalle ampliado">${HTML_INVENTARIO_SIN_IMAGEN}${capaSinStock}</div>`;
   }
-  if (typeof p.imagen === 'string' && p.imagen.trim()) {
-    const src = escHtmlInventario(String(p.imagen).trim());
+  // La miniatura (imagen_thumb) viaja embebida en la lista: evita el fetch
+  // uno-por-uno y ya pesa una fraccion de la imagen grande.
+  const directa = (typeof p.imagen_thumb === 'string' && p.imagen_thumb.trim())
+    ? p.imagen_thumb.trim()
+    : (typeof p.imagen === 'string' && p.imagen.trim() ? p.imagen.trim() : null);
+  if (directa) {
+    const src = escHtmlInventario(directa);
     return `<div class="inventario-producto-img-wrap${claseSinStock}" tabindex="0" role="button" aria-label="Ver imagen ampliada"><img class="inventario-producto-img" src="${src}" alt="">${capaSinStock}</div>`;
   }
   const pid = Number(p.id);
