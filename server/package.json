@@ -19,6 +19,7 @@
     "migrate-devoluciones": "node migrate-devoluciones.js",
     "migrate-hardening": "node migrate-hardening.js",
     "migrate-productos-imagen-thumb": "node migrate-productos-imagen-thumb.js",
+    "migrate-productos-idx-nombre": "node migrate-productos-idx-nombre.js",
     "backfill-productos-imagen-thumb": "node backfill-productos-imagen-thumb.js",
     "setup-mp-terminal": "node setup-mp-terminal.js"
   },
