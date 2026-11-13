@@ -33,33 +33,43 @@ function anexarFiltroSucursalQuery(req, filtros, vals, idx, columnSql) {
   return { idx: idx + 1 };
 }
 
+// Los límites se calculan una sola vez a partir de NOW() y nunca envuelven
+// v.created_at: así el planner puede usar idx_ventas_created (range scan) en
+// vez de una función sobre la columna, que fuerza un seq scan de toda la
+// tabla sin importar el periodo (eso hacía mensual/anual lentos en Home).
 function rangoKpi(periodo) {
   const now = `(NOW() AT TIME ZONE '${TZ}')`;
+  const local = (expr) => `((${expr}) AT TIME ZONE '${TZ}')`;
+
+  let inicio;
+  let unidad;
+  let etiquetaCmp;
   if (periodo === 'semanal') {
-    return {
-      actual: `${TS} >= date_trunc('week', ${now}::timestamp) AND ${TS} < date_trunc('week', ${now}::timestamp) + INTERVAL '1 week'`,
-      anterior: `${TS} >= date_trunc('week', ${now}::timestamp) - INTERVAL '1 week' AND ${TS} < date_trunc('week', ${now}::timestamp)`,
-      etiquetaCmp: 'la semana pasada',
-    };
+    inicio = `date_trunc('week', ${now}::timestamp)`;
+    unidad = '1 week';
+    etiquetaCmp = 'la semana pasada';
+  } else if (periodo === 'mensual') {
+    inicio = `date_trunc('month', ${now}::timestamp)`;
+    unidad = '1 month';
+    etiquetaCmp = 'el mes pasado';
+  } else if (periodo === 'anual') {
+    inicio = `date_trunc('year', ${now}::timestamp)`;
+    unidad = '1 year';
+    etiquetaCmp = 'el año pasado';
+  } else {
+    inicio = `(${now}::date)::timestamp`;
+    unidad = '1 day';
+    etiquetaCmp = 'ayer';
   }
-  if (periodo === 'mensual') {
-    return {
-      actual: `${TS} >= date_trunc('month', ${now}::timestamp) AND ${TS} < date_trunc('month', ${now}::timestamp) + INTERVAL '1 month'`,
-      anterior: `${TS} >= date_trunc('month', ${now}::timestamp) - INTERVAL '1 month' AND ${TS} < date_trunc('month', ${now}::timestamp)`,
-      etiquetaCmp: 'el mes pasado',
-    };
-  }
-  if (periodo === 'anual') {
-    return {
-      actual: `${TS} >= date_trunc('year', ${now}::timestamp) AND ${TS} < date_trunc('year', ${now}::timestamp) + INTERVAL '1 year'`,
-      anterior: `${TS} >= date_trunc('year', ${now}::timestamp) - INTERVAL '1 year' AND ${TS} < date_trunc('year', ${now}::timestamp)`,
-      etiquetaCmp: 'el año pasado',
-    };
-  }
+
+  const inicioActual = local(inicio);
+  const finActual = `${inicioActual} + INTERVAL '${unidad}'`;
+  const inicioAnterior = `${inicioActual} - INTERVAL '${unidad}'`;
+
   return {
-    actual: `${TS} >= (${now}::date)::timestamp AND ${TS} < ((${now}::date) + INTERVAL '1 day')::timestamp`,
-    anterior: `${TS} >= ((${now}::date) - INTERVAL '1 day')::timestamp AND ${TS} < (${now}::date)::timestamp`,
-    etiquetaCmp: 'ayer',
+    actual: `v.created_at >= ${inicioActual} AND v.created_at < ${finActual}`,
+    anterior: `v.created_at >= ${inicioAnterior} AND v.created_at < ${inicioActual}`,
+    etiquetaCmp,
   };
 }
 
@@ -68,7 +78,10 @@ async function metricasPeriodo(pool, whereSql, vals) {
   const where = whereSql
     ? `WHERE (${whereSql}) AND v.devuelta_at IS NULL`
     : 'WHERE v.devuelta_at IS NULL';
-  const [ingRes, comRes, utilRes, prodRes] = await Promise.all([
+  // Antes eran 4 queries por periodo (8 por request, 6 de ellas escaneando
+  // venta_detalle con el mismo join); comision+utilidad+productos_vendidos
+  // comparten FROM/JOIN así que se calculan en una sola pasada.
+  const [ingRes, detRes] = await Promise.all([
     pool.query(
       `SELECT
          COALESCE(SUM(v.total), 0)::float8 AS ingresos,
@@ -79,55 +92,41 @@ async function metricasPeriodo(pool, whereSql, vals) {
       vals
     ),
     pool.query(
-      `SELECT COALESCE(SUM(
-         d.subtotal - (COALESCE(NULLIF(d.detalle->>'costo_consignacion', ''), '0')::numeric * d.cantidad)
-       ), 0)::float8 AS ingresos_comision
-       FROM venta_detalle d
-       INNER JOIN ventas v ON v.id = d.venta_id
-       ${where}
-       AND d.es_consignado = TRUE`,
-      vals
-    ),
-    pool.query(
-      `SELECT COALESCE(SUM(
-         d.subtotal - (
-           CASE
-             WHEN COALESCE(d.es_consignado, FALSE) THEN
-               COALESCE(NULLIF(d.detalle->>'costo_consignacion', ''), '0')::numeric
-             ELSE
-               COALESCE(
-                 NULLIF(d.detalle->>'costo_compra', '')::numeric,
-                 p.costo_compra,
-                 0
-               )
-           END * d.cantidad
-         )
-       ), 0)::float8 AS utilidad
+      `SELECT
+         COALESCE(SUM(
+           d.subtotal - (COALESCE(NULLIF(d.detalle->>'costo_consignacion', ''), '0')::numeric * d.cantidad)
+         ) FILTER (WHERE d.es_consignado = TRUE), 0)::float8 AS ingresos_comision,
+         COALESCE(SUM(
+           d.subtotal - (
+             CASE
+               WHEN COALESCE(d.es_consignado, FALSE) THEN
+                 COALESCE(NULLIF(d.detalle->>'costo_consignacion', ''), '0')::numeric
+               ELSE
+                 COALESCE(
+                   NULLIF(d.detalle->>'costo_compra', '')::numeric,
+                   p.costo_compra,
+                   0
+                 )
+             END * d.cantidad
+           )
+         ), 0)::float8 AS utilidad,
+         COALESCE(SUM(d.cantidad), 0)::int AS productos_vendidos
        FROM venta_detalle d
        INNER JOIN ventas v ON v.id = d.venta_id
        LEFT JOIN productos p ON p.id = d.producto_id
        ${where}`,
       vals
     ),
-    pool.query(
-      `SELECT COALESCE(SUM(d.cantidad), 0)::int AS productos_vendidos
-       FROM venta_detalle d
-       INNER JOIN ventas v ON v.id = d.venta_id
-       ${where}`,
-      vals
-    ),
   ]);
   const ing = ingRes.rows[0] || {};
-  const com = comRes.rows[0] || {};
-  const util = utilRes.rows[0] || {};
-  const prod = prodRes.rows[0] || {};
+  const det = detRes.rows[0] || {};
   return {
     ingresos: Number(ing.ingresos) || 0,
     tickets: Number(ing.tickets) || 0,
     ticket_promedio: Number(ing.ticket_promedio) || 0,
-    ingresos_comision: Math.max(0, Number(com.ingresos_comision) || 0),
-    utilidad: Number(util.utilidad) || 0,
-    productos_vendidos: Math.max(0, Number(prod.productos_vendidos) || 0),
+    ingresos_comision: Math.max(0, Number(det.ingresos_comision) || 0),
+    utilidad: Number(det.utilidad) || 0,
+    productos_vendidos: Math.max(0, Number(det.productos_vendidos) || 0),
   };
 }
 
@@ -341,6 +340,12 @@ router.get('/dashboard-ventas-7d', async (req, res) => {
     idx++;
   }
   const joinSuc = filtrosSuc.length ? `AND ${filtrosSuc.join(' AND ')}` : '';
+  // Filtro sargable (sin envolver v.created_at) para que el planner use
+  // idx_ventas_created en vez de escanear toda la tabla; el filtro exacto
+  // por (${TS})::date se queda para el recorte fino de los 7 días locales.
+  const inicioSarg = `(((NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '6 days') AT TIME ZONE '${TZ}')`;
+  const finSarg = `((((NOW() AT TIME ZONE '${TZ}')::date) + INTERVAL '1 day') AT TIME ZONE '${TZ}')`;
+  const rangoSarg = `AND v.created_at >= ${inicioSarg} AND v.created_at < ${finSarg}`;
 
   try {
     const { rows } = await pool.query(
@@ -361,6 +366,7 @@ router.get('/dashboard-ventas-7d', async (req, res) => {
          WHERE (${TS})::date >= ((NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '6 days')::date
            AND (${TS})::date <= ((NOW() AT TIME ZONE '${TZ}')::date)::date
            AND v.devuelta_at IS NULL
+           ${rangoSarg}
            ${joinSuc}
          GROUP BY 1
        ),
@@ -388,6 +394,7 @@ router.get('/dashboard-ventas-7d', async (req, res) => {
          WHERE (${TS})::date >= ((NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '6 days')::date
            AND (${TS})::date <= ((NOW() AT TIME ZONE '${TZ}')::date)::date
            AND v.devuelta_at IS NULL
+           ${rangoSarg}
            ${joinSuc}
          GROUP BY 1
        )
