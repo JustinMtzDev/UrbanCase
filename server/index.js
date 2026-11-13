@@ -74,12 +74,14 @@ const requireAdminReportes = (req, res, next) => (
 app.use('/api/reportes', authMiddleware, requireAdminReportes, require('./routes/reportes'));
 app.use('/api/ventas', authMiddleware, require('./routes/ventas'));
 
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'login.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
 });
 
 app.use(staticGuard);
-app.use(express.static(path.join(__dirname, '..'), {
+app.use(express.static(PUBLIC_DIR, {
   dotfiles: 'deny',
   index: false,
 }));

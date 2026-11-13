@@ -31,9 +31,6 @@ server/tickets/*
 # Respaldos de datos (pueden contener informacion del negocio)
 respaldos/
 
-# Capturas y artefactos de pruebas
+# Artefactos de pruebas
 .playwright-mcp/
-switch-check.png
-mask-check.png
-devolucion-fila-roja.png
-precio-cliente-card.png
+client/

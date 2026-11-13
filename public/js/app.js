@@ -2795,6 +2795,8 @@ function mostrarInventarioCargando() {
   }
 }
 
+const HTML_INVENTARIO_SIN_IMAGEN = `<span class="inventario-producto-sin-imagen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path><line x1="3" y1="3" x2="21" y2="21"></line></svg>Sin imagen</span>`;
+
 function ocultarImagenInventarioSiRota(img) {
   if (!img || img.dataset.rota === '1') return;
   img.dataset.rota = '1';
@@ -2805,6 +2807,9 @@ function ocultarImagenInventarioSiRota(img) {
   if (wrap) {
     wrap.classList.add('inventario-producto-img-wrap--vacia');
     wrap.setAttribute('aria-label', 'Ver detalle ampliado');
+    if (!wrap.querySelector('.inventario-producto-sin-imagen')) {
+      wrap.insertAdjacentHTML('beforeend', HTML_INVENTARIO_SIN_IMAGEN);
+    }
   }
 }
 
@@ -2828,7 +2833,7 @@ function htmlInventarioCardImagen(p, sinStock = false) {
     : '';
   const claseSinStock = sinStock ? ' inventario-producto-img-wrap--sin-stock' : '';
   if (!productoTieneImagenInventario(p)) {
-    return `<div class="inventario-producto-img-wrap inventario-producto-img-wrap--vacia${claseSinStock}" tabindex="0" role="button" aria-label="Ver detalle ampliado">${capaSinStock}</div>`;
+    return `<div class="inventario-producto-img-wrap inventario-producto-img-wrap--vacia${claseSinStock}" tabindex="0" role="button" aria-label="Ver detalle ampliado">${HTML_INVENTARIO_SIN_IMAGEN}${capaSinStock}</div>`;
   }
   if (typeof p.imagen === 'string' && p.imagen.trim()) {
     const src = escHtmlInventario(String(p.imagen).trim());
@@ -6084,7 +6089,7 @@ function initProductoModal() {
           }
         } else if (r.status === 404) {
           errMsg =
-            'No se encontró la API de productos (404). Cierra cualquier otro servidor en el puerto 3000. En la carpeta UrbanCase ejecuta: npm start y entra en http://localhost:3000/index.html';
+            'No se encontró la API de productos (404). Cierra cualquier otro servidor en el puerto 3000. En la carpeta UrbanCase ejecuta: npm start y entra en http://localhost:3000/';
         } else {
           errMsg = r.statusText || 'Error al guardar';
         }

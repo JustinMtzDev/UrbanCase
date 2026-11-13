@@ -1591,6 +1591,27 @@ body.theme-dark .inventario-producto-img-wrap {
 
 .inventario-producto-img-wrap--vacia {
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inventario-producto-sin-imagen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
+.inventario-producto-sin-imagen svg {
+  width: 26px;
+  height: 26px;
+  opacity: 0.6;
 }
 
 .inventario-producto-img {
